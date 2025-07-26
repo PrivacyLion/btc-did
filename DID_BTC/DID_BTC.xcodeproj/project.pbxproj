@@ -7,15 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		4390DB722E2E87A50087565B /* DID_BTCApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4390DB712E2E87A50087565B /* DID_BTCApp.swift */; };
 		4390DB742E2E87A50087565B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4390DB732E2E87A50087565B /* ContentView.swift */; };
 		4390DB762E2E87A70087565B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4390DB752E2E87A70087565B /* Assets.xcassets */; };
 		4390DB792E2E87A70087565B /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4390DB782E2E87A70087565B /* Preview Assets.xcassets */; };
 		4390DB832E2E87A70087565B /* DID_BTCTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4390DB822E2E87A70087565B /* DID_BTCTests.swift */; };
 		4390DB8D2E2E87A70087565B /* DID_BTCUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4390DB8C2E2E87A70087565B /* DID_BTCUITests.swift */; };
 		4390DB8F2E2E87A70087565B /* DID_BTCUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4390DB8E2E2E87A70087565B /* DID_BTCUITestsLaunchTests.swift */; };
-		4390DB9E2E2E89040087565B /* Core_DID_Wallet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4390DB9D2E2E89040087565B /* Core_DID_Wallet.swift */; };
 		4390DBA02E2E89530087565B /* DID_Wallet_Manager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4390DB9F2E2E89520087565B /* DID_Wallet_Manager.swift */; };
+		4390DBA32E3161860087565B /* BridgeHeader.m in Sources */ = {isa = PBXBuildFile; fileRef = 4390DBA22E3161860087565B /* BridgeHeader.m */; };
+		4390DBA52E328EB10087565B /* libstwo_dlc_bridge.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 4390DBA42E328EB10087565B /* libstwo_dlc_bridge.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -37,7 +37,6 @@
 
 /* Begin PBXFileReference section */
 		4390DB6E2E2E87A50087565B /* DID_BTC.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DID_BTC.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		4390DB712E2E87A50087565B /* DID_BTCApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DID_BTCApp.swift; sourceTree = "<group>"; };
 		4390DB732E2E87A50087565B /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		4390DB752E2E87A70087565B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4390DB782E2E87A70087565B /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -46,8 +45,11 @@
 		4390DB882E2E87A70087565B /* DID_BTCUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DID_BTCUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4390DB8C2E2E87A70087565B /* DID_BTCUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DID_BTCUITests.swift; sourceTree = "<group>"; };
 		4390DB8E2E2E87A70087565B /* DID_BTCUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DID_BTCUITestsLaunchTests.swift; sourceTree = "<group>"; };
-		4390DB9D2E2E89040087565B /* Core_DID_Wallet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core_DID_Wallet.swift; sourceTree = "<group>"; };
 		4390DB9F2E2E89520087565B /* DID_Wallet_Manager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DID_Wallet_Manager.swift; sourceTree = "<group>"; };
+		4390DBA12E3161860087565B /* DID_BTC-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "DID_BTC-Bridging-Header.h"; sourceTree = "<group>"; };
+		4390DBA22E3161860087565B /* BridgeHeader.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BridgeHeader.m; sourceTree = "<group>"; };
+		4390DBA42E328EB10087565B /* libstwo_dlc_bridge.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libstwo_dlc_bridge.a; path = ../../libstwo_dlc_bridge.a; sourceTree = "<group>"; };
+		4390DBA62E328ED90087565B /* stwo_dlc_bridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = stwo_dlc_bridge.h; path = ../../stwo_dlc_bridge.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,6 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4390DBA52E328EB10087565B /* libstwo_dlc_bridge.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -82,6 +85,7 @@
 				4390DB812E2E87A70087565B /* DID_BTCTests */,
 				4390DB8B2E2E87A70087565B /* DID_BTCUITests */,
 				4390DB6F2E2E87A50087565B /* Products */,
+				4390DBA12E3161860087565B /* DID_BTC-Bridging-Header.h */,
 			);
 			sourceTree = "<group>";
 		};
@@ -98,10 +102,11 @@
 		4390DB702E2E87A50087565B /* DID_BTC */ = {
 			isa = PBXGroup;
 			children = (
-				4390DB712E2E87A50087565B /* DID_BTCApp.swift */,
+				4390DBA42E328EB10087565B /* libstwo_dlc_bridge.a */,
+				4390DBA62E328ED90087565B /* stwo_dlc_bridge.h */,
 				4390DB732E2E87A50087565B /* ContentView.swift */,
-				4390DB9D2E2E89040087565B /* Core_DID_Wallet.swift */,
 				4390DB9F2E2E89520087565B /* DID_Wallet_Manager.swift */,
+				4390DBA22E3161860087565B /* BridgeHeader.m */,
 				4390DB752E2E87A70087565B /* Assets.xcassets */,
 				4390DB772E2E87A70087565B /* Preview Content */,
 			);
@@ -149,6 +154,8 @@
 			dependencies = (
 			);
 			name = DID_BTC;
+			packageProductDependencies = (
+			);
 			productName = DID_BTC;
 			productReference = 4390DB6E2E2E87A50087565B /* DID_BTC.app */;
 			productType = "com.apple.product-type.application";
@@ -201,6 +208,7 @@
 				TargetAttributes = {
 					4390DB6D2E2E87A50087565B = {
 						CreatedOnToolsVersion = 15.4;
+						LastSwiftMigration = 1540;
 					};
 					4390DB7D2E2E87A70087565B = {
 						CreatedOnToolsVersion = 15.4;
@@ -221,6 +229,8 @@
 				Base,
 			);
 			mainGroup = 4390DB652E2E87A50087565B;
+			packageReferences = (
+			);
 			productRefGroup = 4390DB6F2E2E87A50087565B /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -263,10 +273,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4390DB9E2E2E89040087565B /* Core_DID_Wallet.swift in Sources */,
 				4390DB742E2E87A50087565B /* ContentView.swift in Sources */,
 				4390DBA02E2E89530087565B /* DID_Wallet_Manager.swift in Sources */,
-				4390DB722E2E87A50087565B /* DID_BTCApp.swift in Sources */,
+				4390DBA32E3161860087565B /* BridgeHeader.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -356,6 +365,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
+				"LIBRARY_SEARCH_PATHS[arch=*]" = "\"$(SRCROOT)/\"";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -413,6 +423,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
+				"LIBRARY_SEARCH_PATHS[arch=*]" = "\"$(SRCROOT)/\"";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -427,6 +438,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"DID_BTC/Preview Content\"";
@@ -445,6 +457,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "Privacy-Lion.DID-BTC";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "DID_BTC-Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -455,6 +469,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"DID_BTC/Preview Content\"";
@@ -473,6 +488,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "Privacy-Lion.DID-BTC";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "DID_BTC-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
