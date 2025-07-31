@@ -1,6 +1,6 @@
 // File: DIDWalletManager.swift
 import Foundation
-import secp256k1
+import P256K
 import Security
 import SwiftUI
 import CryptoKit
@@ -12,7 +12,7 @@ class DIDWalletManager: ObservableObject {
     private let privateKeyTag = "btcdid.privatekey"
     
     func generateKeyPair() throws -> String {
-        let privateKey = try secp256k1.Signing.PrivateKey()
+        let privateKey = try P256K.Signing.PrivateKey()
         let publicKey = privateKey.publicKey
         let publicKeyHex = publicKey.dataRepresentation.hexString
         let newPublicDID = "did:btcr:\(publicKeyHex)"
@@ -28,7 +28,7 @@ class DIDWalletManager: ObservableObject {
         return try generateKeyPair()
     }
     
-    func retrievePrivateKey() throws -> secp256k1.Signing.PrivateKey? {
+    func retrievePrivateKey() throws -> P256K.Signing.PrivateKey? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -44,7 +44,7 @@ class DIDWalletManager: ObservableObject {
             return nil
         }
         
-        return try secp256k1.Signing.PrivateKey(dataRepresentation: data)
+        return try P256K.Signing.PrivateKey(dataRepresentation: data)
     }
     
     private func storePrivateKey(_ keyData: Data) throws {
@@ -89,7 +89,7 @@ class DIDWalletManager: ObservableObject {
         }
         
         let challengeData = Data(challenge.utf8)
-        let digest = SHA256.hash(data: challengeData)
+        let digest = CryptoKit.SHA256.hash(data: challengeData)
         let signature = try privateKey.signature(for: digest.data)
         let signatureHex = signature.dataRepresentation.hexString
         
@@ -119,7 +119,7 @@ class DIDWalletManager: ObservableObject {
         }
         
         let jsonData = try JSONSerialization.data(withJSONObject: claimDict, options: .sortedKeys)
-        let digest = SHA256.hash(data: jsonData)
+        let digest = CryptoKit.SHA256.hash(data: jsonData)
         let signature = try privateKey.signature(for: digest.data)
         let signatureHex = signature.dataRepresentation.hexString
         
@@ -159,14 +159,14 @@ class DIDWalletManager: ObservableObject {
         guard let proofPtr = proofPtr else {
             throw NSError(domain: "STWOError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to generate proof"])
         }
-        
-        let proofCStr = proofPtr.assumingMemoryBound(to: CChar.self)
+
+        let proofCStr = UnsafePointer(proofPtr)  // Convert to immutable pointer
         let proof = String(cString: proofCStr)
         free_proof(proofPtr)
         
-        let metadata = "proof_hash:\(proof.sha256().hexString),circuit:\(circuit)"
+        let metadata = "proof_hash:\(Data(proof.utf8).sha256().hexString),circuit:\(circuit)"
         let metadataData = Data(metadata.utf8)
-        let digest = SHA256.hash(data: metadataData)
+        let digest = CryptoKit.SHA256.hash(data: metadataData)
         guard let privateKey = try retrievePrivateKey() else {
             throw NSError(domain: "DIDError", code: -1, userInfo: [NSLocalizedDescriptionKey: "No private key found"])
         }
@@ -181,12 +181,12 @@ class DIDWalletManager: ObservableObject {
         let oracleCStr = oraclePubKey.cString(using: .utf8)
         
         var payoutMut = payout
-        let contractPtr = create_dlc_contract(outcomeCStr, &payoutMut, payout.count, oracleCStr)
+        let contractPtr = create_dlc_contract(outcomeCStr, &payoutMut, Int32(payout.count), oracleCStr)
         guard let contractPtr = contractPtr else {
             throw NSError(domain: "DLCError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create DLC"])
         }
         
-        let contractCStr = contractPtr.assumingMemoryBound(to: CChar.self)
+        let contractCStr = UnsafePointer(contractPtr)
         let contract = String(cString: contractCStr)
         free_contract(contractPtr)
         
@@ -200,8 +200,8 @@ class DIDWalletManager: ObservableObject {
         guard let signaturePtr = signaturePtr else {
             throw NSError(domain: "DLCError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to sign outcome"])
         }
-        
-        let sigCStr = signaturePtr.assumingMemoryBound(to: CChar.self)
+
+        let sigCStr = UnsafePointer(signaturePtr)  // Convert to immutable
         let signature = String(cString: sigCStr)
         free_signature(signaturePtr)
         
@@ -225,7 +225,7 @@ class DIDWalletManager: ObservableObject {
         }
         
         let jsonData = try JSONSerialization.data(withJSONObject: payload)
-        let digest = SHA256.hash(data: jsonData)
+        let digest = CryptoKit.SHA256.hash(data: jsonData)
         guard let privateKey = try retrievePrivateKey() else {
             throw NSError(domain: "DIDError", code: -1, userInfo: [NSLocalizedDescriptionKey: "No private key found"])
         }
@@ -290,7 +290,7 @@ extension Data {
     }
     
     func sha256() -> Data {
-        SHA256.hash(data: self).data
+        CryptoKit.SHA256.hash(data: self).data
     }
     
     init?(hex: String) {
@@ -312,7 +312,7 @@ extension Data {
     }
 }
 
-extension Digest {
+extension CryptoKit.Digest {
     var data: Data {
         Data(self)
     }

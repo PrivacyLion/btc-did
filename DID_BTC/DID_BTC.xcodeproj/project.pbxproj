@@ -14,8 +14,9 @@
 		4390DB8D2E2E87A70087565B /* DID_BTCUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4390DB8C2E2E87A70087565B /* DID_BTCUITests.swift */; };
 		4390DB8F2E2E87A70087565B /* DID_BTCUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4390DB8E2E2E87A70087565B /* DID_BTCUITestsLaunchTests.swift */; };
 		4390DBA02E2E89530087565B /* DID_Wallet_Manager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4390DB9F2E2E89520087565B /* DID_Wallet_Manager.swift */; };
-		4390DBA32E3161860087565B /* BridgeHeader.m in Sources */ = {isa = PBXBuildFile; fileRef = 4390DBA22E3161860087565B /* BridgeHeader.m */; };
-		4390DBA52E328EB10087565B /* libstwo_dlc_bridge.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 4390DBA42E328EB10087565B /* libstwo_dlc_bridge.a */; };
+		43E562322E3938AE00011BAC /* libstwo_dlc_bridge.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 43E562312E3938AE00011BAC /* libstwo_dlc_bridge.a */; settings = {ATTRIBUTES = (Required, ); }; };
+		43E562342E3938EC00011BAC /* stwo_dlc_bridge.h in Frameworks */ = {isa = PBXBuildFile; fileRef = 43E562332E3938EC00011BAC /* stwo_dlc_bridge.h */; };
+		43FF17E42E3BDBEE005FA7BA /* P256K in Frameworks */ = {isa = PBXBuildFile; productRef = 43FF17E32E3BDBEE005FA7BA /* P256K */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +37,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		432A15532E392DBD007BC117 /* DID_BTC-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "DID_BTC-Bridging-Header.h"; sourceTree = "<group>"; };
 		4390DB6E2E2E87A50087565B /* DID_BTC.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DID_BTC.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4390DB732E2E87A50087565B /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		4390DB752E2E87A70087565B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -46,10 +48,10 @@
 		4390DB8C2E2E87A70087565B /* DID_BTCUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DID_BTCUITests.swift; sourceTree = "<group>"; };
 		4390DB8E2E2E87A70087565B /* DID_BTCUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DID_BTCUITestsLaunchTests.swift; sourceTree = "<group>"; };
 		4390DB9F2E2E89520087565B /* DID_Wallet_Manager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DID_Wallet_Manager.swift; sourceTree = "<group>"; };
-		4390DBA12E3161860087565B /* DID_BTC-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "DID_BTC-Bridging-Header.h"; sourceTree = "<group>"; };
-		4390DBA22E3161860087565B /* BridgeHeader.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BridgeHeader.m; sourceTree = "<group>"; };
-		4390DBA42E328EB10087565B /* libstwo_dlc_bridge.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libstwo_dlc_bridge.a; path = ../../libstwo_dlc_bridge.a; sourceTree = "<group>"; };
-		4390DBA62E328ED90087565B /* stwo_dlc_bridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = stwo_dlc_bridge.h; path = ../../stwo_dlc_bridge.h; sourceTree = "<group>"; };
+		43E5622D2E39357400011BAC /* libstwo_dlc_bridge.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libstwo_dlc_bridge.a; sourceTree = "<group>"; };
+		43E5622E2E39357400011BAC /* stwo_dlc_bridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = stwo_dlc_bridge.h; sourceTree = "<group>"; };
+		43E562312E3938AE00011BAC /* libstwo_dlc_bridge.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libstwo_dlc_bridge.a; path = DID_BTC/libstwo_dlc_bridge.a; sourceTree = "<unknown>"; };
+		43E562332E3938EC00011BAC /* stwo_dlc_bridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = stwo_dlc_bridge.h; path = DID_BTC/stwo_dlc_bridge.h; sourceTree = "<unknown>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -57,7 +59,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4390DBA52E328EB10087565B /* libstwo_dlc_bridge.a in Frameworks */,
+				43FF17E42E3BDBEE005FA7BA /* P256K in Frameworks */,
+				43E562342E3938EC00011BAC /* stwo_dlc_bridge.h in Frameworks */,
+				43E562322E3938AE00011BAC /* libstwo_dlc_bridge.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -84,8 +88,8 @@
 				4390DB702E2E87A50087565B /* DID_BTC */,
 				4390DB812E2E87A70087565B /* DID_BTCTests */,
 				4390DB8B2E2E87A70087565B /* DID_BTCUITests */,
+				43E562302E3938AE00011BAC /* Frameworks */,
 				4390DB6F2E2E87A50087565B /* Products */,
-				4390DBA12E3161860087565B /* DID_BTC-Bridging-Header.h */,
 			);
 			sourceTree = "<group>";
 		};
@@ -102,11 +106,11 @@
 		4390DB702E2E87A50087565B /* DID_BTC */ = {
 			isa = PBXGroup;
 			children = (
-				4390DBA42E328EB10087565B /* libstwo_dlc_bridge.a */,
-				4390DBA62E328ED90087565B /* stwo_dlc_bridge.h */,
+				43E5622D2E39357400011BAC /* libstwo_dlc_bridge.a */,
+				43E5622E2E39357400011BAC /* stwo_dlc_bridge.h */,
+				432A15532E392DBD007BC117 /* DID_BTC-Bridging-Header.h */,
 				4390DB732E2E87A50087565B /* ContentView.swift */,
 				4390DB9F2E2E89520087565B /* DID_Wallet_Manager.swift */,
-				4390DBA22E3161860087565B /* BridgeHeader.m */,
 				4390DB752E2E87A70087565B /* Assets.xcassets */,
 				4390DB772E2E87A70087565B /* Preview Content */,
 			);
@@ -138,6 +142,15 @@
 			path = DID_BTCUITests;
 			sourceTree = "<group>";
 		};
+		43E562302E3938AE00011BAC /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				43E562332E3938EC00011BAC /* stwo_dlc_bridge.h */,
+				43E562312E3938AE00011BAC /* libstwo_dlc_bridge.a */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -155,6 +168,7 @@
 			);
 			name = DID_BTC;
 			packageProductDependencies = (
+				43FF17E32E3BDBEE005FA7BA /* P256K */,
 			);
 			productName = DID_BTC;
 			productReference = 4390DB6E2E2E87A50087565B /* DID_BTC.app */;
@@ -204,7 +218,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1540;
-				LastUpgradeCheck = 1540;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					4390DB6D2E2E87A50087565B = {
 						CreatedOnToolsVersion = 15.4;
@@ -230,6 +244,7 @@
 			);
 			mainGroup = 4390DB652E2E87A50087565B;
 			packageReferences = (
+				437727872E35B9DC0075CFA6 /* XCRemoteSwiftPackageReference "swift-secp256k1" */,
 			);
 			productRefGroup = 4390DB6F2E2E87A50087565B /* Products */;
 			projectDirPath = "";
@@ -275,7 +290,6 @@
 			files = (
 				4390DB742E2E87A50087565B /* ContentView.swift in Sources */,
 				4390DBA02E2E89530087565B /* DID_Wallet_Manager.swift in Sources */,
-				4390DBA32E3161860087565B /* BridgeHeader.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -345,8 +359,10 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DOCC_EXTRACT_SWIFT_INFO_FOR_OBJC_SYMBOLS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -365,14 +381,18 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
-				"LIBRARY_SEARCH_PATHS[arch=*]" = "\"$(SRCROOT)/\"";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MERGED_BINARY_TYPE = none;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OBJC_BRIDGING_HEADER = "DID_BTC/DID_BTC-Bridging-Header.h";
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				"SWIFT_PRECOMPILE_BRIDGING_HEADER[arch=*]" = YES;
 			};
 			name = Debug;
 		};
@@ -409,8 +429,10 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DOCC_EXTRACT_SWIFT_INFO_FOR_OBJC_SYMBOLS = NO;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -423,12 +445,16 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
-				"LIBRARY_SEARCH_PATHS[arch=*]" = "\"$(SRCROOT)/\"";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MERGED_BINARY_TYPE = none;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OBJC_BRIDGING_HEADER = "DID_BTC/DID_BTC-Bridging-Header.h";
+				SWIFT_OBJC_INTEROP_MODE = objc;
+				"SWIFT_PRECOMPILE_BRIDGING_HEADER[arch=*]" = YES;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -453,11 +479,18 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+					"$(PROJECT_DIR)/DID_BTC",
+				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "-lc++";
+				"OTHER_LDFLAGS[arch=*]" = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = "Privacy-Lion.DID-BTC";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "DID_BTC-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "DID_BTC/DID_BTC-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -484,11 +517,18 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+					"$(PROJECT_DIR)/DID_BTC",
+				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "-lc++";
+				"OTHER_LDFLAGS[arch=*]" = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = "Privacy-Lion.DID-BTC";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "DID_BTC-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "DID_BTC/DID_BTC-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -497,7 +537,6 @@
 		4390DB962E2E87A70087565B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -516,7 +555,6 @@
 		4390DB972E2E87A70087565B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -535,7 +573,6 @@
 		4390DB992E2E87A70087565B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -552,7 +589,6 @@
 		4390DB9A2E2E87A70087565B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -606,6 +642,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		437727872E35B9DC0075CFA6 /* XCRemoteSwiftPackageReference "swift-secp256k1" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/21-DOT-DEV/swift-secp256k1.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.21.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		43FF17E32E3BDBEE005FA7BA /* P256K */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 437727872E35B9DC0075CFA6 /* XCRemoteSwiftPackageReference "swift-secp256k1" */;
+			productName = P256K;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 4390DB662E2E87A50087565B /* Project object */;
 }
