@@ -52,6 +52,7 @@
 		43E5622E2E39357400011BAC /* stwo_dlc_bridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = stwo_dlc_bridge.h; sourceTree = "<group>"; };
 		43E562312E3938AE00011BAC /* libstwo_dlc_bridge.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libstwo_dlc_bridge.a; path = DID_BTC/libstwo_dlc_bridge.a; sourceTree = "<unknown>"; };
 		43E562332E3938EC00011BAC /* stwo_dlc_bridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = stwo_dlc_bridge.h; path = DID_BTC/stwo_dlc_bridge.h; sourceTree = "<unknown>"; };
+		43FF17E62E4BB501005FA7BA /* DID_BTC.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DID_BTC.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +107,7 @@
 		4390DB702E2E87A50087565B /* DID_BTC */ = {
 			isa = PBXGroup;
 			children = (
+				43FF17E62E4BB501005FA7BA /* DID_BTC.entitlements */,
 				43E5622D2E39357400011BAC /* libstwo_dlc_bridge.a */,
 				43E5622E2E39357400011BAC /* stwo_dlc_bridge.h */,
 				432A15532E392DBD007BC117 /* DID_BTC-Bridging-Header.h */,
@@ -465,6 +467,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = DID_BTC/DID_BTC.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"DID_BTC/Preview Content\"";
@@ -503,6 +506,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = DID_BTC/DID_BTC.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"DID_BTC/Preview Content\"";

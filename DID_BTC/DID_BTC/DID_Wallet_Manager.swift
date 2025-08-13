@@ -8,10 +8,11 @@ import CryptoKit
 class DIDWalletManager: ObservableObject {
     @Published var publicDID: String?
     
-    private let keychainService = "com.yourapp.btcdid"
+    private let keychainService = "Privacy-Lion.DID-BTC"
     private let privateKeyTag = "btcdid.privatekey"
     
     func generateKeyPair() throws -> String {
+        print("🟡 Generating key pair...")
         let privateKey = try P256K.Signing.PrivateKey()
         let publicKey = privateKey.publicKey
         let publicKeyHex = publicKey.dataRepresentation.hexString
@@ -19,7 +20,9 @@ class DIDWalletManager: ObservableObject {
         try storePrivateKey(privateKey.dataRepresentation)
         DispatchQueue.main.async {
             self.publicDID = newPublicDID
+            print("publicDID set to: \(newPublicDID)")
         }
+        print("🟡 Key pair generated successfully")
         return newPublicDID
     }
     
@@ -39,8 +42,15 @@ class DIDWalletManager: ObservableObject {
         
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
+        print("Keychain retrieve status: \(status)")  // Log the status code for debugging
         
-        guard status == errSecSuccess, let data = item as? Data else {
+        if status != errSecSuccess {
+            print("Keychain error details: \(SecCopyErrorMessageString(status, nil) as String? ?? "Unknown error")")
+            return nil
+        }
+        
+        guard let data = item as? Data else {
+            print("Item is not Data, type: \(type(of: item))")  // Log if casting fails
             return nil
         }
         
@@ -52,12 +62,14 @@ class DIDWalletManager: ObservableObject {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: privateKeyTag,
-            kSecValueData as String: keyData
+            kSecValueData as String: keyData,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly  // Explicit accessibility
         ]
-        SecItemDelete(query as CFDictionary)
+        SecItemDelete(query as CFDictionary)  // Ignore result, as before
         let status = SecItemAdd(query as CFDictionary, nil)
+        print("Keychain store status: \(status)")  // Log store status for debugging
         guard status == errSecSuccess else {
-            throw NSError(domain: "KeychainError", code: Int(status))
+            throw NSError(domain: "KeychainError", code: Int(status), userInfo: [NSLocalizedDescriptionKey: SecCopyErrorMessageString(status, nil) as String? ?? "Unknown error"])
         }
     }
     
@@ -133,6 +145,8 @@ class DIDWalletManager: ObservableObject {
     
     private func getLightningWallet(for walletType: WalletType) -> LightningWalletProtocol {
         switch walletType {
+        case .lightning:
+            return MockLightningWallet() // or create a dedicated LightningWallet class
         case .embedded:
             return BreezLightningWallet()
         case .custodial:
@@ -246,6 +260,7 @@ class DIDWalletManager: ObservableObject {
 // MARK: - Supporting Types and Extensions
 
 enum WalletType: String {
+    case lightning = "lightning"
     case embedded = "embedded"
     case custodial = "custodial"
 }
