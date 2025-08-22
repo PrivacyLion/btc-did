@@ -38,6 +38,5 @@ sequenceDiagram
     OR-->>DLC: 15) Oracle outcome signature
     DLC->>LN: 16) DLC path enforces 90/10 split via contract metadata
     LN-->>UM: 17) Funds received to user wallet
-    deactivate DLC
 
     SA-->>EA: 18) Login Verified → session token + audit refs (DID pubkey, proof hashes, payment refs)
