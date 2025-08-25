@@ -13,31 +13,31 @@ sequenceDiagram
     participant DID as BTC DID Key (on device)
 
     %% Section A: Verified Content Claim (VCC) Anchoring (creator-only)
-    UM->>UM: 1) Select asset (file/URL); fetch minimal metadata
-    UM->>UM: 2) 2) Canonicalize and compute sha256(content) = content_hash
+    Note right of UM: 1) Select asset (file/URL); fetch minimal metadata
+    Note right of UM: 2) Canonicalize and compute sha256(content) = content_hash
     UM->>ZK: 3) Generate STWO proof (HashIntegrity / ContentTransform)
     ZK-->>UM: 4) Return zkProof = proof_hash
-    UM->>DID: 5) Ensure DID key (generate if first use, Secure Enclave/Keystore)
+    UM->>DID: 5) Initialize/ensure DID key (first use -> generate in Secure Enclave/Keystore)
     DID-->>UM: 6) DID_pubkey available
-    UM->>UM: 7) Build pre-anchor VCC JSON {did_pubkey, content_hash, withdraw_to, proof_hash, ts}
-    UM->>UM: 8) Create PRP (Payment Request Package) for anchoring micro-payment
+    Note right of UM: 7) Build pre-anchor VCC JSON {did_pubkey, content_hash, withdraw_to, proof_hash, ts}
+    Note right of UM: 8) Create PRP (Payment Request Package) for anchoring micro-payment
     alt Cash App
-        UM->>UM: 9a) Show PRP as QR or deeplink compatible with Cash App
+        Note right of UM: 9a) Show PRP as QR or deeplink compatible with Cash App
         UM->>LN: 10a) Pay PRP via Cash App
         LN-->>UM: 11a) Settlement refs returned (preimage and txid)
     else Custodial Wallet
-        UM->>UM: 9b) Show PRP as QR or deeplink for custodial wallet
+        Note right of UM: 9b) Show PRP as QR or deeplink for custodial wallet
         UM->>LN: 10b) Pay PRP via custodial wallet
         LN-->>UM: 11b) Settlement refs returned (preimage and txid)
     else Non-Custodial Wallet
-        UM->>UM: 9c) Show PRP as QR or deeplink for non-custodial wallet
+        Note right of UM: 9c) Show PRP as QR or deeplink for non-custodial wallet
         UM->>LN: 10c) Pay PRP via non-custodial wallet
         LN-->>UM: 11c) Settlement refs returned (preimage and txid)
     end
-    UM->>UM: 12) Bind preimage and txid into VCC JSON (economic and timestamp anchor)
+    Note right of UM: 12) Bind preimage and txid into VCC JSON (economic/timestamp anchor)
     UM->>DID: 13) SIGN VCC JSON with DID private key (on-device)
     DID-->>UM: 14) VCC signature
-    UM->>UM: 15) Store or export signed VCC; generate share artifact (QR or URL or snippet)
+    Note right of UM: 15) Store/export signed VCC; generate share artifact (QR / URL / snippet)
 
     %% Section B: Enterprise Pay-to-Verify Login (DLC-enforced 90/10)
     EA->>SA: 1) Start login; request nonce (domain-scoped, expiring)
@@ -47,9 +47,9 @@ sequenceDiagram
     ZK-->>UM: 5) zkProof
     UM->>DLC: 6) Build DLC outcome=auth_verified, payout=90/10
     DLC->>OR: 7) Request outcome-sign policy (auth_verified)
-    OR-->>DLC: 8) Oracle policy or descriptor acknowledged
+    OR-->>DLC: 8) Oracle policy/descriptor acknowledged
     UM->>SA: 9) Submit DID_signature(nonce) + zkProof + DLC metadata
-    SA-->>EA: 10) Return QR code containing a PRP for a single DLC-tagged payment token that enforces the split.
+    SA-->>EA: 10) Return QR code containing a PRP for a single DLC-tagged payment token that enforces the split
     EA->>LN: 11) Present PRP (scan or forward QR) to initiate payment
     LN-->>SA: 12) Payment settled (preimages and settlement refs)
     SA-->>UM: 13) Settlement refs delivered to mobile (receipt)
