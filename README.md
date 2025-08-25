@@ -1,8 +1,6 @@
 # BTC DID — Flows A, B, C
-
 ```mermaid
 
-    sequenceDiagram
     sequenceDiagram
     participant EA as Enterprise App (Web/Mobile)
     participant SA as Stateless Auth API
