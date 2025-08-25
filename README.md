@@ -3,7 +3,7 @@
 ```mermaid
 sequenceDiagram
 
-    %% Shared participants for all sections
+   sequenceDiagram
     participant EA as Enterprise App (Web/Mobile)
     participant SA as Stateless Auth API
     participant UM as SignedByMe Mobile App
@@ -13,11 +13,7 @@ sequenceDiagram
     participant LN as Lightning Network
     participant DID as BTC DID Key (on device)
 
-    %% =======================
-    %% Section A — Verified Content Claim (VCC) Anchoring (creator-only)
-    %% =======================
-    rect rgb(245,245,245)
-
+    %% Section A: Verified Content Claim (VCC) Anchoring (creator-only)
     UM->>UM: 1) Select asset (file/URL); fetch minimal metadata
     UM->>UM: 2) Canonicalize and compute sha256(content) = content_hash
     UM->>ZK: 3) Generate STWO proof (HashIntegrity / ContentTransform)
@@ -26,7 +22,6 @@ sequenceDiagram
     DID-->>UM: 6) DID_pubkey available
     UM->>UM: 7) Build pre-anchor VCC JSON {did_pubkey, content_hash, withdraw_to, proof_hash, ts}
     UM->>UM: 8) Create PRP (Payment Request Package) for anchoring micro-payment
-
     alt Cash App
         UM->>UM: 9a) Show PRP as QR or deeplink compatible with Cash App
         UM->>LN: 10a) Pay PRP via Cash App
@@ -40,18 +35,12 @@ sequenceDiagram
         UM->>LN: 10c) Pay PRP via non-custodial wallet
         LN-->>UM: 11c) Settlement refs returned (preimage and txid)
     end
-
     UM->>UM: 12) Bind preimage and txid into VCC JSON (economic and timestamp anchor)
     UM->>DID: 13) SIGN VCC JSON with DID private key (on-device)
     DID-->>UM: 14) VCC signature
     UM->>UM: 15) Store or export signed VCC; generate share artifact (QR or URL or snippet)
-    end
 
-    %% =======================
-    %% Section B — Enterprise Pay-to-Verify Login (DLC-enforced 90/10)
-    %% =======================
-    rect rgb(235,245,255)
-
+    %% Section B: Enterprise Pay-to-Verify Login (DLC-enforced 90/10)
     EA->>SA: 1) Start login; request nonce (domain-scoped, expiring)
     SA-->>EA: 2) Return nonce + login_id + pay_terms
     EA->>UM: 3) Display QR {nonce, domain, login_id, pay_terms}
@@ -70,13 +59,8 @@ sequenceDiagram
     DLC->>LN: 16) Enforce 90/10 split via DLC contract metadata
     LN-->>UM: 17) Funds received to user wallet
     SA-->>EA: 18) Login Verified; session token + audit refs (DID pubkey, proof hashes, payment refs)
-    end
 
-    %% =======================
-    %% Section C — Content Unlock / Licensing (DLC-enforced 90/10, single PRP)
-    %% =======================
-    rect rgb(245,235,245)
-
+    %% Section C: Content Unlock / Licensing (DLC-enforced 90/10, single PRP)
     EA->>SA: 1) Request unlock or license for claim_id or content_hash
     SA-->>EA: 2) Return terms and QR with PRP for a single DLC-tagged payment token (enforces 90/10)
     EA->>LN: 3) Present PRP (scan or forward QR) to initiate payment
@@ -88,4 +72,3 @@ sequenceDiagram
     EA->>UM: 9) If needed, fetch or decrypt asset using unlock token
     SA-->>EA: 10) Provide verification receipt (claim_id, did_pubkey, anchor refs, proof_hashes)
     EA-->>EA: 11) Record DID-authenticated view for analytics and compliance
-    end
