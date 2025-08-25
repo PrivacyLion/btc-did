@@ -1,7 +1,6 @@
 # BTC DID — Flows A, B, C
 
 ```mermaid
-sequenceDiagram
 
    sequenceDiagram
     participant EA as Enterprise App (Web/Mobile)
