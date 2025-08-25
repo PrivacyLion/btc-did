@@ -14,7 +14,7 @@ sequenceDiagram
 
     %% Section A: Verified Content Claim (VCC) Anchoring (creator-only)
     UM->>UM: 1) Select asset (file/URL); fetch minimal metadata
-    UM->>UM: 2) Canonicalize and compute sha256(content) = content_hash
+    UM->>UM: 2) 2) Canonicalize and compute sha256(content) = content_hash
     UM->>ZK: 3) Generate STWO proof (HashIntegrity / ContentTransform)
     ZK-->>UM: 4) Return zkProof = proof_hash
     UM->>DID: 5) Ensure DID key (generate if first use, Secure Enclave/Keystore)
