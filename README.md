@@ -1,8 +1,8 @@
-# BTC DID — Flows A, B, C
+# BTC DID — All Flows
 ```mermaid
 sequenceDiagram
 
-title BTC DID - Flows A, B, C
+title BTC DID - All Flows
 participant EA as Enterprise App (Web/Mobile)
 participant SA as Stateless Auth API
 participant UM as SignedByMe Mobile App
