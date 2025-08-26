@@ -2,6 +2,7 @@
 ```mermaid
 sequenceDiagram
 
+title BTC DID - Flows A, B, C
 participant EA as Enterprise App (Web/Mobile)
 participant SA as Stateless Auth API
 participant UM as SignedByMe Mobile App
@@ -11,7 +12,7 @@ participant OR as Oracle (DID/Operator key)
 participant LN as Lightning Network
 participant DID as BTC DID Key (on device)
 
-%% Section A: VCC Anchoring (creator only)
+== Section A: Verified Content Claim Anchoring ==
 UM->>UM: 1) Select asset (file or URL), fetch minimal metadata
 UM->>UM: 2) Canonicalize and compute sha256 content to content_hash
 UM->>ZK: 3) Generate STWO proof (hash integrity or content transform)
@@ -38,7 +39,7 @@ UM->>DID: 13) Sign VCC JSON with DID private key on device
 DID-->>UM: 14) VCC signature ready
 UM->>UM: 15) Store or export signed VCC, generate share artifact
 
-%% Section B: Enterprise Pay to Verify Login (DLC enforced 90/10)
+== Section B: Enterprise Login Pay to Verify ==
 EA->>SA: 1) Start login, request nonce (domain scoped, expiring)
 SA-->>EA: 2) Return nonce, login_id, pay_terms
 EA->>UM: 3) Display QR {nonce, domain, login_id, pay_terms}
@@ -58,7 +59,7 @@ DLC->>LN: 16) Enforce 90/10 split via DLC contract metadata
 LN-->>UM: 17) Funds received to user wallet
 SA-->>EA: 18) Login verified, session token and audit refs
 
-%% Section C: Content Unlock / Licensing (single PRP, DLC enforced 90/10)
+== Section C: Content Unlock ==
 EA->>SA: 1) Request unlock or license for claim_id or content_hash
 SA-->>EA: 2) Return terms and QR with PRP for a single DLC tagged payment token
 EA->>LN: 3) Present PRP (scan or forward QR) to initiate payment
