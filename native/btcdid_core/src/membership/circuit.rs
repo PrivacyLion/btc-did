@@ -1682,7 +1682,22 @@ mod tests {
         println!("✓ Proof generated!");
         
         // =========================================================================
-        // Step 5: Verify the proof
+        // Step 5: Serialize/Deserialize round-trip (Phase 4 requirement)
+        // =========================================================================
+        let proof_bytes = bincode::serialize(&proof)
+            .expect("Proof serialization should succeed");
+        println!("✓ Proof serialized: {} bytes", proof_bytes.len());
+        
+        // Deserialize back
+        type ProofType = stwo::core::proof::StarkProof<
+            stwo::core::vcs_lifted::blake2_merkle::Blake2sMerkleHasher
+        >;
+        let proof: ProofType = bincode::deserialize(&proof_bytes)
+            .expect("Proof deserialization should succeed");
+        println!("✓ Proof deserialized successfully");
+        
+        // =========================================================================
+        // Step 6: Verify the proof (using deserialized proof)
         // =========================================================================
         let verifier_channel = &mut Blake2sM31Channel::default();
         let commitment_scheme = &mut CommitmentSchemeVerifier::<Blake2sM31MerkleChannel>::new(config);
