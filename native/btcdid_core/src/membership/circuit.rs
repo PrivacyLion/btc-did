@@ -1688,9 +1688,9 @@ mod tests {
             .expect("Proof serialization should succeed");
         println!("✓ Proof serialized: {} bytes", proof_bytes.len());
         
-        // Deserialize back
+        // Deserialize back (must match prover's MerkleChannel hasher type)
         type ProofType = stwo::core::proof::StarkProof<
-            stwo::core::vcs_lifted::blake2_merkle::Blake2sMerkleHasher
+            stwo::core::vcs_lifted::blake2_merkle::Blake2sM31MerkleHasher
         >;
         let proof: ProofType = bincode::deserialize(&proof_bytes)
             .expect("Proof deserialization should succeed");
