@@ -21,6 +21,7 @@
 pub mod binding;
 pub mod merkle_hash;     // SHA-256 based (for non-ZK tree operations)
 pub mod poseidon2_m31;   // Poseidon2 over M31 - ZK-friendly (Plonky3 parameters)
+pub mod poseidon2_bn254; // Poseidon2 over BN254 - for Groth16 circuits (Phase 4)
 pub mod poseidon;        // Legacy - kept for backwards compat
 pub mod merkle;
 pub mod proof;
@@ -50,6 +51,17 @@ pub use poseidon2_m31::{
     get_external_constants, get_internal_constants, get_internal_diag,
 };
 pub use poseidon::{poseidon_hash_pair, poseidon_hash_bytes, PoseidonHasher, FieldElement};  // Legacy
+
+// Poseidon2 over BN254 - for Groth16 circuits (Phase 4)
+pub use poseidon2_bn254::{
+    poseidon2_hash as bn254_poseidon2_hash,
+    poseidon2_hash_5 as bn254_leaf_commitment,
+    poseidon2_hash_2 as bn254_merkle_hash,
+    derive_nsec as bn254_derive_nsec,
+    derive_npub_commitment as bn254_derive_npub,
+    generate_test_vectors as bn254_generate_test_vectors,
+    scalar_to_hex, hex_to_scalar,
+};
 pub use merkle::{MerkleTree, MerklePath, PathSibling, verify_merkle_path};
 pub use proof::{MembershipProof, MembershipPublicInputs, MembershipWitness, prove_membership, verify_membership};
 

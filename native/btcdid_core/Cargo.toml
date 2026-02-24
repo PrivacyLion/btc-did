@@ -37,6 +37,12 @@ k256 = { version = "0.13", features = ["ecdsa", "schnorr"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 getrandom = { version = "0.2", features = ["js"] }
 
+# Arkworks for Groth16 / BN254 operations
+ark-ff = "0.4"
+ark-bn254 = "0.4"
+ark-ec = "0.4"
+ark-std = "0.4"
+
 # Bitcoin / Schnorr / Taproot
 secp256k1 = { version = "0.28", features = ["rand-std", "global-context"] }
 bitcoin = { version = "0.31", features = ["rand-std"] }
