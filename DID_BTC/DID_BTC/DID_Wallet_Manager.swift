@@ -9,7 +9,7 @@ class DIDWalletManager: ObservableObject {
     @Published var publicDID: String?
     
     private let keychainService = "Privacy-Lion.DID-BTC"
-    private let privateKeyTag = "btcdid.privatekey"
+    private let privateKeyTag = "signedby.privatekey"
     
     func generateKeyPair() throws -> String {
         print("🟡 Generating key pair...")

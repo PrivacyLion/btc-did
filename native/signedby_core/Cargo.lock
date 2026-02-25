@@ -291,30 +291,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "btcdid_core"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "ark-bn254",
- "ark-ec",
- "ark-ff",
- "ark-std",
- "base64",
- "bitcoin 0.31.2",
- "clap",
- "getrandom",
- "hex",
- "jni",
- "k256",
- "lightning-invoice",
- "rand_core",
- "secp256k1 0.28.2",
- "serde",
- "serde_json",
- "sha2",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -988,6 +964,30 @@ checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
  "digest",
  "rand_core",
+]
+
+[[package]]
+name = "signedby_core"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "ark-std",
+ "base64",
+ "bitcoin 0.31.2",
+ "clap",
+ "getrandom",
+ "hex",
+ "jni",
+ "k256",
+ "lightning-invoice",
+ "rand_core",
+ "secp256k1 0.28.2",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

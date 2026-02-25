@@ -15,7 +15,7 @@ val localProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.privacylion.btcdid"
+    namespace = "com.signedby.app"
     compileSdk = 36
 
     defaultConfig {

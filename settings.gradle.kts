@@ -21,5 +21,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "BTC_DID"
+rootProject.name = "SignedByMe"
 include(":app")

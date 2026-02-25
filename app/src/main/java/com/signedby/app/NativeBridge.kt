@@ -1,9 +1,9 @@
-// File: app/src/main/java/com/privacylion/btcdid/NativeBridge.kt
-package com.privacylion.btcdid
+// File: app/src/main/java/com/signedby/app/NativeBridge.kt
+package com.signedby.app
 
 object NativeBridge {
     init {
-        System.loadLibrary("btcdid_core")
+        System.loadLibrary("signedby_core")
     }
 
     // ============================================================================

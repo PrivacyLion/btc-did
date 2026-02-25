@@ -3,7 +3,7 @@
 
 import Foundation
 
-/// Swift wrapper for the btcdid_core Rust library.
+/// Swift wrapper for the signedby_core Rust library.
 /// All cryptographic operations go through this bridge.
 enum NativeBridge {
     

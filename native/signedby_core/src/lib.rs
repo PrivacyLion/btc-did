@@ -1,4 +1,4 @@
-// lib.rs - BTC DID Core Library
+// lib.rs - SignedByMe Core Library
 // Implements KeyManager, DLC Builder, Lightning payments, and Groth16 membership proofs
 
 use anyhow::{Result, anyhow};
@@ -25,7 +25,7 @@ use lightning::{Preimage, PaymentRequestPackage, verify_payment};
 
 /// Simple sanity check
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_helloFromRust(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_helloFromRust(
     mut env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
@@ -36,7 +36,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_helloFromRust(
 
 /// SHA-256 helper
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_sha256Hex(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_sha256Hex(
     mut env: JNIEnv,
     _clazz: JClass,
     input: JString,
@@ -53,7 +53,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_sha256Hex(
 
 /// Generate 32-byte secp256k1 private key
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_generateSecp256k1PrivateKey(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_generateSecp256k1PrivateKey(
     mut env: JNIEnv,
     _clazz: JClass,
 ) -> jbyteArray {
@@ -72,7 +72,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_generateSecp256k
 
 /// Derive compressed public key hex from private key bytes
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_derivePublicKeyHex(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_derivePublicKeyHex(
     mut env: JNIEnv,
     _clazz: JClass,
     priv_bytes: JByteArray,
@@ -90,7 +90,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_derivePublicKeyH
 
 /// Sign message with secp256k1 key (DER sig hex)
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_signMessageDerHex(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_signMessageDerHex(
     mut env: JNIEnv,
     _clazz: JClass,
     priv_bytes: JByteArray,
@@ -123,7 +123,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_signMessageDerHe
 
 /// Create a DLC contract
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_createDlcContract(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_createDlcContract(
     mut env: JNIEnv,
     _clazz: JClass,
     outcome: JString,
@@ -176,7 +176,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_createDlcContrac
 
 /// Sign a DLC outcome with real Schnorr signature
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_signDlcOutcome(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_signDlcOutcome(
     mut env: JNIEnv,
     _clazz: JClass,
     outcome: JString,
@@ -191,7 +191,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_signDlcOutcome(
 
 /// Get oracle x-only public key (BIP340 format)
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_oraclePubkeyHex(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_oraclePubkeyHex(
     mut env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
@@ -202,17 +202,17 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_oraclePubkeyHex(
 
 /// Oracle sign outcome (alias for signDlcOutcome)
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_oracleSignOutcome(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleSignOutcome(
     mut env: JNIEnv,
     _clazz: JClass,
     outcome: JString,
 ) -> jstring {
-    Java_com_privacylion_btcdid_NativeBridge_signDlcOutcome(env, _clazz, outcome)
+    Java_com_signedby_app_NativeBridge_signDlcOutcome(env, _clazz, outcome)
 }
 
 /// Acknowledge oracle signing policy for a contract
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_oracleAcknowledgePolicy(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleAcknowledgePolicy(
     mut env: JNIEnv,
     _clazz: JClass,
     outcome: JString,
@@ -231,7 +231,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_oracleAcknowledg
 
 /// Verify an oracle attestation signature
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_oracleVerifyAttestation(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleVerifyAttestation(
     mut env: JNIEnv,
     _clazz: JClass,
     outcome: JString,
@@ -258,7 +258,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_oracleVerifyAtte
 
 /// Generate a Lightning preimage and payment hash
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_generatePreimage(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_generatePreimage(
     mut env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
@@ -272,7 +272,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_generatePreimage
 
 /// Verify a payment (preimage against payment hash)
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_verifyPayment(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_verifyPayment(
     mut env: JNIEnv,
     _clazz: JClass,
     payment_hash: JString,
@@ -292,7 +292,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_verifyPayment(
 
 /// Extract payment hash from a BOLT11 invoice
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_extractPaymentHashFromBolt11(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_extractPaymentHashFromBolt11(
     mut env: JNIEnv,
     _clazz: JClass,
     bolt11: JString,
@@ -320,7 +320,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_extractPaymentHa
 
 /// Create a Payment Request Package (PRP)
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_createPrp(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_createPrp(
     mut env: JNIEnv,
     _clazz: JClass,
     amount_sats: jlong,
@@ -366,7 +366,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_createPrp(
 
 /// Sign a message with Schnorr (for Taproot/DLC)
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_signSchnorr(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_signSchnorr(
     mut env: JNIEnv,
     _clazz: JClass,
     priv_bytes: JByteArray,
@@ -395,7 +395,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_signSchnorr(
 
 /// Get x-only public key (for Taproot)
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_getXOnlyPubkey(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_getXOnlyPubkey(
     mut env: JNIEnv,
     _clazz: JClass,
     priv_bytes: JByteArray,

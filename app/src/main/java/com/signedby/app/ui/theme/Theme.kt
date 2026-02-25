@@ -1,4 +1,4 @@
-package com.privacylion.btcdid.ui.theme
+package com.signedby.app.ui.theme
 
 import android.app.Activity
 import android.os.Build
@@ -34,7 +34,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun BTC_DIDTheme(
+fun SignedByMeTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,

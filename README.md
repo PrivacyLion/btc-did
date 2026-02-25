@@ -176,7 +176,7 @@ At verification:
 ## Project Structure
 
 ```
-btc-did/
+signedby/
 ├── app/                          # Android app + API (mixed)
 │   ├── src/main/java/.../        # Android Kotlin code
 │   │   ├── MainActivity.kt       # Main UI

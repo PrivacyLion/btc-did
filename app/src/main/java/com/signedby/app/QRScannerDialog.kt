@@ -1,4 +1,4 @@
-package com.privacylion.btcdid
+package com.signedby.app
 
 import android.Manifest
 import android.content.pm.PackageManager

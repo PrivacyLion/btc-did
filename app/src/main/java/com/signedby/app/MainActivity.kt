@@ -1,4 +1,4 @@
-package com.privacylion.btcdid
+package com.signedby.app
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -53,7 +53,7 @@ import breez_sdk_spark.Payment
 import breez_sdk_spark.PaymentType
 import breez_sdk_spark.PaymentStatus
 import breez_sdk_spark.PaymentDetails
-import com.privacylion.btcdid.ui.theme.BTC_DIDTheme
+import com.signedby.app.ui.theme.SignedByMeTheme
 import kotlinx.coroutines.*
 import androidx.lifecycle.lifecycleScope
 import org.json.JSONObject
@@ -102,7 +102,7 @@ class MainActivity : FragmentActivity() {
         val initialLoginSession = parseLoginIntent(intent)
 
         setContent {
-            BTC_DIDTheme {
+            SignedByMeTheme {
                 SignedByMeApp(didMgr, breezMgr, initialLoginSession)
             }
         }

@@ -1,4 +1,4 @@
-package com.privacylion.btcdid
+package com.signedby.app
 
 import android.content.Intent
 import android.graphics.Typeface

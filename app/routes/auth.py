@@ -17,7 +17,7 @@ def login_start(body: LoginStartRequest):
     nonce = sha256_hex(f"{login_id}:{body.domain}:{time.time_ns()}")
     pay_terms = PayTerms(
         amount_sats=100,
-        description=f"BTC DID login for {body.domain}",
+        description=f"SignedByMe login for {body.domain}",
         expires=int(time.time()) + PRP_TTL
     )
     store.LOGINS[login_id] = {

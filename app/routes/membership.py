@@ -44,11 +44,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Path to poseidon_hash binary (built from btcdid_core)
+# Path to poseidon_hash binary (built from signedby_core)
 # In production, this should be an absolute path or in PATH
 POSEIDON_HASH_BIN = os.getenv(
     "POSEIDON_HASH_BIN", 
-    str(Path(__file__).resolve().parents[2] / "native" / "btcdid_core" / "target" / "release" / "poseidon_hash")
+    str(Path(__file__).resolve().parents[2] / "native" / "signedby_core" / "target" / "release" / "poseidon_hash")
 )
 
 
@@ -77,7 +77,7 @@ def _call_poseidon_hash(args: list) -> bytes:
     except FileNotFoundError:
         raise RuntimeError(
             f"poseidon_hash binary not found at {POSEIDON_HASH_BIN}. "
-            "Build with: cd native/btcdid_core && cargo build --release"
+            "Build with: cd native/signedby_core && cargo build --release"
         )
     except subprocess.TimeoutExpired:
         raise RuntimeError("poseidon_hash timed out")

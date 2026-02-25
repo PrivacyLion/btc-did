@@ -9,7 +9,7 @@ Verifies that ALL four components produce identical results:
 4. Python tree builder (sbm_tree.py)
 
 This test requires the poseidon_hash binary to be built:
-    cd native/btcdid_core && cargo build --release
+    cd native/signedby_core && cargo build --release
 
 Run with:
     pytest tests/test_poseidon2_integration.py -v
@@ -33,7 +33,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "tools" / "sbm-tree"))
 # Poseidon hash binary path
 POSEIDON_HASH_BIN = os.getenv(
     "POSEIDON_HASH_BIN",
-    str(PROJECT_ROOT / "native" / "btcdid_core" / "target" / "release" / "poseidon_hash")
+    str(PROJECT_ROOT / "native" / "signedby_core" / "target" / "release" / "poseidon_hash")
 )
 
 
@@ -73,7 +73,7 @@ class TestPoseidon2Integration:
             import pytest
             pytest.skip(
                 f"poseidon_hash binary not found at {POSEIDON_HASH_BIN}. "
-                "Build with: cd native/btcdid_core && cargo build --release"
+                "Build with: cd native/signedby_core && cargo build --release"
             )
     
     def test_cli_pair_deterministic(self):
@@ -238,7 +238,7 @@ def run_standalone_tests():
     
     if not check_binary_available():
         print(f"\n❌ ERROR: poseidon_hash binary not found at {POSEIDON_HASH_BIN}")
-        print("Build with: cd native/btcdid_core && cargo build --release")
+        print("Build with: cd native/signedby_core && cargo build --release")
         sys.exit(1)
     
     print(f"✓ Found poseidon_hash at {POSEIDON_HASH_BIN}")

@@ -1,4 +1,4 @@
-package com.privacylion.btcdid.ui.theme
+package com.signedby.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

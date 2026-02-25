@@ -18,7 +18,7 @@ Commitments CSV format (one hex commitment per line, no header):
     0x5678...
 
 Environment variables:
-    POSEIDON_HASH_BIN - Path to poseidon_hash binary (defaults to ../native/btcdid_core/target/release/poseidon_hash)
+    POSEIDON_HASH_BIN - Path to poseidon_hash binary (defaults to ../native/signedby_core/target/release/poseidon_hash)
 """
 
 import argparse
@@ -38,7 +38,7 @@ WITNESS_VERSION = 2  # Bumped for Poseidon2 change
 
 # Path to poseidon_hash binary
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_BIN_PATH = SCRIPT_DIR.parents[1] / "native" / "btcdid_core" / "target" / "release" / "poseidon_hash"
+DEFAULT_BIN_PATH = SCRIPT_DIR.parents[1] / "native" / "signedby_core" / "target" / "release" / "poseidon_hash"
 POSEIDON_HASH_BIN = os.getenv("POSEIDON_HASH_BIN", str(DEFAULT_BIN_PATH))
 
 
@@ -71,7 +71,7 @@ def _call_poseidon_hash(args: list) -> bytes:
     except FileNotFoundError:
         raise RuntimeError(
             f"poseidon_hash binary not found at {POSEIDON_HASH_BIN}. "
-            "Build with: cd native/btcdid_core && cargo build --release"
+            "Build with: cd native/signedby_core && cargo build --release"
         )
     except subprocess.TimeoutExpired:
         raise RuntimeError("poseidon_hash timed out")
@@ -257,7 +257,7 @@ def build_tree(args):
     # Check for poseidon_hash binary
     if not check_poseidon_binary():
         print(f"ERROR: poseidon_hash binary not found at {POSEIDON_HASH_BIN}", file=sys.stderr)
-        print(f"       Build with: cd native/btcdid_core && cargo build --release", file=sys.stderr)
+        print(f"       Build with: cd native/signedby_core && cargo build --release", file=sys.stderr)
         print(f"       Or set POSEIDON_HASH_BIN environment variable", file=sys.stderr)
         sys.exit(1)
     

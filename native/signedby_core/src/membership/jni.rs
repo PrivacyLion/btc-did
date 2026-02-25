@@ -21,7 +21,7 @@ const LEAF_COMMITMENT_DOMAIN: &[u8] = b"leaf_commit:";
 /// This allows the app to compute the binding hash client-side
 /// to include in proof generation.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_computeBindingHashV4<'local>(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_computeBindingHashV4<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     did_pubkey: JByteArray<'local>,
@@ -105,7 +105,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_computeBindingHa
 ///
 /// Signature: (leafSecret: ByteArray) -> ByteArray (32 bytes)
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_computeLeafCommitment<'local>(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_computeLeafCommitment<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     leaf_secret: JByteArray<'local>,
@@ -145,7 +145,7 @@ pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_computeLeafCommi
 ///
 /// Signature: (leafSecret: ByteArray, sessionId: ByteArray) -> ByteArray (32 bytes)
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_privacylion_btcdid_NativeBridge_computeNullifier<'local>(
+pub extern "system" fn Java_com_signedby_app_NativeBridge_computeNullifier<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     leaf_secret: JByteArray<'local>,
