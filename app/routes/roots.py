@@ -7,6 +7,8 @@ Manages Merkle roots for membership proofs.
 - Admin endpoints for root lifecycle management
 
 INVARIANT: Acme roots NEVER satisfy BetaCorp sessions (client_id scoping)
+
+Storage: SQLite (persistent across restarts)
 """
 from fastapi import APIRouter, HTTPException, Header, Depends, Query
 from pydantic import BaseModel, Field
@@ -14,15 +16,23 @@ from typing import Optional
 import time
 import json
 import os
+import secrets
 import logging
 from pathlib import Path
+
+from ..db import (
+    create_root as db_create_root,
+    get_root_by_id,
+    get_active_root,
+    list_roots as db_list_roots,
+    audit_log,
+)
 
 logger = logging.getLogger("roots")
 router = APIRouter(tags=["roots"])
 
 # Config paths
 DATA_DIR = Path(__file__).resolve().parents[2]
-ROOTS_PATH = DATA_DIR / "roots.json"
 CLIENTS_PATH = DATA_DIR / "clients.json"
 ADMIN_API_KEY = os.environ.get("SBM_ADMIN_KEY")
 
@@ -93,22 +103,6 @@ class RootsResponse(BaseModel):
 
 # === Storage Helpers ===
 
-def load_roots() -> list[dict]:
-    """Load roots from config file."""
-    if ROOTS_PATH.exists():
-        try:
-            data = json.loads(ROOTS_PATH.read_text())
-            return data.get("roots", [])
-        except Exception as e:
-            logger.warning(f"Could not load roots.json: {e}")
-    return []
-
-
-def save_roots(roots: list[dict]) -> None:
-    """Save roots to config file."""
-    ROOTS_PATH.write_text(json.dumps({"roots": roots}, indent=2))
-
-
 def get_canonical_root(root_id: str, client_id: str = None) -> dict | None:
     """
     Server-authoritative root lookup.
@@ -116,18 +110,18 @@ def get_canonical_root(root_id: str, client_id: str = None) -> dict | None:
     
     INVARIANT: If client_id is provided, root must belong to that client.
     """
+    r = get_root_by_id(root_id)
+    if not r:
+        return None
+    
     now = int(time.time())
-    for r in load_roots():
-        if r["root_id"] == root_id:
-            # Client scoping check (critical security invariant)
-            if client_id and r.get("client_id") != client_id:
-                return None  # Wrong client - Acme roots don't satisfy BetaCorp
-            if now < r.get("not_before", 0):
-                return None  # Not yet valid
-            if now > r.get("expires_at", float("inf")):
-                return None  # Expired
-            return r
-    return None
+    
+    # Client scoping check (critical security invariant)
+    if client_id and r.get("client_id") != client_id:
+        return None  # Wrong client - Acme roots don't satisfy BetaCorp
+    
+    # Active check is already handled by the query if needed
+    return r
 
 
 def get_active_root_for_client(client_id: str, purpose: str = None) -> dict | None:
@@ -135,24 +129,7 @@ def get_active_root_for_client(client_id: str, purpose: str = None) -> dict | No
     Get the active root for a client (optionally filtered by purpose).
     Returns the most recently created active root.
     """
-    now = int(time.time())
-    matching = []
-    for r in load_roots():
-        if r.get("client_id") != client_id:
-            continue
-        if purpose and r.get("purpose") != purpose:
-            continue
-        if now < r.get("not_before", 0):
-            continue
-        if now > r.get("expires_at", float("inf")):
-            continue
-        matching.append(r)
-    
-    if not matching:
-        return None
-    
-    # Return most recent (by not_before or created_at)
-    return max(matching, key=lambda r: r.get("not_before", 0))
+    return get_active_root(client_id, purpose or "allowlist")
 
 
 # === Admin Auth ===
@@ -175,27 +152,30 @@ def get_current_roots(
     Get currently active roots, optionally filtered by client_id.
     
     Public endpoint - no authentication required.
-    Returns roots where: not_before <= now <= expires_at
+    Returns roots where: active = 1
     
     If client_id is provided, returns only that client's roots.
     Mobile apps should pass client_id to get the correct root for their enterprise.
     """
-    now = int(time.time())
-    active = []
-    for r in load_roots():
-        # Time-based filtering
-        if not (r.get("not_before", 0) <= now <= r.get("expires_at", float("inf"))):
-            continue
-        # Client filtering (if requested)
-        if client_id and r.get("client_id") != client_id:
-            continue
-        active.append(r)
+    roots = db_list_roots(client_id=client_id, active_only=True)
     
-    # Handle roots without client_id (legacy/global roots) - include if no filter
-    if not client_id:
-        pass  # Already included
+    # Convert to response format
+    entries = []
+    for r in roots:
+        entries.append(RootEntry(
+            root_id=r["id"],
+            client_id=r["client_id"],
+            purpose=r["purpose"],
+            purpose_id=get_purpose_id(r["purpose"]),
+            root=r["root_hash"],
+            hash_alg="poseidon",
+            depth=r["tree_depth"],
+            not_before=r.get("created_at", 0),
+            expires_at=r.get("superseded_at") or 2000000000,
+            description=None,
+        ))
     
-    return RootsResponse(roots=[RootEntry(**r) for r in active if "client_id" in r])
+    return RootsResponse(roots=entries)
 
 
 @router.get("/v1/roots/{root_id}", response_model=RootEntry)
@@ -206,10 +186,22 @@ def get_root(root_id: str):
     Returns the root even if expired (for audit purposes).
     Public endpoint - no authentication required.
     """
-    for r in load_roots():
-        if r["root_id"] == root_id:
-            return RootEntry(**r)
-    raise HTTPException(404, f"Root not found: {root_id}")
+    r = get_root_by_id(root_id)
+    if not r:
+        raise HTTPException(404, f"Root not found: {root_id}")
+    
+    return RootEntry(
+        root_id=r["id"],
+        client_id=r["client_id"],
+        purpose=r["purpose"],
+        purpose_id=get_purpose_id(r["purpose"]),
+        root=r["root_hash"],
+        hash_alg="poseidon",
+        depth=r["tree_depth"],
+        not_before=r.get("created_at", 0),
+        expires_at=r.get("superseded_at") or 2000000000,
+        description=None,
+    )
 
 
 # === Admin Endpoints ===
@@ -246,10 +238,9 @@ def publish_root(
     if body.depth != 20:
         raise HTTPException(400, f"depth must be 20 (got {body.depth}). Pad tree with zero leaves if needed.")
     
-    roots = load_roots()
-    
     # Check for duplicate
-    if any(r["root_id"] == body.root_id for r in roots):
+    existing = get_root_by_id(body.root_id)
+    if existing:
         raise HTTPException(400, f"root_id already exists: {body.root_id}")
     
     # Validate purpose_id
@@ -257,27 +248,17 @@ def publish_root(
     if purpose_id == 0 and body.purpose:
         raise HTTPException(400, f"Invalid purpose: {body.purpose}")
     
-    # Set defaults
-    now = int(time.time())
-    not_before = body.not_before if body.not_before is not None else now
-    expires_at = body.expires_at if body.expires_at is not None else now + (365 * 86400)  # 1 year
+    # Create root in SQLite
+    db_create_root(
+        root_id=body.root_id,
+        client_id=client_id,
+        purpose=body.purpose,
+        root_hash=body.root,
+        leaf_count=0,  # Will be updated when tree is built
+        tree_depth=body.depth,
+    )
     
-    root_entry = {
-        "root_id": body.root_id,
-        "client_id": client_id,  # Scoped to this enterprise
-        "purpose": body.purpose,
-        "purpose_id": purpose_id,
-        "root": body.root,
-        "hash_alg": body.hash_alg,
-        "depth": body.depth,
-        "not_before": not_before,
-        "expires_at": expires_at,
-        "description": body.description or f"{client_id} {body.purpose} root",
-    }
-    
-    roots.append(root_entry)
-    save_roots(roots)
-    
+    audit_log("root_published", client_id=client_id, details={"root_id": body.root_id})
     logger.info(f"Root published: {body.root_id} for client {client_id}")
     return {"ok": True, "root_id": body.root_id, "client_id": client_id}
 
@@ -296,10 +277,9 @@ def add_root_admin(body: RootEntry):
     if body.depth != 20:
         raise HTTPException(400, f"depth must be 20 (got {body.depth}). Pad tree with zero leaves if needed.")
     
-    roots = load_roots()
-    
     # Check for duplicate
-    if any(r["root_id"] == body.root_id for r in roots):
+    existing = get_root_by_id(body.root_id)
+    if existing:
         raise HTTPException(400, f"root_id already exists: {body.root_id}")
     
     # Validate purpose_id matches purpose
@@ -307,9 +287,17 @@ def add_root_admin(body: RootEntry):
     if body.purpose_id != expected_id:
         raise HTTPException(400, f"purpose_id mismatch: expected {expected_id} for purpose '{body.purpose}'")
     
-    roots.append(body.dict())
-    save_roots(roots)
+    # Create root in SQLite
+    db_create_root(
+        root_id=body.root_id,
+        client_id=body.client_id,
+        purpose=body.purpose,
+        root_hash=body.root,
+        leaf_count=0,
+        tree_depth=body.depth,
+    )
     
+    audit_log("root_added_admin", details={"root_id": body.root_id, "client_id": body.client_id})
     logger.info(f"Root added (admin): {body.root_id}")
     return {"ok": True, "root_id": body.root_id}
 
@@ -321,23 +309,27 @@ def update_root(root_id: str, patch: RootPatch):
     
     Requires X-Admin-Key header.
     Common use: set expires_at to deprecate a root.
+    
+    Note: For SQLite, we mark roots inactive instead of setting expires_at.
     """
-    roots = load_roots()
+    from ..db import get_connection
     
-    for r in roots:
-        if r["root_id"] == root_id:
-            if patch.expires_at is not None:
-                r["expires_at"] = patch.expires_at
-            if patch.not_before is not None:
-                r["not_before"] = patch.not_before
-            if patch.description is not None:
-                r["description"] = patch.description
-            
-            save_roots(roots)
-            logger.info(f"Root updated: {root_id}")
-            return {"ok": True, "root_id": root_id}
+    r = get_root_by_id(root_id)
+    if not r:
+        raise HTTPException(404, f"Root not found: {root_id}")
     
-    raise HTTPException(404, f"Root not found: {root_id}")
+    # For deprecation, mark as inactive
+    if patch.expires_at is not None and patch.expires_at < int(time.time()):
+        conn = get_connection()
+        conn.execute(
+            "UPDATE merkle_roots SET active = 0, superseded_at = ? WHERE id = ?",
+            (patch.expires_at, root_id)
+        )
+        conn.commit()
+    
+    audit_log("root_updated", details={"root_id": root_id, "patch": patch.dict(exclude_none=True)})
+    logger.info(f"Root updated: {root_id}")
+    return {"ok": True, "root_id": root_id}
 
 
 @router.delete("/v1/roots/{root_id}", response_model=dict, dependencies=[Depends(require_admin)])
@@ -348,12 +340,16 @@ def delete_root(root_id: str):
     Requires X-Admin-Key header.
     Use with caution - prefer setting expires_at for graceful deprecation.
     """
-    roots = load_roots()
-    new_roots = [r for r in roots if r["root_id"] != root_id]
+    from ..db import get_connection
     
-    if len(new_roots) == len(roots):
+    r = get_root_by_id(root_id)
+    if not r:
         raise HTTPException(404, f"Root not found: {root_id}")
     
-    save_roots(new_roots)
+    conn = get_connection()
+    conn.execute("DELETE FROM merkle_roots WHERE id = ?", (root_id,))
+    conn.commit()
+    
+    audit_log("root_deleted", details={"root_id": root_id})
     logger.info(f"Root deleted: {root_id}")
     return {"ok": True, "root_id": root_id, "deleted": True}

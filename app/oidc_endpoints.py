@@ -4,17 +4,16 @@ from pydantic import BaseModel
 from urllib.parse import urlparse
 from pathlib import Path
 from fastapi import Header, status
-import time, json, hashlib, base64, secrets, shelve
+import time, json, hashlib, base64, secrets
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
+from .db import create_oidc_code, get_oidc_code, use_oidc_code
+
 router = APIRouter()
 
 ISSUER = "https://api.beta.privacy-lion.com"
-VAR_DIR = Path(__file__).resolve().parents[1] / "var"
-VAR_DIR.mkdir(parents=True, exist_ok=True)
-CODES_DB = str(VAR_DIR / "oidc_codes.db")  # short-lived auth codes storage
 
 def oauth_err(code: str, desc: str, http=status.HTTP_400_BAD_REQUEST):
     return JSONResponse({"error": code, "error_description": desc}, status_code=http)
@@ -86,18 +85,16 @@ def oidc_authorize(
     now = int(time.time())
     exp = now + 300
 
-    rec = {
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "rp_domain": rp_domain,
-        "nonce": nonce or secrets.token_urlsafe(16),
-        "code_challenge": code_challenge,
-        "code_challenge_method": code_challenge_method or "S256",
-        "iat": now,
-        "exp": exp,
-    }
-    with shelve.open(CODES_DB, writeback=True) as db:
-        db[code] = rec
+    # Store code in SQLite
+    create_oidc_code(
+        code=code,
+        client_id=client_id,
+        iat=now,
+        exp=exp,
+        redirect_uri=redirect_uri,
+        nonce=nonce or secrets.token_urlsafe(16),
+        code_challenge=code_challenge,
+    )
 
     sep = '&' if parsed.query else '?'
     loc = f"{redirect_uri}{sep}code={code}"
@@ -182,33 +179,28 @@ async def oidc_token_code_grant(
     if grant_type != "authorization_code":
         return oauth_err("unsupported_grant_type", "grant_type must be authorization_code")
 
-    with shelve.open(CODES_DB, writeback=True) as db:
-        rec = db.get(code)
-        if not rec:
-            raise HTTPException(status_code=400, detail="invalid or expired code")
-        if redirect_uri and redirect_uri != rec["redirect_uri"]:
-            return oauth_err("invalid_request", "redirect_uri mismatch")
-        if client_id and client_id != rec["client_id"]:
-            return oauth_err("invalid_client", "client_id mismatch")
+    # Get code from SQLite
+    rec = get_oidc_code(code)
+    if not rec:
+        raise HTTPException(status_code=400, detail="invalid or expired code")
+    if redirect_uri and redirect_uri != rec["redirect_uri"]:
+        return oauth_err("invalid_request", "redirect_uri mismatch")
+    if client_id and client_id != rec["client_id"]:
+        return oauth_err("invalid_client", "client_id mismatch")
 
-        now = int(time.time())
-        if now >= rec["exp"]:
-            del db[code]
-            raise HTTPException(status_code=400, detail="code expired")
+    # PKCE (S256)
+    if rec.get("code_challenge"):
+        if not code_verifier:
+            raise HTTPException(status_code=400, detail="missing code_verifier")
+        if (rec.get("code_challenge_method") or "S256") != "S256":
+            raise HTTPException(status_code=400, detail="unsupported code_challenge_method")
+        digest = hashlib.sha256(code_verifier.encode()).digest()
+        derived = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+        if derived != rec["code_challenge"]:
+            raise HTTPException(status_code=400, detail="PKCE verification failed")
 
-        # PKCE (S256)
-        if rec.get("code_challenge"):
-            if not code_verifier:
-                raise HTTPException(status_code=400, detail="missing code_verifier")
-            if (rec.get("code_challenge_method") or "S256") != "S256":
-                raise HTTPException(status_code=400, detail="unsupported code_challenge_method")
-            digest = hashlib.sha256(code_verifier.encode()).digest()
-            derived = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
-            if derived != rec["code_challenge"]:
-                raise HTTPException(status_code=400, detail="PKCE verification failed")
-
-        # one-time use
-        del db[code]
+    # Mark code as used (one-time use)
+    use_oidc_code(code)
 
     # Sign ID Token
     jwks_path = Path("keys/jwks.json")

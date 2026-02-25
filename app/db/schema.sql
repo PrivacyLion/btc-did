@@ -167,6 +167,34 @@ CREATE INDEX IF NOT EXISTS idx_payments_session ON payment_confirmations(session
 -- Could migrate later if needed
 
 -- ============================================================================
+-- ENROLLMENT TOKENS
+-- Short-lived tokens for enrollment/witness retrieval
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS enrollment_tokens (
+    token TEXT PRIMARY KEY,
+    enrollment_id TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    did TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    consumed INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT (strftime('%s', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tokens_exp ON enrollment_tokens(expires_at);
+
+-- ============================================================================
+-- DID CHALLENGES
+-- Challenges for DID signature verification
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS did_challenges (
+    challenge TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    did TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER DEFAULT (strftime('%s', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_challenges_exp ON did_challenges(expires_at);
+
+-- ============================================================================
 -- AUDIT LOG (optional - for debugging)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS audit_log (

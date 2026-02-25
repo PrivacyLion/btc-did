@@ -456,6 +456,116 @@ def audit_log(
 
 
 # ============================================================================
+# ENROLLMENT TOKENS
+# ============================================================================
+
+def create_enrollment_token(
+    token: str,
+    enrollment_id: str,
+    client_id: str,
+    did: str,
+    expires_at: int,
+) -> None:
+    """Create an enrollment token."""
+    conn = get_connection()
+    conn.execute("""
+        INSERT INTO enrollment_tokens (token, enrollment_id, client_id, did, expires_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (token, enrollment_id, client_id, did, expires_at))
+    conn.commit()
+
+
+def get_enrollment_token(token: str) -> Optional[Dict[str, Any]]:
+    """Get enrollment token if valid and not consumed."""
+    import time
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM enrollment_tokens WHERE token = ? AND consumed = 0 AND expires_at > ?",
+        (token, int(time.time()))
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def consume_enrollment_token(token: str) -> bool:
+    """Mark token as consumed. Returns True if token was valid."""
+    conn = get_connection()
+    cursor = conn.execute(
+        "UPDATE enrollment_tokens SET consumed = 1 WHERE token = ? AND consumed = 0",
+        (token,)
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def delete_expired_tokens(before_ts: int) -> int:
+    """Delete expired tokens. Returns count deleted."""
+    conn = get_connection()
+    cursor = conn.execute(
+        "DELETE FROM enrollment_tokens WHERE expires_at < ?",
+        (before_ts,)
+    )
+    conn.commit()
+    return cursor.rowcount
+
+
+# ============================================================================
+# DID CHALLENGES
+# ============================================================================
+
+def create_challenge(
+    challenge: str,
+    client_id: str,
+    did: str,
+    expires_at: int,
+) -> None:
+    """Create a DID signature challenge (replaces any existing for same client+did)."""
+    conn = get_connection()
+    # Remove old challenges for same (client_id, did)
+    conn.execute(
+        "DELETE FROM did_challenges WHERE client_id = ? AND did = ?",
+        (client_id, did)
+    )
+    conn.execute("""
+        INSERT INTO did_challenges (challenge, client_id, did, expires_at)
+        VALUES (?, ?, ?, ?)
+    """, (challenge, client_id, did, expires_at))
+    conn.commit()
+
+
+def get_challenge(challenge: str, client_id: str, did: str) -> Optional[Dict[str, Any]]:
+    """Get challenge if valid."""
+    import time
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT * FROM did_challenges 
+        WHERE challenge = ? AND client_id = ? AND did = ? AND expires_at > ?
+    """, (challenge, client_id, did, int(time.time()))).fetchone()
+    return dict(row) if row else None
+
+
+def delete_challenge(challenge: str) -> bool:
+    """Delete challenge (single-use). Returns True if deleted."""
+    conn = get_connection()
+    cursor = conn.execute(
+        "DELETE FROM did_challenges WHERE challenge = ?",
+        (challenge,)
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def delete_expired_challenges(before_ts: int) -> int:
+    """Delete expired challenges. Returns count deleted."""
+    conn = get_connection()
+    cursor = conn.execute(
+        "DELETE FROM did_challenges WHERE expires_at < ?",
+        (before_ts,)
+    )
+    conn.commit()
+    return cursor.rowcount
+
+
+# ============================================================================
 # MAINTENANCE
 # ============================================================================
 
@@ -467,6 +577,8 @@ def cleanup_expired(max_age_hours: int = 24) -> Dict[str, int]:
     return {
         "sessions": delete_expired_sessions(cutoff),
         "oidc_codes": delete_expired_oidc_codes(cutoff),
+        "tokens": delete_expired_tokens(cutoff),
+        "challenges": delete_expired_challenges(cutoff),
     }
 
 
