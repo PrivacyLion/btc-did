@@ -263,7 +263,7 @@ pub fn generate_test_vectors() -> Vec<TestVector> {
         BN254Scalar::from(0xcafebabeu64),
         BN254Scalar::from(0x12345678u64),
         BN254Scalar::from(0x87654321u64),
-        BN254Scalar::from(0xfeedface64),
+        BN254Scalar::from(0xfeedface64u64),
     ];
     let leaf_3 = poseidon2_hash_5(&leaf_secret_3);
     let nsec_3 = derive_nsec(&leaf_secret_3);

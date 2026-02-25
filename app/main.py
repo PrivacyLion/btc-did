@@ -11,8 +11,6 @@ from slowapi.errors import RateLimitExceeded
 from .routes.auth import router as auth_router
 from .routes.unlock import router as unlock_router
 from .routes.claims import router as claims_router
-from .routes.enterprise import router as enterprise_router
-from .routes.login_invoice import router as login_router
 from .routes.roots import router as roots_router
 from .routes.membership import router as membership_router
 from .routes.session import router as session_router
@@ -25,7 +23,7 @@ from app.oidc_endpoints import router as oidc_endpoints_router
 # Rate limiter: 100 requests per minute per IP for general endpoints
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
-app = FastAPI(title="BTC DID — Stateless Auth API", version="0.1.0")
+app = FastAPI(title="SignedByMe — Stateless Auth API", version="0.2.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -45,17 +43,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# v1 routes - login_router FIRST to avoid auth.py /login/start conflict
-app.include_router(groth16_router)  # Groth16 stateless login (has /v1 prefix in routes)
-app.include_router(login_router)  # Login invoice + DLC routes (has /v1 prefix in routes)
-app.include_router(session_router)  # Canonical session start/poll endpoints
-app.include_router(admin_router)  # Read-only admin dashboard API
+# v1 routes
+app.include_router(groth16_router)  # Groth16 stateless login (/v1/login/verify)
+app.include_router(session_router)  # Session management
+app.include_router(admin_router)  # Admin dashboard API
 app.include_router(roots_router)  # Merkle root registry
 app.include_router(membership_router)  # Enrollment + tree building
 app.include_router(auth_router, prefix="/v1")
 app.include_router(unlock_router, prefix="/v1")
 app.include_router(claims_router, prefix="/v1")
-app.include_router(enterprise_router)  # Stateless enterprise login (routes have /v1 prefix)
 
 @app.get("/healthz")
 def health():

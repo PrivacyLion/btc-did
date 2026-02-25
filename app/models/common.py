@@ -19,7 +19,7 @@ class DLCMetadata(BaseModel):
     oracle_pubkey: Optional[str] = None
 
 class ZKProof(BaseModel):
-    system: str = "STWO"
+    system: str = "groth16"
     proof: str
     proof_hash: Optional[str] = None
     circuit: Optional[str] = None

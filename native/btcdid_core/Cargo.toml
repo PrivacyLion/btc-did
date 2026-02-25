@@ -1,27 +1,10 @@
 [package]
 name = "btcdid_core"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
-
-[[bin]]
-name = "stwo_verifier"
-path = "src/bin/stwo_verifier.rs"
-required-features = ["real-stwo"]
-
-[[bin]]
-name = "membership_verifier"
-path = "src/bin/membership_verifier.rs"
-
-[[bin]]
-name = "sbm_tree"
-path = "src/bin/sbm_tree.rs"
-
-[[bin]]
-name = "poseidon_hash"
-path = "src/bin/poseidon_hash.rs"
 
 [dependencies]
 # CLI argument parsing
@@ -50,40 +33,17 @@ bitcoin = { version = "0.31", features = ["rand-std"] }
 # Lightning invoice generation
 lightning-invoice = "0.29"
 
-# Real STWO STARK prover from StarkWare
-stwo = { git = "https://github.com/starkware-libs/stwo", branch = "dev", features = ["prover"], optional = true }
-stwo-constraint-framework = { git = "https://github.com/starkware-libs/stwo", branch = "dev", features = ["prover"], optional = true }
-
-# Additional deps for STWO
-itertools = { version = "0.12", optional = true }
-num-traits = { version = "0.2", optional = true }
-tracing = { version = "0.1", optional = true }
-bincode = { version = "1.3", optional = true }
-
-# Base64 encoding (always needed for membership proofs)
+# Base64 encoding
 base64 = "0.21"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# Plonky3 - Verified Poseidon2 over M31
-# These provide cryptographically-analyzed parameters
-p3-field = { git = "https://github.com/Plonky3/Plonky3", branch = "main" }
-p3-mersenne-31 = { git = "https://github.com/Plonky3/Plonky3", branch = "main" }
-p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3", branch = "main" }
-p3-symmetric = { git = "https://github.com/Plonky3/Plonky3", branch = "main" }
-
-# PRNG for Poseidon2 round constant generation (matches Plonky3 0.4.2+)
-# p3 uses rand 0.10 / rand_core 0.10
-rand_p3 = { package = "rand", version = "0.10" }
-
 [features]
 default = []
-real-stwo = ["stwo", "stwo-constraint-framework", "itertools", "num-traits", "tracing", "bincode"]
 
 [dev-dependencies]
-# (moved rand to main dependencies for Poseidon2 round constant generation)
 
 [profile.release]
 opt-level = "z"

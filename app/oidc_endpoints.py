@@ -225,7 +225,7 @@ async def oidc_token_code_grant(
     # Check if this is a SignedByMe login flow
     if rec.get("signedby"):
         # Build AMR (authentication methods reference)
-        amr = ["did_sig", "stwo_proof", "ln_payment"]
+        amr = ["did_sig", "groth16", "ln_payment"]
         if rec.get("membership_verified"):
             amr.append("merkle")
         
