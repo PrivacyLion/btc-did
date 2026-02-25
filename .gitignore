@@ -41,3 +41,12 @@ captures/
 **/.DS_Store
 # OIDC signing keys (private - never commit)
 keys/oidc_rs256.pem
+
+# Exception: keep circuit verification key and C++ sources
+!circuits/build/verification_key_final.json
+!circuits/build/membership_cpp/
+!circuits/build/membership_cpp/Makefile
+!circuits/build/membership_cpp/*.cpp
+!circuits/build/membership_cpp/*.hpp
+!circuits/build/membership_cpp/*.asm
+!circuits/build/.gitignore

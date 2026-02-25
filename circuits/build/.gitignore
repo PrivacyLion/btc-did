@@ -1,0 +1,18 @@
+# Large binary artifacts (download/generate on build)
+*.ptau
+*.zkey
+*.r1cs
+*.sym
+*.wtns
+
+# JS witness calculator (regenerate from circom)
+membership_js/
+
+# Compiled objects and binaries
+*.o
+membership_cpp/membership
+membership_cpp/*.dat
+
+# Test proofs
+proof*.json
+public*.json
