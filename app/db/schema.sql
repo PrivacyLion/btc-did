@@ -136,6 +136,44 @@ CREATE TABLE IF NOT EXISTS merkle_witnesses (
 );
 
 -- ============================================================================
+-- INCREMENTAL MERKLE TREES
+-- Stores tree state for incremental updates (new root on each insert)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS merkle_trees (
+    id TEXT PRIMARY KEY,  -- tree_id (e.g., "acme-allowlist")
+    client_id TEXT NOT NULL,
+    purpose TEXT NOT NULL,
+    
+    -- Tree state
+    depth INTEGER NOT NULL DEFAULT 20,
+    next_leaf_index INTEGER NOT NULL DEFAULT 0,
+    
+    -- Current state: JSON array of hashes at each level (right-most path)
+    state_json TEXT NOT NULL DEFAULT '[]',
+    
+    -- Timestamps
+    created_at INTEGER DEFAULT (strftime('%s', 'now')),
+    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_trees_client ON merkle_trees(client_id);
+
+-- ============================================================================
+-- ROOT HISTORY
+-- Track last N roots for validity window (last 30 roots valid)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS root_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tree_id TEXT NOT NULL,
+    root_hash TEXT NOT NULL,
+    leaf_index INTEGER NOT NULL,  -- Index when this root was computed
+    created_at INTEGER DEFAULT (strftime('%s', 'now')),
+    
+    FOREIGN KEY (tree_id) REFERENCES merkle_trees(id)
+);
+CREATE INDEX IF NOT EXISTS idx_root_history_tree ON root_history(tree_id);
+CREATE INDEX IF NOT EXISTS idx_root_history_hash ON root_history(root_hash);
+
+-- ============================================================================
 -- NULLIFIERS
 -- Used nullifiers for replay protection
 -- ============================================================================

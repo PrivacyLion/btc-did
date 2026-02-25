@@ -456,6 +456,124 @@ def audit_log(
 
 
 # ============================================================================
+# INCREMENTAL MERKLE TREES
+# ============================================================================
+
+def create_merkle_tree(
+    tree_id: str,
+    client_id: str,
+    purpose: str,
+    depth: int = 20,
+) -> None:
+    """Create a new incremental Merkle tree."""
+    conn = get_connection()
+    # Initialize with empty state (zeros at each level)
+    initial_state = ["0" * 64] * depth  # 32-byte zeros as hex
+    conn.execute("""
+        INSERT OR IGNORE INTO merkle_trees (id, client_id, purpose, depth, state_json)
+        VALUES (?, ?, ?, ?, ?)
+    """, (tree_id, client_id, purpose, depth, json.dumps(initial_state)))
+    conn.commit()
+
+
+def get_merkle_tree(tree_id: str) -> Optional[Dict[str, Any]]:
+    """Get Merkle tree state."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM merkle_trees WHERE id = ?",
+        (tree_id,)
+    ).fetchone()
+    if not row:
+        return None
+    result = dict(row)
+    result["state"] = json.loads(result["state_json"])
+    return result
+
+
+def update_merkle_tree(
+    tree_id: str,
+    next_leaf_index: int,
+    state: List[str],
+) -> None:
+    """Update Merkle tree state after insertion."""
+    import time
+    conn = get_connection()
+    conn.execute("""
+        UPDATE merkle_trees 
+        SET next_leaf_index = ?, state_json = ?, updated_at = ?
+        WHERE id = ?
+    """, (next_leaf_index, json.dumps(state), int(time.time()), tree_id))
+    conn.commit()
+
+
+def add_root_to_history(
+    tree_id: str,
+    root_hash: str,
+    leaf_index: int,
+) -> None:
+    """Add a root to history."""
+    conn = get_connection()
+    conn.execute("""
+        INSERT INTO root_history (tree_id, root_hash, leaf_index)
+        VALUES (?, ?, ?)
+    """, (tree_id, root_hash, leaf_index))
+    conn.commit()
+
+
+def get_valid_roots(tree_id: str, limit: int = 30) -> List[str]:
+    """Get last N valid roots for a tree."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT root_hash FROM root_history
+        WHERE tree_id = ?
+        ORDER BY id DESC
+        LIMIT ?
+    """, (tree_id, limit)).fetchall()
+    return [row[0] for row in rows]
+
+
+def is_root_valid(tree_id: str, root_hash: str, limit: int = 30) -> bool:
+    """Check if a root is in the valid window."""
+    valid_roots = get_valid_roots(tree_id, limit)
+    return root_hash in valid_roots
+
+
+def get_current_root(tree_id: str) -> Optional[str]:
+    """Get the most recent root for a tree."""
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT root_hash FROM root_history
+        WHERE tree_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+    """, (tree_id,)).fetchone()
+    return row[0] if row else None
+
+
+def prune_root_history(tree_id: str, keep: int = 100) -> int:
+    """Prune old roots, keeping the most recent N. Returns count deleted."""
+    conn = get_connection()
+    # Get the ID threshold
+    row = conn.execute("""
+        SELECT id FROM root_history
+        WHERE tree_id = ?
+        ORDER BY id DESC
+        LIMIT 1 OFFSET ?
+    """, (tree_id, keep - 1)).fetchone()
+    
+    if not row:
+        return 0
+    
+    threshold_id = row[0]
+    cursor = conn.execute("""
+        DELETE FROM root_history
+        WHERE tree_id = ? AND id < ?
+    """, (tree_id, threshold_id))
+    conn.commit()
+    return cursor.rowcount
+
+
+# ============================================================================
 # ENROLLMENT TOKENS
 # ============================================================================
 
