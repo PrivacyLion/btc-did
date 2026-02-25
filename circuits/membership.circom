@@ -1,38 +1,37 @@
 /**
  * SignedByMe Membership Circuit
  * 
- * Proves membership in a Merkle tree and derives a NOSTR npub from the leaf secret.
+ * Proves membership in a Merkle tree and derives a NOSTR npub from the leaf secret
+ * using real secp256k1 scalar multiplication.
  * 
  * 4 Sub-circuits:
- *   1. Leaf Commitment: leaf = Poseidon2(leaf_secret[0..5])
- *   2. Merkle Path (20 levels): parent = Poseidon2(left, right)
+ *   1. Leaf Commitment: leaf = Poseidon(leaf_secret[0..5])
+ *   2. Merkle Path (20 levels): parent = Poseidon(left, right)
  *   3. Path Bit Boolean: path_bits[i] * (path_bits[i] - 1) === 0
- *   4. npub Derivation: nsec = Poseidon2(leaf_secret[0..2]) → npub = secp256k1_derive(nsec)
+ *   4. npub Derivation: nsec = Poseidon(leaf_secret[0..2]) → npub = secp256k1(nsec * G)
  * 
- * Public Outputs: merkle_root, npub_x, npub_y
+ * Public Outputs: merkle_root, npub_x[4], npub_y[4]  (secp256k1 point in 4x64-bit limbs)
  * Private Inputs: leaf_secret[5], siblings[20], path_bits[20]
  * 
- * Target: <10,000 constraints, <1s proof on phone
+ * Estimated constraints: ~100,000 (95K for secp256k1 + ~5K for Merkle/Poseidon)
+ * Target: <3s proof on iPhone 13+ / Pixel 7+
  * 
  * See: SignedByMe Bible Section 12, Phase 4
  */
 
 pragma circom 2.1.0;
 
-// Include Poseidon hash from circomlib
-include "../node_modules/circomlib/circuits/poseidon.circom";
-include "../node_modules/circomlib/circuits/mux1.circom";
-include "../node_modules/circomlib/circuits/comparators.circom";
+// Use circomlib from circom-ecdsa's node_modules
+include "circom-ecdsa/node_modules/circomlib/circuits/poseidon.circom";
+include "circom-ecdsa/node_modules/circomlib/circuits/mux1.circom";
+include "circom-ecdsa/node_modules/circomlib/circuits/bitify.circom";
 
-// SECP256K1 scalar multiplication (from circom-ecdsa or custom implementation)
-// NOTE: This is expensive (~15,000+ constraints). May need optimization.
-// For MVP, we can use a Poseidon-based npub derivation instead of actual secp256k1.
-include "./secp256k1/scalar_mult.circom";
+// Use the optimized ECDSAPrivToPub from circom-ecdsa (uses precomputed tables)
+include "circom-ecdsa/circuits/ecdsa.circom";
 
 /**
- * Poseidon2 hash with 5 inputs (for leaf commitment)
- * Using standard Poseidon since Poseidon2 templates may not be available in circomlib
- * Poseidon with 5 inputs uses t=6 (inputs + 1 for capacity)
+ * Leaf Commitment: hash 5 leaf_secret elements
+ * leaf = Poseidon(leaf_secret[0..5])
  */
 template LeafCommitment() {
     signal input leaf_secret[5];
@@ -62,12 +61,10 @@ template MerklePath(levels) {
     hashes[0] <== leaf;
     
     for (var i = 0; i < levels; i++) {
-        // Ensure path_bits[i] is binary
+        // Ensure path_bits[i] is binary (Sub-circuit 3)
         path_bits[i] * (path_bits[i] - 1) === 0;
         
         // Select order based on path bit
-        // If path_bit = 0: hash(current, sibling)
-        // If path_bit = 1: hash(sibling, current)
         mux[i] = MultiMux1(2);
         mux[i].c[0][0] <== hashes[i];
         mux[i].c[0][1] <== siblings[i];
@@ -89,8 +86,8 @@ template MerklePath(levels) {
  * Derive nsec from leaf_secret[0..2]
  * nsec = Poseidon(leaf_secret[0], leaf_secret[1], leaf_secret[2])
  * 
- * NOTE: The nsec is PRIVATE - it never leaves the circuit.
- * Only the derived npub is public.
+ * The nsec is a 254-bit BN254 scalar that gets converted to a 256-bit
+ * secp256k1 scalar for the EC multiplication.
  */
 template DeriveNsec() {
     signal input leaf_secret_0;
@@ -107,28 +104,59 @@ template DeriveNsec() {
 }
 
 /**
- * Derive npub from nsec via secp256k1 scalar multiplication
- * npub = nsec * G (where G is the secp256k1 generator point)
+ * Convert a BN254 field element to 4x64-bit limbs for secp256k1 operations
  * 
- * WARNING: secp256k1 inside BN254 circuit is expensive (~15K+ constraints).
- * Alternative: Use a commitment scheme where npub = Poseidon(nsec, salt)
- * and the verifier checks this commitment matches a registered npub.
- * 
- * For v1, we use the Poseidon-based approach to stay under 10K constraints.
+ * The Poseidon output is a BN254 scalar (254 bits).
+ * secp256k1 operations expect 4 limbs of 64 bits each.
  */
-template DeriveNpubPoseidon() {
-    signal input nsec;
-    signal output npub;
+template ScalarToLimbs() {
+    signal input scalar;
+    signal output limbs[4];
     
-    // Domain separator to distinguish npub derivation from other hashes
-    // npub = Poseidon(nsec, DOMAIN_SEP) where DOMAIN_SEP is a constant
-    var DOMAIN_SEP = 0x6e707562; // "npub" in hex
+    // Decompose to bits (254 bits for BN254)
+    component n2b = Num2Bits(254);
+    n2b.in <== scalar;
     
-    component hasher = Poseidon(2);
-    hasher.inputs[0] <== nsec;
-    hasher.inputs[1] <== DOMAIN_SEP;
+    // Recompose into 4 limbs of 64 bits each
+    component b2n[4];
+    for (var i = 0; i < 4; i++) {
+        b2n[i] = Bits2Num(64);
+        for (var j = 0; j < 64; j++) {
+            var bit_idx = i * 64 + j;
+            if (bit_idx < 254) {
+                b2n[i].in[j] <== n2b.out[bit_idx];
+            } else {
+                b2n[i].in[j] <== 0;
+            }
+        }
+        limbs[i] <== b2n[i].out;
+    }
+}
+
+/**
+ * Derive npub from nsec via secp256k1 scalar multiplication
+ * npub = nsec * G
+ * 
+ * Uses ECDSAPrivToPub which has precomputed tables for G and is much more
+ * efficient than naive scalar multiplication (~95K constraints vs 1.4M).
+ */
+template DeriveNpub() {
+    signal input nsec_limbs[4];
+    signal output npub_x[4];
+    signal output npub_y[4];
     
-    npub <== hasher.out;
+    // Use the optimized ECDSAPrivToPub template
+    // n=64 bits per limb, k=4 limbs = 256 bits
+    component privToPub = ECDSAPrivToPub(64, 4);
+    
+    for (var i = 0; i < 4; i++) {
+        privToPub.privkey[i] <== nsec_limbs[i];
+    }
+    
+    for (var i = 0; i < 4; i++) {
+        npub_x[i] <== privToPub.pubkey[0][i];
+        npub_y[i] <== privToPub.pubkey[1][i];
+    }
 }
 
 /**
@@ -136,7 +164,9 @@ template DeriveNpubPoseidon() {
  * 
  * Proves: "I know a leaf_secret such that:
  *   1. Poseidon(leaf_secret[0..5]) is a leaf in the Merkle tree with the given root
- *   2. My npub is derived from Poseidon(leaf_secret[0..3])"
+ *   2. My npub = secp256k1(Poseidon(leaf_secret[0..3]) * G)"
+ * 
+ * The nsec (private key) never leaves the circuit. Only the npub (public key) is output.
  */
 template Membership() {
     // === Private Inputs ===
@@ -146,7 +176,8 @@ template Membership() {
     
     // === Public Outputs ===
     signal output merkle_root;        // The Merkle root being proven against
-    signal output npub;               // Derived NOSTR public key (Poseidon-based)
+    signal output npub_x[4];          // secp256k1 public key X (4x64-bit limbs)
+    signal output npub_y[4];          // secp256k1 public key Y (4x64-bit limbs)
     
     // === Sub-circuit 1: Leaf Commitment ===
     component leafCommit = LeafCommitment();
@@ -164,15 +195,27 @@ template Membership() {
     merkle_root <== merkle.root;
     
     // === Sub-circuit 4: npub Derivation ===
+    // Step 4a: Derive nsec from leaf_secret[0..2]
     component deriveNsec = DeriveNsec();
     deriveNsec.leaf_secret_0 <== leaf_secret[0];
     deriveNsec.leaf_secret_1 <== leaf_secret[1];
     deriveNsec.leaf_secret_2 <== leaf_secret[2];
     
-    component deriveNpub = DeriveNpubPoseidon();
-    deriveNpub.nsec <== deriveNsec.nsec;
+    // Step 4b: Convert nsec to 4x64-bit limbs
+    component toLimbs = ScalarToLimbs();
+    toLimbs.scalar <== deriveNsec.nsec;
     
-    npub <== deriveNpub.npub;
+    // Step 4c: secp256k1 scalar multiplication: npub = nsec * G
+    // Using ECDSAPrivToPub with precomputed tables (~95K constraints)
+    component deriveNpub = DeriveNpub();
+    for (var i = 0; i < 4; i++) {
+        deriveNpub.nsec_limbs[i] <== toLimbs.limbs[i];
+    }
+    
+    for (var i = 0; i < 4; i++) {
+        npub_x[i] <== deriveNpub.npub_x[i];
+        npub_y[i] <== deriveNpub.npub_y[i];
+    }
 }
 
-component main {public []} = Membership();
+component main = Membership();
