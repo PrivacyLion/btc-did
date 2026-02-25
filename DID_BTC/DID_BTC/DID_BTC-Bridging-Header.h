@@ -5,7 +5,7 @@
 #ifndef DID_BTC_BRIDGING_HEADER_H
 #define DID_BTC_BRIDGING_HEADER_H
 
-// Include the full Rust FFI header
-#include "stwo_dlc_bridge.h"
+// Include the Rust FFI header (renamed from stwo_dlc_bridge.h)
+#include "signedby_core.h"
 
 #endif // DID_BTC_BRIDGING_HEADER_H
