@@ -93,6 +93,9 @@ class LoginVerifyRequest(BaseModel):
     public_inputs: list[str] = Field(..., description="9 public outputs: [merkle_root, npub_x[4], npub_y[4]]")
     client_id: str = Field(..., description="Client ID for the relying party")
     nonce: Optional[str] = Field(None, description="Optional nonce for replay protection")
+    # Payment preimages (required for id_token issuance once payment phases are built)
+    preimage_user: Optional[str] = Field(None, description="User payment preimage (32 bytes hex) - verifies user got paid")
+    preimage_operator: Optional[str] = Field(None, description="Operator payment preimage (32 bytes hex) - verifies operator fee paid")
 
 
 class LoginVerifyResponse(BaseModel):
