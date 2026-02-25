@@ -21,6 +21,8 @@ import logging
 from pathlib import Path
 
 from ..lib.groth16_verify import verify_proof, npub_to_bech32, has_verifier, has_vk
+from ..db import get_session as db_get_session, audit_log
+from . import session as session_module
 
 logger = logging.getLogger("groth16_login")
 router = APIRouter(tags=["login"])
@@ -93,6 +95,8 @@ class LoginVerifyRequest(BaseModel):
     public_inputs: list[str] = Field(..., description="9 public outputs: [merkle_root, npub_x[4], npub_y[4]]")
     client_id: str = Field(..., description="Client ID for the relying party")
     nonce: Optional[str] = Field(None, description="Optional nonce for replay protection")
+    # Session binding (for RP polling flow)
+    session_id: Optional[str] = Field(None, description="Session ID from /v1/session (for RP polling flow)")
     # Payment preimages (required for id_token issuance once payment phases are built)
     preimage_user: Optional[str] = Field(None, description="User payment preimage (32 bytes hex) - verifies user got paid")
     preimage_operator: Optional[str] = Field(None, description="Operator payment preimage (32 bytes hex) - verifies operator fee paid")
@@ -205,6 +209,27 @@ def verify_login(
     
     # Sign token
     id_token = _jwt_rs256(claims, kid, priv_path)
+    
+    # Update session if provided (for RP polling flow)
+    if body.session_id:
+        session = db_get_session(body.session_id)
+        if session:
+            if session["client_id"] != client_id:
+                raise HTTPException(400, "Session client_id mismatch")
+            session_module.complete_session(
+                session_id=body.session_id,
+                npub=npub_bech32,
+                merkle_root=result.merkle_root or "",
+            )
+            logger.info(f"Session {body.session_id} completed")
+    
+    # Audit log
+    audit_log(
+        "login_verified",
+        session_id=body.session_id,
+        client_id=client_id,
+        details={"npub": npub_bech32[:20] + "...", "verify_ms": result.verify_time_ms}
+    )
     
     logger.info(f"Login verified: sub={npub_bech32[:20]}... client={client_id}")
     
