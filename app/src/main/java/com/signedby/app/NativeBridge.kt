@@ -381,4 +381,65 @@ object NativeBridge {
      * @return 32-byte leaf commitment (safe to share with enterprise for tree building)
      */
     @JvmStatic external fun computeLeafCommitment(leafSecret: ByteArray): ByteArray
+
+    // ============================================================================
+    // Groth16 Proof Generation (Phase 14)
+    // ============================================================================
+
+    /**
+     * Initialize the Groth16 prover.
+     * 
+     * Must be called before generateProof. Paths should point to app assets:
+     * - zkeyPath: Path to membership_final.zkey (85MB)
+     * - datPath: Path to membership.dat (circuit data)
+     * - calculatorPath: Path to witness calculator binary
+     * 
+     * @param zkeyPath Path to .zkey file (proving key)
+     * @param datPath Path to .dat file (circuit data)
+     * @param calculatorPath Path to witness calculator binary
+     * @return true if initialization succeeded
+     */
+    @JvmStatic external fun initProver(
+        zkeyPath: String,
+        datPath: String,
+        calculatorPath: String
+    ): Boolean
+
+    /**
+     * Check if the prover is ready.
+     * 
+     * @return true if initProver was called successfully
+     */
+    @JvmStatic external fun isProverReady(): Boolean
+
+    /**
+     * Generate a Groth16 membership proof.
+     * 
+     * Takes the user's secret and Merkle witness, generates a proof that:
+     * 1. The user knows a leaf_secret that produces a valid leaf_commitment
+     * 2. The leaf_commitment is in the Merkle tree (witness verification)
+     * 3. The npub is correctly derived from the secret via secp256k1
+     * 
+     * Input JSON format:
+     * {
+     *   "leaf_secret": "hex...",  // 32 bytes as hex
+     *   "siblings": ["0x...", ...], // 20 merkle siblings
+     *   "path_bits": [0, 1, ...]    // 20 path direction bits (0=left, 1=right)
+     * }
+     * 
+     * Returns JSON:
+     * On success: {"success": true, "proof": {...}, "public_inputs": [...]}
+     * On error: {"success": false, "error": "message"}
+     * 
+     * Public inputs (9 elements):
+     * [0] = merkle_root
+     * [1-4] = npub_x (4 × 64-bit limbs)
+     * [5-8] = npub_y (4 × 64-bit limbs)
+     * 
+     * Performance: ~2-3 seconds on modern phones (iPhone 13+, Pixel 7+)
+     * 
+     * @param inputJson JSON with leaf_secret, siblings, and path_bits
+     * @return JSON with proof or error
+     */
+    @JvmStatic external fun generateProof(inputJson: String): String
 }

@@ -14,6 +14,7 @@ pub mod dlc_builder;
 pub mod lightning;
 pub mod dlc_oracle;
 pub mod membership; // Groth16 membership proofs
+pub mod groth16;    // Native Groth16 prover for mobile
 
 use key_manager::ManagedKey;
 use dlc_builder::{DlcContract, DlcOutcome, OracleInfo, PayoutSplit, oracle_sign_outcome};

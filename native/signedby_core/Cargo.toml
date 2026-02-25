@@ -25,6 +25,13 @@ ark-ff = "0.4"
 ark-bn254 = "0.4"
 ark-ec = "0.4"
 ark-std = "0.4"
+ark-groth16 = "0.4"
+ark-snark = "0.4"
+ark-serialize = "0.4"
+
+# Utilities
+thiserror = "1.0"
+once_cell = "1.18"
 
 # Bitcoin / Schnorr / Taproot
 secp256k1 = { version = "0.28", features = ["rand-std", "global-context"] }
