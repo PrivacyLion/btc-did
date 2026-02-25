@@ -39,3 +39,5 @@ captures/
 
 # macOS Finder metadata
 **/.DS_Store
+# OIDC signing keys (private - never commit)
+keys/oidc_rs256.pem
