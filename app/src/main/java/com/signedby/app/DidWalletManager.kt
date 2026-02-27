@@ -74,9 +74,10 @@ class DidWalletManager(private val context: Context) {
 
     fun wrapPrivateKey(plain: ByteArray): ByteArray {
         val secret = getAesKey()
-        val iv = ByteArray(12).also { rng.nextBytes(it) }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, secret, GCMParameterSpec(128, iv))
+        // Let Keystore generate IV (required when randomizedEncryptionRequired=true)
+        cipher.init(Cipher.ENCRYPT_MODE, secret)
+        val iv = cipher.iv  // Retrieve generated IV after init
         val ct = cipher.doFinal(plain)
         return iv + ct
     }
