@@ -83,13 +83,13 @@ private fun extractGroth16Assets(context: Context, targetDir: java.io.File) {
         // Assets to extract (zkey is sideloaded separately - too big for APK)
         val assetFiles = listOf(
             "membership.dat",   // 4.5MB circuit data
-            "membership"        // 5.7MB witness calculator (ARM64)
+            "membership"        // ARM64 witness calculator binary (if bundled)
         )
         
         for (filename in assetFiles) {
             val targetFile = java.io.File(targetDir, filename)
             
-            // Skip if already extracted
+            // Skip if already extracted and same size
             if (targetFile.exists() && targetFile.length() > 0) {
                 android.util.Log.i("SignedByMe", "Groth16 asset exists: $filename (${targetFile.length()} bytes)")
                 continue
@@ -104,13 +104,13 @@ private fun extractGroth16Assets(context: Context, targetDir: java.io.File) {
                 
                 // Make binary executable
                 if (filename == "membership") {
-                    targetFile.setExecutable(true)
+                    targetFile.setExecutable(true, false)
                 }
                 
                 android.util.Log.i("SignedByMe", "Extracted Groth16 asset: $filename (${targetFile.length()} bytes)")
             } catch (e: java.io.FileNotFoundException) {
-                // Not an error - asset may be bundled elsewhere (e.g., jniLibs)
-                android.util.Log.d("SignedByMe", "Groth16 asset not in assets/: $filename")
+                // Not an error for optional files like witness calculator
+                android.util.Log.d("SignedByMe", "Groth16 asset not bundled: $filename (will fail if needed)")
             }
         }
     } catch (e: Exception) {

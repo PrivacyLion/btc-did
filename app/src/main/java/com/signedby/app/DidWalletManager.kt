@@ -341,27 +341,22 @@ class DidWalletManager(private val context: Context) {
      * Call once at app startup after NativeBridge.initNativeLibPath().
      *
      * Asset locations on device:
-     * - membership (witness calc): jniLibs/arm64-v8a/libmembership.so OR assets/groth16/membership
+     * - membership.wasm: assets/groth16/membership.wasm → extracted to filesDir/groth16/
      * - membership.dat: assets/groth16/membership.dat → extracted to filesDir/groth16/
      * - membership_final.zkey: externalFilesDir OR Downloads (85MB, sideloaded)
      *
-     * @param nativeLibDir context.applicationInfo.nativeLibraryDir
+     * @param nativeLibDir context.applicationInfo.nativeLibraryDir (unused with WASM)
      * @param groth16Dir Directory for extracted assets (filesDir/groth16)
      * @param externalFilesDir context.getExternalFilesDir(null) for zkey sideload
      * @return true if initialization succeeded
      */
     fun initGroth16Prover(nativeLibDir: String, groth16Dir: java.io.File, externalFilesDir: java.io.File?): Boolean {
         android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
-        android.util.Log.i("SignedByMe", "Groth16 Prover Initialization")
+        android.util.Log.i("SignedByMe", "Groth16 Prover Initialization (WASM)")
         android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
         
-        // Witness calculator binary - check multiple locations
-        val calcCandidates = listOf(
-            java.io.File(nativeLibDir, "libmembership.so"),  // jniLibs as .so
-            java.io.File(nativeLibDir, "membership"),       // jniLibs plain
-            java.io.File(groth16Dir, "membership")          // extracted from assets
-        )
-        val calcFile = calcCandidates.firstOrNull { it.exists() }
+        // WASM witness calculator (platform-independent, works on ARM64)
+        val wasmFile = java.io.File(groth16Dir, "membership.wasm")
         
         // Circuit data (extracted from assets)
         val datFile = java.io.File(groth16Dir, "membership.dat")
@@ -375,10 +370,8 @@ class DidWalletManager(private val context: Context) {
         val zkeyFile = zkeyCandidates.firstOrNull { it.exists() }
 
         // Log all paths for debugging
-        android.util.Log.i("SignedByMe", "Witness calculator candidates:")
-        calcCandidates.forEach { 
-            android.util.Log.i("SignedByMe", "  ${it.absolutePath} → ${if (it.exists()) "✓ EXISTS" else "✗ not found"}")
-        }
+        android.util.Log.i("SignedByMe", "WASM witness calculator:")
+        android.util.Log.i("SignedByMe", "  ${wasmFile.absolutePath} → ${if (wasmFile.exists()) "✓ EXISTS (${wasmFile.length()} bytes)" else "✗ not found"}")
         android.util.Log.i("SignedByMe", "Circuit data:")
         android.util.Log.i("SignedByMe", "  ${datFile.absolutePath} → ${if (datFile.exists()) "✓ EXISTS (${datFile.length()} bytes)" else "✗ not found"}")
         android.util.Log.i("SignedByMe", "Proving key candidates:")
@@ -388,21 +381,10 @@ class DidWalletManager(private val context: Context) {
         android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
 
         // Validate all required files exist
-        if (calcFile == null) {
-            android.util.Log.e("SignedByMe", "FATAL: Witness calculator not found")
-            android.util.Log.e("SignedByMe", "  Option 1: Add ARM64 binary to jniLibs/arm64-v8a/libmembership.so")
-            android.util.Log.e("SignedByMe", "  Option 2: Add to assets/groth16/membership")
+        if (!wasmFile.exists()) {
+            android.util.Log.e("SignedByMe", "FATAL: membership.wasm not found")
+            android.util.Log.e("SignedByMe", "  Should be in assets/groth16/membership.wasm and extracted at startup")
             return false
-        }
-        
-        // Make executable if needed (for non-.so binaries)
-        if (!calcFile.name.endsWith(".so") && calcFile.canRead() && !calcFile.canExecute()) {
-            try {
-                calcFile.setExecutable(true)
-                android.util.Log.i("SignedByMe", "Set executable: ${calcFile.absolutePath}")
-            } catch (e: Exception) {
-                android.util.Log.w("SignedByMe", "Could not set executable: ${e.message}")
-            }
         }
         
         if (!datFile.exists()) {
@@ -419,8 +401,14 @@ class DidWalletManager(private val context: Context) {
             return false
         }
 
+        // Witness calculator binary (for external execution)
+        val calcFile = java.io.File(groth16Dir, "membership")
+        
+        android.util.Log.i("SignedByMe", "Witness calculator (ARM64 binary):")
+        android.util.Log.i("SignedByMe", "  ${calcFile.absolutePath} → ${if (calcFile.exists()) "✓ EXISTS (${calcFile.length()} bytes)" else "✗ not found"}")
+        
         android.util.Log.i("SignedByMe", "All Groth16 assets found:")
-        android.util.Log.i("SignedByMe", "  calc: ${calcFile.absolutePath}")
+        android.util.Log.i("SignedByMe", "  calc: ${calcFile.absolutePath} (${if (calcFile.exists()) "ready" else "MISSING - need ARM64 binary"})")
         android.util.Log.i("SignedByMe", "  dat:  ${datFile.absolutePath}")
         android.util.Log.i("SignedByMe", "  zkey: ${zkeyFile.absolutePath}")
 
@@ -429,7 +417,7 @@ class DidWalletManager(private val context: Context) {
             val result = NativeBridge.initProver(
                 zkeyFile.absolutePath,
                 datFile.absolutePath,
-                calcFile.absolutePath
+                calcFile.absolutePath  // Pass calculator binary path
             )
             if (result) {
                 android.util.Log.i("SignedByMe", "✓ Groth16 prover initialized successfully")

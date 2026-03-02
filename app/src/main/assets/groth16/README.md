@@ -1,43 +1,80 @@
 # Groth16 Proof Assets
 
-This directory contains circuit data for Groth16 proof generation.
-
 ## Required Files
 
-### In this directory (bundled in APK):
+### Bundled in assets/groth16/:
 
-1. **membership.dat** (4.5MB) - Circuit constraint data
-   - Source: `circuits/build/membership_cpp/membership.dat`
-   - ✓ Already bundled
+1. **membership.dat** (4.5MB) - Circuit constraint data ✓ BUNDLED
+2. **membership** (~6MB) - ARM64 witness calculator ✗ NEEDS BUILD
 
-2. **membership** (optional, ~6MB) - ARM64 witness calculator
-   - Source: Cross-compiled from `circuits/build/membership_cpp/membership`
-   - Alternative: Bundle as `jniLibs/arm64-v8a/libmembership.so`
-   - The app checks both locations
-
-### Sideloaded to device (too big for APK):
+### Sideloaded to device:
 
 3. **membership_final.zkey** (85MB) - Proving key
-   - Source: `circuits/build/membership_final.zkey`
-   - Sideload to one of:
-     - `/storage/emulated/0/Android/data/com.signedby.app/files/membership_final.zkey` (preferred)
-     - `/storage/emulated/0/Download/membership_final.zkey` (fallback)
-   
-   To sideload via adb:
    ```bash
-   adb push circuits/build/membership_final.zkey /storage/emulated/0/Android/data/com.signedby.app/files/
+   adb push circuits/build/membership_final.zkey /storage/emulated/0/Download/
    ```
 
-## How It Works
+## Building ARM64 Witness Calculator
 
-1. App extracts `membership.dat` and `membership` from assets to `filesDir/groth16/` at startup
-2. App looks for proving key in externalFilesDir, then Downloads
-3. `NativeBridge.initProver()` loads all three files
-4. `NativeBridge.generateProof()` runs the witness calculator + rapidsnark
+The witness calculator needs to be cross-compiled for Android ARM64.
 
-## Logs
+### Option 1: Using Android NDK
 
-Check logcat for detailed initialization logs:
 ```bash
-adb logcat -s SignedByMe | grep -E "Groth16|TIMING"
+cd circuits/build/membership_cpp
+
+# Set NDK path
+export NDK=/path/to/android-ndk
+
+# Note: fr.asm is x86 assembly, need pure C++ implementation
+# The Makefile uses nasm for x86 - this won't work for ARM64
+
+# For ARM64, you need to either:
+# 1. Get the fr_asm implementations for ARM64
+# 2. Use a pure C++ implementation of the field operations
+```
+
+### Option 2: Static linking with GMP
+
+The witness calculator requires GMP (GNU Multiple Precision) library.
+For static linking on Android:
+
+```bash
+# Cross-compile GMP for ARM64 first
+# Then link statically:
+$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
+  -O2 -o membership \
+  membership.cpp calcwit.cpp fr.cpp \
+  -I. -static-libstdc++ \
+  /path/to/gmp_arm64/lib/libgmp.a
+
+# Copy to assets
+cp membership ../../../app/src/main/assets/groth16/
+```
+
+### Option 3: Use snarkjs Node.js (dev only)
+
+For testing on device with node.js installed:
+```bash
+node circuits/build/membership_js/generate_witness.js \
+  circuits/build/membership_js/membership.wasm \
+  input.json \
+  witness.wtns
+```
+
+## Timing Logs
+
+```bash
+adb logcat -s SignedByMe | grep -E "TIMING|witness|generateProof"
+```
+
+Expected:
+```
+[TIMING] generateGroth16Proof START at 1709402400000
+[generateProof] Starting witness calculation...
+[witness] Running: /data/.../membership input.json witness.wtns
+[witness] Calculator completed in 1.5s
+[generateProof] Starting rapidsnark proof generation...
+[generateProof] Rapidsnark proof generation completed in 2.0s
+[TIMING] NativeBridge.generateProof END (+3500ms PROOF TIME)
 ```

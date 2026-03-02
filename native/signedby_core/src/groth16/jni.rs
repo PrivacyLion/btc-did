@@ -51,7 +51,12 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_initRapidsnarkPath<'lo
     JNI_TRUE
 }
 
-/// Initialize the prover with paths to .zkey and .dat files
+/// Initialize the prover with paths to .zkey, .dat, and .wasm files
+/// 
+/// The calculator_path can be either:
+/// - Path to .wasm file directly
+/// - Path to directory containing membership.wasm
+/// - Path to C++ binary (for compatibility, will look for .wasm)
 #[no_mangle]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_initProver<'local>(
     mut env: JNIEnv<'local>,
@@ -75,13 +80,19 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_initProver<'local>(
         Err(_) => return JNI_FALSE,
     };
     
+    eprintln!("[initProver] zkey: {}", zkey);
+    eprintln!("[initProver] dat: {}", dat);
+    eprintln!("[initProver] calc: {}", calc);
+    
     // Initialize prover
     let mut prover = Prover::new().with_paths(&zkey, &dat);
     
     // Try to load proving key
     if let Err(e) = prover.load_proving_key(&zkey) {
-        eprintln!("Warning: Could not load proving key: {}", e);
+        eprintln!("[initProver] Warning: Could not load proving key: {}", e);
         // Continue anyway - proving key can be loaded later
+    } else {
+        eprintln!("[initProver] Proving key loaded successfully");
     }
     
     // Store prover
@@ -89,8 +100,11 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_initProver<'local>(
         *guard = Some(prover);
     }
     
-    // Initialize witness calculator
+    // Initialize witness calculator (will find .wasm file)
     let witness_calc = WitnessCalculator::new(&calc, &dat);
+    let wasm_available = witness_calc.is_available();
+    eprintln!("[initProver] WASM witness calculator available: {}", wasm_available);
+    
     if let Ok(mut guard) = WITNESS_CALC.lock() {
         *guard = Some(witness_calc);
     }
@@ -187,18 +201,32 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generateProof<'local>(
         None => return make_error_string(&mut env, "Witness calculator not initialized"),
     };
     
-    let _witness = match calc.calculate(&inputs) {
-        Ok(w) => w,
-        Err(e) => return make_error_string(&mut env, &format!("Witness generation failed: {}", e)),
-    };
+    eprintln!("[generateProof] Starting witness calculation...");
+    let witness_start = std::time::Instant::now();
+    
+    // Witness output path
+    #[cfg(target_os = "android")]
+    let witness_path = "/data/local/tmp/signedby_witness.wtns";
+    #[cfg(not(target_os = "android"))]
+    let witness_path = "/tmp/signedby_witness.wtns";
+    
+    // Generate witness using external calculator
+    if let Err(e) = calc.calculate_to_file(&inputs, witness_path) {
+        return make_error_string(&mut env, &format!("Witness generation failed: {}", e));
+    }
+    
+    let witness_elapsed = witness_start.elapsed();
+    eprintln!("[generateProof] Witness calculation completed in {:?}", witness_elapsed);
     
     drop(witness_calc);  // Release lock
     
     // Read witness file
-    let witness_path = "/tmp/signedby_witness_output.wtns";
     let witness_bytes = match std::fs::read(witness_path) {
-        Ok(b) => b,
-        Err(e) => return make_error_string(&mut env, &format!("Failed to read witness: {}", e)),
+        Ok(b) => {
+            eprintln!("[generateProof] Witness file read: {} bytes", b.len());
+            b
+        }
+        Err(e) => return make_error_string(&mut env, &format!("Failed to read witness file {}: {}", witness_path, e)),
     };
     
     // Get zkey path from prover
@@ -214,11 +242,18 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generateProof<'local>(
     
     drop(prover);  // Release lock before proof generation
     
-    // Generate proof using rapidsnark FFI (or binary fallback)
+    // Generate proof using rapidsnark FFI
+    eprintln!("[generateProof] Starting rapidsnark proof generation...");
+    let proof_start = std::time::Instant::now();
+    
     let (proof_json, public_json) = match rapidsnark_ffi::prove_with_library(&zkey_path, &witness_bytes) {
         Ok(result) => result,
         Err(e) => return make_error_string(&mut env, &format!("Proof generation failed: {}", e)),
     };
+    
+    let proof_elapsed = proof_start.elapsed();
+    eprintln!("[generateProof] Rapidsnark proof generation completed in {:?}", proof_elapsed);
+    eprintln!("[generateProof] Total time: witness {:?} + proof {:?}", witness_elapsed, proof_elapsed);
     
     // Build result JSON
     let result = serde_json::json!({
