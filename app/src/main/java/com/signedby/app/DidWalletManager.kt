@@ -331,6 +331,164 @@ class DidWalletManager(private val context: Context) {
         val md = java.security.MessageDigest.getInstance("SHA-256")
         return bytesToHex(md.digest(proof.toByteArray(Charsets.UTF_8)))
     }
+
+    // ============================================================================
+    // Groth16 Proof Generation (Phase 14)
+    // ============================================================================
+
+    /**
+     * Initialize the Groth16 prover with asset paths.
+     * Call once at app startup after NativeBridge.initNativeLibPath().
+     *
+     * @param assetDir Directory containing groth16 assets (zkey, dat files)
+     * @return true if initialization succeeded
+     */
+    fun initGroth16Prover(assetDir: java.io.File): Boolean {
+        val zkeyFile = java.io.File(assetDir, "membership_final.zkey")
+        val datFile = java.io.File(assetDir, "membership.dat")
+        // Calculator path - will fail on Android until cross-compiled
+        val calcFile = java.io.File(assetDir, "membership")
+
+        if (!zkeyFile.exists()) {
+            android.util.Log.w("SignedByMe", "Groth16: zkey not found at ${zkeyFile.absolutePath}")
+            return false
+        }
+        if (!datFile.exists()) {
+            android.util.Log.w("SignedByMe", "Groth16: dat not found at ${datFile.absolutePath}")
+            return false
+        }
+
+        return try {
+            val result = NativeBridge.initProver(
+                zkeyFile.absolutePath,
+                datFile.absolutePath,
+                calcFile.absolutePath
+            )
+            android.util.Log.i("SignedByMe", "Groth16 prover initialized: $result")
+            result
+        } catch (e: Exception) {
+            android.util.Log.e("SignedByMe", "Groth16 prover init failed: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Generate a Groth16 membership proof.
+     *
+     * Requires:
+     * - leaf_secret stored (from enrollment)
+     * - witness data for the given client/root (from API)
+     * - prover initialized (initGroth16Prover)
+     *
+     * @param clientId Client/enterprise ID
+     * @param rootId Merkle root ID
+     * @return JSON with {success: true, proof: {...}, public_inputs: [...]} or {success: false, error: "..."}
+     */
+    fun generateGroth16Proof(clientId: String, rootId: String): String {
+        // Check prover ready
+        if (!NativeBridge.isProverReady()) {
+            android.util.Log.w("SignedByMe", "Groth16 prover not ready - returning stub proof")
+            return stubGroth16Proof("Prover not initialized")
+        }
+
+        // Load leaf secret
+        val leafSecret = loadLeafSecret()
+        if (leafSecret == null) {
+            android.util.Log.e("SignedByMe", "No leaf secret for Groth16 proof")
+            return stubGroth16Proof("No leaf_secret")
+        }
+
+        // Load witness
+        val witness = loadWitness(clientId, rootId)
+        if (witness == null) {
+            android.util.Log.e("SignedByMe", "No witness for $clientId/$rootId")
+            java.util.Arrays.fill(leafSecret, 0.toByte())
+            return stubGroth16Proof("No witness for $clientId/$rootId")
+        }
+
+        return try {
+            // Build input JSON
+            val inputJson = buildGroth16InputJson(leafSecret, witness)
+            android.util.Log.i("SignedByMe", "Groth16 proof inputs built, generating proof...")
+
+            val startTime = System.currentTimeMillis()
+            val result = NativeBridge.generateProof(inputJson)
+            val elapsed = System.currentTimeMillis() - startTime
+
+            android.util.Log.i("SignedByMe", "Groth16 proof generated in ${elapsed}ms")
+            result
+        } catch (e: Exception) {
+            android.util.Log.e("SignedByMe", "Groth16 proof failed: ${e.message}")
+            stubGroth16Proof(e.message ?: "Unknown error")
+        } finally {
+            java.util.Arrays.fill(leafSecret, 0.toByte())
+        }
+    }
+
+    /**
+     * Generate Groth16 proof with auto-fetched witness.
+     * Attempts to fetch witness from API if not stored locally.
+     */
+    suspend fun generateGroth16ProofWithFetch(clientId: String, rootId: String): String {
+        // Try local witness first
+        var witness = loadWitness(clientId, rootId)
+
+        // If not found, try to fetch from API
+        if (witness == null) {
+            android.util.Log.i("SignedByMe", "Fetching witness from API for $clientId/$rootId")
+            // Need enrollment first
+            val enrollment = loadEnrollment()
+            if (enrollment != null && enrollment.clientId == clientId) {
+                witness = fetchWitness(enrollment, rootId)
+            }
+        }
+
+        return if (witness != null) {
+            generateGroth16Proof(clientId, rootId)
+        } else {
+            stubGroth16Proof("Could not fetch witness")
+        }
+    }
+
+    /**
+     * Build Groth16 circuit input JSON from leaf secret and witness.
+     */
+    private fun buildGroth16InputJson(leafSecret: ByteArray, witness: WitnessData): String {
+        val leafSecretHex = leafSecret.joinToString("") { "%02x".format(it) }
+
+        // Convert siblings to 0x-prefixed hex strings
+        val siblingsArray = org.json.JSONArray()
+        for (sibling in witness.siblings) {
+            val hex = "0x" + sibling.joinToString("") { "%02x".format(it) }
+            siblingsArray.put(hex)
+        }
+
+        // Convert path_bits to int array
+        val pathBitsArray = org.json.JSONArray()
+        for (bit in witness.pathBits) {
+            pathBitsArray.put(bit.toInt())
+        }
+
+        return org.json.JSONObject().apply {
+            put("leaf_secret", leafSecretHex)
+            put("siblings", siblingsArray)
+            put("path_bits", pathBitsArray)
+        }.toString()
+    }
+
+    /**
+     * Return a stub proof for testing when real proving isn't available.
+     * Clearly marked as invalid for production verification.
+     */
+    private fun stubGroth16Proof(reason: String): String {
+        android.util.Log.w("SignedByMe", "Using STUB Groth16 proof: $reason")
+        return org.json.JSONObject().apply {
+            put("success", false)
+            put("stub", true)
+            put("error", reason)
+            put("message", "Real Groth16 proof generation not available. Need witness calculator for Android.")
+        }.toString()
+    }
     
     /**
      * Check if an identity proof exists

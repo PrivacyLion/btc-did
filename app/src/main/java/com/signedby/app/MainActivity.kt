@@ -69,6 +69,48 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 
+/**
+ * Extract Groth16 assets from APK assets to filesystem.
+ * Assets in assets/groth16/ are copied to the target directory.
+ * Large files (zkey) are only copied if not already present.
+ */
+private fun extractGroth16Assets(context: Context, targetDir: java.io.File) {
+    try {
+        if (!targetDir.exists()) {
+            targetDir.mkdirs()
+        }
+        
+        val assetFiles = listOf(
+            "membership_final.zkey",  // 85MB proving key
+            "membership.dat"          // 4.5MB circuit data
+            // Note: witness calculator binary not included (needs ARM cross-compile)
+        )
+        
+        for (filename in assetFiles) {
+            val targetFile = java.io.File(targetDir, filename)
+            
+            // Skip if already extracted (for large files)
+            if (targetFile.exists() && targetFile.length() > 0) {
+                android.util.Log.i("SignedByMe", "Groth16 asset already extracted: $filename")
+                continue
+            }
+            
+            try {
+                context.assets.open("groth16/$filename").use { input ->
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                android.util.Log.i("SignedByMe", "Extracted Groth16 asset: $filename (${targetFile.length()} bytes)")
+            } catch (e: java.io.FileNotFoundException) {
+                android.util.Log.w("SignedByMe", "Groth16 asset not bundled: $filename")
+            }
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("SignedByMe", "Failed to extract Groth16 assets: ${e.message}")
+    }
+}
+
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,9 +134,24 @@ class MainActivity : FragmentActivity() {
         }
         
         val didMgr = DidWalletManager(applicationContext)
-        // Copy bundled test witnesses asynchronously (debug only)
+        // Initialize native library paths for Groth16
+        NativeBridge.initNativeLibPath(applicationInfo.nativeLibraryDir)
+        
+        // Copy bundled test witnesses and initialize prover asynchronously
         lifecycleScope.launch(Dispatchers.IO) {
             didMgr.copyWitnessesFromAssets()
+            
+            // Try to initialize Groth16 prover with bundled assets
+            val groth16Dir = java.io.File(applicationContext.filesDir, "groth16")
+            if (groth16Dir.exists()) {
+                val initialized = didMgr.initGroth16Prover(groth16Dir)
+                android.util.Log.i("SignedByMe", "Groth16 prover init from files: $initialized")
+            } else {
+                // Try assets extraction
+                extractGroth16Assets(applicationContext, groth16Dir)
+                val initialized = didMgr.initGroth16Prover(groth16Dir)
+                android.util.Log.i("SignedByMe", "Groth16 prover init after extraction: $initialized")
+            }
         }
         val breezMgr = BreezWalletManager(applicationContext)
         
@@ -1508,22 +1565,33 @@ fun SignedByMeApp(
                             preimageSha256Hex = preShaHex
                         )
                         
-                        // Generate STWO Identity Proof (binds DID to wallet)
-                        val identityProofJson = didMgr.generateIdentityProof(
-                            walletAddress = walletSparkAddress.ifEmpty { "unknown" },
-                            expiryDays = 30
+                        // Generate Groth16 Membership Proof (replaces STWO)
+                        // Uses leaf_secret + Merkle witness to prove membership
+                        val groth16Result = didMgr.generateGroth16Proof(
+                            clientId = "default",  // TODO: get from session
+                            rootId = "default"     // TODO: get from session
                         )
-                        val stwoproofHash = didMgr.getIdentityProofHash() ?: "none"
+                        val groth16Json = JSONObject(groth16Result)
+                        val proofHash = if (groth16Json.optBoolean("success", false)) {
+                            // Hash the actual proof for VCC
+                            val md = java.security.MessageDigest.getInstance("SHA-256")
+                            md.digest(groth16Result.toByteArray(Charsets.UTF_8))
+                                .joinToString("") { "%02x".format(it) }
+                        } else {
+                            // Stub proof - use placeholder hash
+                            android.util.Log.w("SignedByMe", "Groth16 proof stub: ${groth16Json.optString("error", "unknown")}")
+                            "stub_proof_${System.currentTimeMillis()}"
+                        }
 
                         val generatedVccId = "vcc_${System.currentTimeMillis()}_${did!!.takeLast(8)}"
                         val vcc = JSONObject().apply {
-                            put("schema", "signedby.me/vcc/2")  // Updated schema with STWO
+                            put("schema", "signedby.me/vcc/3")  // Updated schema with Groth16
                             put("id", generatedVccId)
                             put("did", did!!)
                             put("wallet_address", walletSparkAddress)
                             put("content_hash", "sha256_demo_${System.currentTimeMillis()}")
                             put("proof_hash", preShaHex)
-                            put("stwo_proof_hash", stwoproofHash)  // STWO proof hash
+                            put("groth16_proof_hash", proofHash)  // Groth16 proof hash
                             put("wallet_type", "breez")
                             put("timestamp", System.currentTimeMillis())
                             put("expires_at", System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000)
