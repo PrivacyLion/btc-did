@@ -72,7 +72,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 /**
  * Extract Groth16 assets from APK assets to filesystem.
  * Assets in assets/groth16/ are copied to the target directory.
- * Large files (zkey) are only copied if not already present.
+ * Large files (zkey) are sideloaded to Downloads, not bundled.
  */
 private fun extractGroth16Assets(context: Context, targetDir: java.io.File) {
     try {
@@ -80,18 +80,18 @@ private fun extractGroth16Assets(context: Context, targetDir: java.io.File) {
             targetDir.mkdirs()
         }
         
+        // Assets to extract (zkey is sideloaded separately - too big for APK)
         val assetFiles = listOf(
-            "membership_final.zkey",  // 85MB proving key
-            "membership.dat"          // 4.5MB circuit data
-            // Note: witness calculator binary not included (needs ARM cross-compile)
+            "membership.dat",   // 4.5MB circuit data
+            "membership"        // 5.7MB witness calculator (ARM64)
         )
         
         for (filename in assetFiles) {
             val targetFile = java.io.File(targetDir, filename)
             
-            // Skip if already extracted (for large files)
+            // Skip if already extracted
             if (targetFile.exists() && targetFile.length() > 0) {
-                android.util.Log.i("SignedByMe", "Groth16 asset already extracted: $filename")
+                android.util.Log.i("SignedByMe", "Groth16 asset exists: $filename (${targetFile.length()} bytes)")
                 continue
             }
             
@@ -101,9 +101,16 @@ private fun extractGroth16Assets(context: Context, targetDir: java.io.File) {
                         input.copyTo(output)
                     }
                 }
+                
+                // Make binary executable
+                if (filename == "membership") {
+                    targetFile.setExecutable(true)
+                }
+                
                 android.util.Log.i("SignedByMe", "Extracted Groth16 asset: $filename (${targetFile.length()} bytes)")
             } catch (e: java.io.FileNotFoundException) {
-                android.util.Log.w("SignedByMe", "Groth16 asset not bundled: $filename")
+                // Not an error - asset may be bundled elsewhere (e.g., jniLibs)
+                android.util.Log.d("SignedByMe", "Groth16 asset not in assets/: $filename")
             }
         }
     } catch (e: Exception) {
@@ -141,17 +148,19 @@ class MainActivity : FragmentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             didMgr.copyWitnessesFromAssets()
             
-            // Try to initialize Groth16 prover with bundled assets
+            // Extract groth16 assets (membership.dat) from APK
             val groth16Dir = java.io.File(applicationContext.filesDir, "groth16")
-            if (groth16Dir.exists()) {
-                val initialized = didMgr.initGroth16Prover(groth16Dir)
-                android.util.Log.i("SignedByMe", "Groth16 prover init from files: $initialized")
-            } else {
-                // Try assets extraction
-                extractGroth16Assets(applicationContext, groth16Dir)
-                val initialized = didMgr.initGroth16Prover(groth16Dir)
-                android.util.Log.i("SignedByMe", "Groth16 prover init after extraction: $initialized")
-            }
+            extractGroth16Assets(applicationContext, groth16Dir)
+            
+            // Initialize Groth16 prover with:
+            // - witness calculator from jniLibs (nativeLibraryDir)
+            // - membership.dat from extracted assets
+            // - zkey from Downloads (sideloaded)
+            val initialized = didMgr.initGroth16Prover(
+                nativeLibDir = applicationInfo.nativeLibraryDir,
+                groth16Dir = groth16Dir
+            )
+            android.util.Log.i("SignedByMe", "Groth16 prover ready: $initialized")
         }
         val breezMgr = BreezWalletManager(applicationContext)
         

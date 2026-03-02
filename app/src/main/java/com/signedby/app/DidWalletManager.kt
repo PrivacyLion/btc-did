@@ -340,21 +340,63 @@ class DidWalletManager(private val context: Context) {
      * Initialize the Groth16 prover with asset paths.
      * Call once at app startup after NativeBridge.initNativeLibPath().
      *
-     * @param assetDir Directory containing groth16 assets (zkey, dat files)
+     * Asset locations on device:
+     * - membership (witness calc): nativeLibraryDir/libmembership.so OR groth16Dir/membership
+     * - membership.dat: extracted from assets/groth16/ to filesDir/groth16/
+     * - membership_final.zkey: sideloaded to Downloads (85MB, too big for APK)
+     *
+     * @param nativeLibDir context.applicationInfo.nativeLibraryDir
+     * @param groth16Dir Directory for extracted assets (filesDir/groth16)
      * @return true if initialization succeeded
      */
-    fun initGroth16Prover(assetDir: java.io.File): Boolean {
-        val zkeyFile = java.io.File(assetDir, "membership_final.zkey")
-        val datFile = java.io.File(assetDir, "membership.dat")
-        // Calculator path - will fail on Android until cross-compiled
-        val calcFile = java.io.File(assetDir, "membership")
+    fun initGroth16Prover(nativeLibDir: String, groth16Dir: java.io.File): Boolean {
+        // Witness calculator binary - check multiple locations
+        // Option 1: jniLibs as .so (Android installs these)
+        // Option 2: jniLibs as plain binary (may work)
+        // Option 3: Extracted to groth16Dir
+        val calcCandidates = listOf(
+            java.io.File(nativeLibDir, "libmembership.so"),
+            java.io.File(nativeLibDir, "membership"),
+            java.io.File(groth16Dir, "membership")
+        )
+        val calcFile = calcCandidates.firstOrNull { it.exists() }
+        
+        // Circuit data (extracted from assets)
+        val datFile = java.io.File(groth16Dir, "membership.dat")
+        
+        // Proving key (sideloaded to Downloads - 85MB too big for APK)
+        val zkeyFile = java.io.File("/storage/emulated/0/Download", "membership_final.zkey")
 
-        if (!zkeyFile.exists()) {
-            android.util.Log.w("SignedByMe", "Groth16: zkey not found at ${zkeyFile.absolutePath}")
+        // Log paths for debugging
+        android.util.Log.i("SignedByMe", "Groth16 paths:")
+        android.util.Log.i("SignedByMe", "  calc candidates: ${calcCandidates.map { "${it.name}=${it.exists()}" }}")
+        android.util.Log.i("SignedByMe", "  calc: ${calcFile?.absolutePath ?: "NOT FOUND"}")
+        android.util.Log.i("SignedByMe", "  dat:  ${datFile.absolutePath} (exists: ${datFile.exists()})")
+        android.util.Log.i("SignedByMe", "  zkey: ${zkeyFile.absolutePath} (exists: ${zkeyFile.exists()})")
+
+        if (calcFile == null) {
+            android.util.Log.e("SignedByMe", "Groth16: witness calculator not found.")
+            android.util.Log.e("SignedByMe", "  Add to jniLibs/arm64-v8a/ as libmembership.so")
+            android.util.Log.e("SignedByMe", "  Or add to assets/groth16/membership")
             return false
         }
+        
+        // Make executable if needed (for non-.so binaries)
+        if (!calcFile.name.endsWith(".so") && calcFile.canRead() && !calcFile.canExecute()) {
+            try {
+                calcFile.setExecutable(true)
+                android.util.Log.i("SignedByMe", "Set executable: ${calcFile.absolutePath}")
+            } catch (e: Exception) {
+                android.util.Log.w("SignedByMe", "Could not set executable: ${e.message}")
+            }
+        }
+        
         if (!datFile.exists()) {
-            android.util.Log.w("SignedByMe", "Groth16: dat not found at ${datFile.absolutePath}")
+            android.util.Log.e("SignedByMe", "Groth16: membership.dat not found. Add to assets/groth16/")
+            return false
+        }
+        if (!zkeyFile.exists()) {
+            android.util.Log.e("SignedByMe", "Groth16: zkey not found in Downloads. Sideload membership_final.zkey")
             return false
         }
 
@@ -364,10 +406,15 @@ class DidWalletManager(private val context: Context) {
                 datFile.absolutePath,
                 calcFile.absolutePath
             )
-            android.util.Log.i("SignedByMe", "Groth16 prover initialized: $result")
+            if (result) {
+                android.util.Log.i("SignedByMe", "✓ Groth16 prover initialized successfully")
+            } else {
+                android.util.Log.e("SignedByMe", "✗ Groth16 prover init returned false")
+            }
             result
         } catch (e: Exception) {
-            android.util.Log.e("SignedByMe", "Groth16 prover init failed: ${e.message}")
+            android.util.Log.e("SignedByMe", "✗ Groth16 prover init failed: ${e.message}")
+            e.printStackTrace()
             false
         }
     }
@@ -429,17 +476,21 @@ class DidWalletManager(private val context: Context) {
      * Generate Groth16 proof with auto-fetched witness.
      * Attempts to fetch witness from API if not stored locally.
      */
-    suspend fun generateGroth16ProofWithFetch(clientId: String, rootId: String): String {
+    suspend fun generateGroth16ProofWithFetch(
+        clientId: String,
+        rootId: String,
+        apiBaseUrl: String,
+        apiKey: String
+    ): String {
         // Try local witness first
         var witness = loadWitness(clientId, rootId)
 
         // If not found, try to fetch from API
         if (witness == null) {
             android.util.Log.i("SignedByMe", "Fetching witness from API for $clientId/$rootId")
-            // Need enrollment first
-            val enrollment = loadEnrollment()
-            if (enrollment != null && enrollment.clientId == clientId) {
-                witness = fetchWitness(enrollment, rootId)
+            val did = getPublicDID()
+            if (did != null) {
+                witness = fetchWitness(apiBaseUrl, apiKey, did, "allowlist", rootId)
             }
         }
 
