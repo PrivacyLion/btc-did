@@ -91,10 +91,13 @@ cp "$RAPIDSNARK_BUILD/fr.hpp" .
 cp "$RAPIDSNARK_BUILD/fr.cpp" .
 cp "$RAPIDSNARK_BUILD/fr_element.hpp" .
 
+# nlohmann/json header (used by main.cpp)
+JSON_INCLUDE="$RAPIDSNARK_DIR/depends/json/single_include"
+
 # Compiler flags
 TARGET_FLAGS="-target aarch64-linux-android24"
 CXXFLAGS="-O2 -std=c++17 -fPIC -DUSE_ASM -DARCH_ARM64"
-INCLUDES="-I. -I$GMP_INCLUDE"
+INCLUDES="-I. -I$GMP_INCLUDE -I$JSON_INCLUDE"
 
 # Compile each source file
 echo "Compiling fr.cpp (rapidsnark's ARM64-compatible version)..."
