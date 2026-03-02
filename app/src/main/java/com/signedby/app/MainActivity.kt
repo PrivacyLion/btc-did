@@ -148,17 +148,18 @@ class MainActivity : FragmentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             didMgr.copyWitnessesFromAssets()
             
-            // Extract groth16 assets (membership.dat) from APK
+            // Extract groth16 assets (membership.dat, membership) from APK
             val groth16Dir = java.io.File(applicationContext.filesDir, "groth16")
             extractGroth16Assets(applicationContext, groth16Dir)
             
             // Initialize Groth16 prover with:
-            // - witness calculator from jniLibs (nativeLibraryDir)
+            // - witness calculator from jniLibs or extracted assets
             // - membership.dat from extracted assets
-            // - zkey from Downloads (sideloaded)
+            // - zkey from externalFilesDir or Downloads (sideloaded, 85MB)
             val initialized = didMgr.initGroth16Prover(
                 nativeLibDir = applicationInfo.nativeLibraryDir,
-                groth16Dir = groth16Dir
+                groth16Dir = groth16Dir,
+                externalFilesDir = applicationContext.getExternalFilesDir(null)
             )
             android.util.Log.i("SignedByMe", "Groth16 prover ready: $initialized")
         }

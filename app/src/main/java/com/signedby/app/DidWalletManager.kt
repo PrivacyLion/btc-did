@@ -341,43 +341,57 @@ class DidWalletManager(private val context: Context) {
      * Call once at app startup after NativeBridge.initNativeLibPath().
      *
      * Asset locations on device:
-     * - membership (witness calc): nativeLibraryDir/libmembership.so OR groth16Dir/membership
-     * - membership.dat: extracted from assets/groth16/ to filesDir/groth16/
-     * - membership_final.zkey: sideloaded to Downloads (85MB, too big for APK)
+     * - membership (witness calc): jniLibs/arm64-v8a/libmembership.so OR assets/groth16/membership
+     * - membership.dat: assets/groth16/membership.dat → extracted to filesDir/groth16/
+     * - membership_final.zkey: externalFilesDir OR Downloads (85MB, sideloaded)
      *
      * @param nativeLibDir context.applicationInfo.nativeLibraryDir
      * @param groth16Dir Directory for extracted assets (filesDir/groth16)
+     * @param externalFilesDir context.getExternalFilesDir(null) for zkey sideload
      * @return true if initialization succeeded
      */
-    fun initGroth16Prover(nativeLibDir: String, groth16Dir: java.io.File): Boolean {
+    fun initGroth16Prover(nativeLibDir: String, groth16Dir: java.io.File, externalFilesDir: java.io.File?): Boolean {
+        android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
+        android.util.Log.i("SignedByMe", "Groth16 Prover Initialization")
+        android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
+        
         // Witness calculator binary - check multiple locations
-        // Option 1: jniLibs as .so (Android installs these)
-        // Option 2: jniLibs as plain binary (may work)
-        // Option 3: Extracted to groth16Dir
         val calcCandidates = listOf(
-            java.io.File(nativeLibDir, "libmembership.so"),
-            java.io.File(nativeLibDir, "membership"),
-            java.io.File(groth16Dir, "membership")
+            java.io.File(nativeLibDir, "libmembership.so"),  // jniLibs as .so
+            java.io.File(nativeLibDir, "membership"),       // jniLibs plain
+            java.io.File(groth16Dir, "membership")          // extracted from assets
         )
         val calcFile = calcCandidates.firstOrNull { it.exists() }
         
         // Circuit data (extracted from assets)
         val datFile = java.io.File(groth16Dir, "membership.dat")
         
-        // Proving key (sideloaded to Downloads - 85MB too big for APK)
-        val zkeyFile = java.io.File("/storage/emulated/0/Download", "membership_final.zkey")
+        // Proving key - check multiple locations (85MB, sideloaded)
+        val zkeyCandidates = listOfNotNull(
+            externalFilesDir?.let { java.io.File(it, "membership_final.zkey") },  // App's external files
+            java.io.File("/storage/emulated/0/Download", "membership_final.zkey"), // Downloads
+            java.io.File(groth16Dir, "membership_final.zkey")  // Extracted from assets (if bundled)
+        )
+        val zkeyFile = zkeyCandidates.firstOrNull { it.exists() }
 
-        // Log paths for debugging
-        android.util.Log.i("SignedByMe", "Groth16 paths:")
-        android.util.Log.i("SignedByMe", "  calc candidates: ${calcCandidates.map { "${it.name}=${it.exists()}" }}")
-        android.util.Log.i("SignedByMe", "  calc: ${calcFile?.absolutePath ?: "NOT FOUND"}")
-        android.util.Log.i("SignedByMe", "  dat:  ${datFile.absolutePath} (exists: ${datFile.exists()})")
-        android.util.Log.i("SignedByMe", "  zkey: ${zkeyFile.absolutePath} (exists: ${zkeyFile.exists()})")
+        // Log all paths for debugging
+        android.util.Log.i("SignedByMe", "Witness calculator candidates:")
+        calcCandidates.forEach { 
+            android.util.Log.i("SignedByMe", "  ${it.absolutePath} → ${if (it.exists()) "✓ EXISTS" else "✗ not found"}")
+        }
+        android.util.Log.i("SignedByMe", "Circuit data:")
+        android.util.Log.i("SignedByMe", "  ${datFile.absolutePath} → ${if (datFile.exists()) "✓ EXISTS (${datFile.length()} bytes)" else "✗ not found"}")
+        android.util.Log.i("SignedByMe", "Proving key candidates:")
+        zkeyCandidates.forEach {
+            android.util.Log.i("SignedByMe", "  ${it.absolutePath} → ${if (it.exists()) "✓ EXISTS (${it.length()} bytes)" else "✗ not found"}")
+        }
+        android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
 
+        // Validate all required files exist
         if (calcFile == null) {
-            android.util.Log.e("SignedByMe", "Groth16: witness calculator not found.")
-            android.util.Log.e("SignedByMe", "  Add to jniLibs/arm64-v8a/ as libmembership.so")
-            android.util.Log.e("SignedByMe", "  Or add to assets/groth16/membership")
+            android.util.Log.e("SignedByMe", "FATAL: Witness calculator not found")
+            android.util.Log.e("SignedByMe", "  Option 1: Add ARM64 binary to jniLibs/arm64-v8a/libmembership.so")
+            android.util.Log.e("SignedByMe", "  Option 2: Add to assets/groth16/membership")
             return false
         }
         
@@ -392,15 +406,26 @@ class DidWalletManager(private val context: Context) {
         }
         
         if (!datFile.exists()) {
-            android.util.Log.e("SignedByMe", "Groth16: membership.dat not found. Add to assets/groth16/")
+            android.util.Log.e("SignedByMe", "FATAL: membership.dat not found")
+            android.util.Log.e("SignedByMe", "  Should be in assets/groth16/membership.dat and extracted at startup")
             return false
         }
-        if (!zkeyFile.exists()) {
-            android.util.Log.e("SignedByMe", "Groth16: zkey not found in Downloads. Sideload membership_final.zkey")
+        
+        if (zkeyFile == null) {
+            android.util.Log.e("SignedByMe", "FATAL: Proving key not found")
+            android.util.Log.e("SignedByMe", "  Sideload membership_final.zkey (85MB) to one of:")
+            android.util.Log.e("SignedByMe", "  - ${externalFilesDir?.absolutePath ?: "[no external files dir]"}/membership_final.zkey")
+            android.util.Log.e("SignedByMe", "  - /storage/emulated/0/Download/membership_final.zkey")
             return false
         }
 
+        android.util.Log.i("SignedByMe", "All Groth16 assets found:")
+        android.util.Log.i("SignedByMe", "  calc: ${calcFile.absolutePath}")
+        android.util.Log.i("SignedByMe", "  dat:  ${datFile.absolutePath}")
+        android.util.Log.i("SignedByMe", "  zkey: ${zkeyFile.absolutePath}")
+
         return try {
+            android.util.Log.i("SignedByMe", "Calling NativeBridge.initProver()...")
             val result = NativeBridge.initProver(
                 zkeyFile.absolutePath,
                 datFile.absolutePath,
@@ -409,12 +434,14 @@ class DidWalletManager(private val context: Context) {
             if (result) {
                 android.util.Log.i("SignedByMe", "✓ Groth16 prover initialized successfully")
             } else {
-                android.util.Log.e("SignedByMe", "✗ Groth16 prover init returned false")
+                android.util.Log.e("SignedByMe", "✗ NativeBridge.initProver() returned false")
             }
+            android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
             result
         } catch (e: Exception) {
-            android.util.Log.e("SignedByMe", "✗ Groth16 prover init failed: ${e.message}")
+            android.util.Log.e("SignedByMe", "✗ Groth16 prover init exception: ${e.message}")
             e.printStackTrace()
+            android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
             false
         }
     }
@@ -432,9 +459,14 @@ class DidWalletManager(private val context: Context) {
      * @return JSON with {success: true, proof: {...}, public_inputs: [...]} or {success: false, error: "..."}
      */
     fun generateGroth16Proof(clientId: String, rootId: String): String {
+        val startMs = System.currentTimeMillis()
+        android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof START at $startMs")
+        android.util.Log.i("SignedByMe", "[TIMING] clientId=$clientId, rootId=$rootId")
+        
         // Check prover ready
         if (!NativeBridge.isProverReady()) {
-            android.util.Log.w("SignedByMe", "Groth16 prover not ready - returning stub proof")
+            android.util.Log.e("SignedByMe", "Groth16 prover not ready - returning stub proof")
+            android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof FAILED (prover not ready) at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
             return stubGroth16Proof("Prover not initialized")
         }
 
@@ -442,30 +474,40 @@ class DidWalletManager(private val context: Context) {
         val leafSecret = loadLeafSecret()
         if (leafSecret == null) {
             android.util.Log.e("SignedByMe", "No leaf secret for Groth16 proof")
+            android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof FAILED (no leaf_secret) at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
             return stubGroth16Proof("No leaf_secret")
         }
+        android.util.Log.i("SignedByMe", "[TIMING] Leaf secret loaded at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
 
         // Load witness
         val witness = loadWitness(clientId, rootId)
         if (witness == null) {
             android.util.Log.e("SignedByMe", "No witness for $clientId/$rootId")
             java.util.Arrays.fill(leafSecret, 0.toByte())
+            android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof FAILED (no witness) at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
             return stubGroth16Proof("No witness for $clientId/$rootId")
         }
+        android.util.Log.i("SignedByMe", "[TIMING] Witness loaded at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
 
         return try {
             // Build input JSON
             val inputJson = buildGroth16InputJson(leafSecret, witness)
-            android.util.Log.i("SignedByMe", "Groth16 proof inputs built, generating proof...")
+            android.util.Log.i("SignedByMe", "[TIMING] Input JSON built at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
 
-            val startTime = System.currentTimeMillis()
+            val proofStartMs = System.currentTimeMillis()
+            android.util.Log.i("SignedByMe", "[TIMING] NativeBridge.generateProof START at $proofStartMs")
+            
             val result = NativeBridge.generateProof(inputJson)
-            val elapsed = System.currentTimeMillis() - startTime
-
-            android.util.Log.i("SignedByMe", "Groth16 proof generated in ${elapsed}ms")
+            
+            val proofEndMs = System.currentTimeMillis()
+            android.util.Log.i("SignedByMe", "[TIMING] NativeBridge.generateProof END at $proofEndMs (+${proofEndMs - proofStartMs}ms PROOF TIME)")
+            android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof SUCCESS at $proofEndMs (+${proofEndMs - startMs}ms TOTAL)")
+            
             result
         } catch (e: Exception) {
             android.util.Log.e("SignedByMe", "Groth16 proof failed: ${e.message}")
+            e.printStackTrace()
+            android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof EXCEPTION at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
             stubGroth16Proof(e.message ?: "Unknown error")
         } finally {
             java.util.Arrays.fill(leafSecret, 0.toByte())
@@ -1192,51 +1234,67 @@ class DidWalletManager(private val context: Context) {
     }
     
     /**
-     * Generate a membership proof.
+     * Generate a membership proof using Groth16.
      * 
      * @param witness The loaded witness data
-     * @param bindingHash 32-byte V4 binding hash
-     * @return Base64-encoded proof bytes, or null on error
+     * @param bindingHash 32-byte V4 binding hash (unused in current Groth16 circuit)
+     * @param sessionId 32-byte session ID (unused in current Groth16 circuit)
+     * @return Base64-encoded proof JSON, or null on error
      */
     fun generateMembershipProof(
         witness: WitnessData,
         bindingHash: ByteArray,
         sessionId: ByteArray
     ): String? {
-        if (sessionId.size != 32) {
-            android.util.Log.e("SignedByMe", "sessionId must be 32 bytes, got ${sessionId.size}")
+        val startMs = System.currentTimeMillis()
+        android.util.Log.i("SignedByMe", "[TIMING] generateMembershipProof START at $startMs")
+        
+        if (!NativeBridge.isProverReady()) {
+            android.util.Log.e("SignedByMe", "Groth16 prover not initialized - cannot generate membership proof")
+            android.util.Log.i("SignedByMe", "[TIMING] generateMembershipProof FAILED (prover not ready) at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
             return null
         }
         
         val leafSecret = loadLeafSecret() ?: run {
             android.util.Log.e("SignedByMe", "No leaf secret found for membership proof")
-            return null
-        }
-        
-        // Parse root from witness
-        val rootBytes = if (witness.rootHex.isNotEmpty()) {
-            hexToBytes(witness.rootHex)
-        } else {
-            android.util.Log.e("SignedByMe", "Witness missing root hash")
-            java.util.Arrays.fill(leafSecret, 0.toByte())
+            android.util.Log.i("SignedByMe", "[TIMING] generateMembershipProof FAILED (no leaf secret) at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
             return null
         }
         
         return try {
-            val proofBytes = NativeBridge.proveMembership(
-                leafSecret = leafSecret,
-                merklePath = witness.toSiblingsArray(),
-                pathIndices = witness.pathBits,
-                root = rootBytes,
-                bindingHash = bindingHash,
-                sessionId = sessionId,
-                purposeId = witness.purposeId
+            // Build Groth16 input JSON
+            val inputJson = buildGroth16InputJson(leafSecret, witness)
+            android.util.Log.i("SignedByMe", "[TIMING] Input JSON built at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
+            
+            // Generate Groth16 proof
+            val proofStartMs = System.currentTimeMillis()
+            android.util.Log.i("SignedByMe", "[TIMING] NativeBridge.generateProof START at $proofStartMs")
+            
+            val resultJson = NativeBridge.generateProof(inputJson)
+            
+            val proofEndMs = System.currentTimeMillis()
+            android.util.Log.i("SignedByMe", "[TIMING] NativeBridge.generateProof END at $proofEndMs (+${proofEndMs - proofStartMs}ms)")
+            
+            val result = org.json.JSONObject(resultJson)
+            if (!result.optBoolean("success", false)) {
+                val error = result.optString("error", "Unknown error")
+                android.util.Log.e("SignedByMe", "Groth16 proof generation failed: $error")
+                android.util.Log.i("SignedByMe", "[TIMING] generateMembershipProof FAILED at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
+                return null
+            }
+            
+            // Base64 encode the proof JSON for API
+            val proofBase64 = android.util.Base64.encodeToString(
+                resultJson.toByteArray(Charsets.UTF_8),
+                android.util.Base64.NO_WRAP
             )
             
-            // Base64 encode for API
-            android.util.Base64.encodeToString(proofBytes, android.util.Base64.NO_WRAP)
+            android.util.Log.i("SignedByMe", "[TIMING] generateMembershipProof SUCCESS at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
+            proofBase64
         } catch (e: Exception) {
             android.util.Log.e("SignedByMe", "Failed to generate membership proof: ${e.message}")
+            e.printStackTrace()
+            android.util.Log.i("SignedByMe", "[TIMING] generateMembershipProof EXCEPTION at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
             null
         } finally {
             java.util.Arrays.fill(leafSecret, 0.toByte())
