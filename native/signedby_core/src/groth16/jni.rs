@@ -25,6 +25,32 @@ static PROVER: Lazy<Mutex<Option<Prover>>> = Lazy::new(|| Mutex::new(None));
 /// Global witness calculator
 static WITNESS_CALC: Lazy<Mutex<Option<WitnessCalculator>>> = Lazy::new(|| Mutex::new(None));
 
+/// Set the path to librapidsnark.so for dlopen
+/// Must be called before using any Groth16 functions on Android
+#[no_mangle]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_initRapidsnarkPath<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    path: JString<'local>,
+) -> jboolean {
+    let path_str: String = match env.get_string(&path) {
+        Ok(s) => s.into(),
+        Err(_) => return JNI_FALSE,
+    };
+    
+    #[cfg(target_os = "android")]
+    {
+        rapidsnark_ffi::android::set_rapidsnark_path(path_str);
+    }
+    
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = path_str; // unused on non-Android
+    }
+    
+    JNI_TRUE
+}
+
 /// Initialize the prover with paths to .zkey and .dat files
 #[no_mangle]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_initProver<'local>(

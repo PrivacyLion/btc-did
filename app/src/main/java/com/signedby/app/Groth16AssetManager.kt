@@ -42,6 +42,11 @@ object Groth16AssetManager {
      * @return true if all assets are ready
      */
     fun initialize(context: Context): Boolean {
+        // First, set native lib path for dlopen (required for rapidsnark FFI)
+        val nativeLibDir = context.applicationInfo.nativeLibraryDir
+        NativeBridge.initNativeLibPath(nativeLibDir)
+        Log.i(TAG, "Native lib dir: $nativeLibDir")
+        
         val dataDir = context.filesDir
         val groth16Dir = File(dataDir, "groth16")
         groth16Dir.mkdirs()

@@ -2,12 +2,30 @@
 package com.signedby.app
 
 object NativeBridge {
+    private var nativeLibDir: String? = null
+    
     init {
-        // Load rapidsnark first (provides groth16_prover_* functions)
-        System.loadLibrary("rapidsnark")
-        // Then our Rust core which depends on rapidsnark FFI
+        // Only load signedby_core - it will dlopen rapidsnark with RTLD_GLOBAL
+        // to avoid RTLD_LOCAL symbol visibility issues
         System.loadLibrary("signedby_core")
     }
+    
+    /**
+     * Initialize the native library directory path for dlopen.
+     * Must be called before using Groth16 functions.
+     * 
+     * @param nativeLibraryDir context.applicationInfo.nativeLibraryDir
+     */
+    fun initNativeLibPath(nativeLibraryDir: String) {
+        nativeLibDir = nativeLibraryDir
+        initRapidsnarkPath("$nativeLibraryDir/librapidsnark.so")
+    }
+    
+    /**
+     * Set the path to librapidsnark.so for dlopen.
+     * Called automatically by initNativeLibPath.
+     */
+    @JvmStatic private external fun initRapidsnarkPath(path: String): Boolean
 
     // ============================================================================
     // Basic Functions
