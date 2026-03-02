@@ -20,6 +20,8 @@ use thiserror::Error;
 
 pub mod witness;
 pub mod zkey;
+pub mod rapidsnark_ffi;
+pub mod jni;
 
 #[derive(Error, Debug)]
 pub enum ProverError {
@@ -40,9 +42,9 @@ pub struct Prover {
     /// Proving key (parsed from .zkey)
     proving_key: Option<ProvingKey<Bn254>>,
     /// Path to zkey file (for lazy loading)
-    zkey_path: Option<String>,
+    pub zkey_path: Option<String>,
     /// Circuit data path
-    dat_path: Option<String>,
+    pub dat_path: Option<String>,
 }
 
 impl Prover {

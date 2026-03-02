@@ -14,6 +14,7 @@ use jni::sys::{jboolean, jstring, JNI_FALSE, JNI_TRUE};
 
 use crate::groth16::witness::{MembershipInputs, WitnessCalculator};
 use crate::groth16::Prover;
+use crate::groth16::rapidsnark_ffi;
 
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
@@ -167,21 +168,28 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generateProof<'local>(
     
     drop(witness_calc);  // Release lock
     
-    // Generate proof using external prover
+    // Read witness file
+    let witness_path = "/tmp/signedby_witness_output.wtns";
+    let witness_bytes = match std::fs::read(witness_path) {
+        Ok(b) => b,
+        Err(e) => return make_error_string(&mut env, &format!("Failed to read witness: {}", e)),
+    };
+    
+    // Get zkey path from prover
     let prover = match PROVER.lock() {
         Ok(guard) => guard,
         Err(_) => return make_error_string(&mut env, "Prover lock failed"),
     };
     
-    let p = match prover.as_ref() {
-        Some(p) => p,
-        None => return make_error_string(&mut env, "Prover not initialized"),
+    let zkey_path = match prover.as_ref().and_then(|p| p.zkey_path.as_ref()) {
+        Some(p) => p.clone(),
+        None => return make_error_string(&mut env, "Prover not initialized with zkey path"),
     };
     
-    // Witness was written to /tmp/signedby_witness_output.wtns by calculator
-    let witness_path = "/tmp/signedby_witness_output.wtns";
+    drop(prover);  // Release lock before proof generation
     
-    let (proof_json, public_json) = match p.prove_json(witness_path) {
+    // Generate proof using rapidsnark FFI (or binary fallback)
+    let (proof_json, public_json) = match rapidsnark_ffi::prove_with_library(&zkey_path, &witness_bytes) {
         Ok(result) => result,
         Err(e) => return make_error_string(&mut env, &format!("Proof generation failed: {}", e)),
     };

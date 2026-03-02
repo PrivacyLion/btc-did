@@ -3,6 +3,9 @@ package com.signedby.app
 
 object NativeBridge {
     init {
+        // Load rapidsnark first (provides groth16_prover_* functions)
+        System.loadLibrary("rapidsnark")
+        // Then our Rust core which depends on rapidsnark FFI
         System.loadLibrary("signedby_core")
     }
 
