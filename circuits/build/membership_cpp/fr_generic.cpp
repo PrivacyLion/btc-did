@@ -174,9 +174,10 @@ extern "C" void Fr_rawNeg(FrRawElement r, const FrRawElement a) {
 
 // Montgomery multiplication: r = a * b * R^(-1) mod q
 extern "C" void Fr_rawMMul(FrRawElement r, const FrRawElement a, const FrRawElement b) {
-    // Use GMP for simplicity and correctness
-    mpz_t ma, mb, mq, mr, mR;
-    mpz_init(ma); mpz_init(mb); mpz_init(mq); mpz_init(mr); mpz_init(mR);
+    // Montgomery multiplication: r = (a * b * R^(-1)) mod q
+    // where R = 2^256 (for 4x64-bit limbs)
+    mpz_t ma, mb, mq, mr, mR, mRinv;
+    mpz_init(ma); mpz_init(mb); mpz_init(mq); mpz_init(mr); mpz_init(mR); mpz_init(mRinv);
     
     mpz_import(ma, Fr_N64, -1, 8, -1, 0, a);
     mpz_import(mb, Fr_N64, -1, 8, -1, 0, b);
@@ -186,11 +187,12 @@ extern "C" void Fr_rawMMul(FrRawElement r, const FrRawElement a, const FrRawElem
     mpz_set_ui(mR, 1);
     mpz_mul_2exp(mR, mR, 256);
     
-    // r = (a * b) mod q (both are in Montgomery form, result stays in Montgomery form)
-    mpz_mul(mr, ma, mb);
+    // Compute R^(-1) mod q
+    mpz_invert(mRinv, mR, mq);
     
-    // Montgomery reduction: multiply by R^(-1) mod q
-    // For Montgomery form: (a*R) * (b*R) * R^(-1) = a*b*R which is still Montgomery form
+    // Montgomery multiplication: (a * b * R^(-1)) mod q
+    mpz_mul(mr, ma, mb);
+    mpz_mul(mr, mr, mRinv);
     mpz_mod(mr, mr, mq);
     
     // Extract result
@@ -198,7 +200,7 @@ extern "C" void Fr_rawMMul(FrRawElement r, const FrRawElement a, const FrRawElem
     Fr_rawZero(r);
     mpz_export(r, &count, -1, 8, -1, 0, mr);
     
-    mpz_clear(ma); mpz_clear(mb); mpz_clear(mq); mpz_clear(mr); mpz_clear(mR);
+    mpz_clear(ma); mpz_clear(mb); mpz_clear(mq); mpz_clear(mr); mpz_clear(mR); mpz_clear(mRinv);
 }
 
 // Montgomery square: r = a^2 * R^(-1) mod q
