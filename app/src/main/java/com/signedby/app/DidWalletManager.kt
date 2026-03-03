@@ -13,6 +13,9 @@ import java.security.KeyStore
 import java.security.SecureRandom
 import android.security.keystore.KeyInfo
 import javax.crypto.SecretKeyFactory
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 
 class DidWalletManager(private val context: Context) {
 
@@ -482,12 +485,12 @@ class DidWalletManager(private val context: Context) {
             android.util.Log.i("SignedByMe", "[TIMING] Input JSON built at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
 
             val proofStartMs = System.currentTimeMillis()
-            android.util.Log.i("SignedByMe", "[TIMING] NativeBridge.generateProof START at $proofStartMs")
+            android.util.Log.i("SignedByMe", "[TIMING] Native proof (16MB stack) START at $proofStartMs")
             
-            val result = NativeBridge.generateProof(inputJson)
+            val result = runNativeProofWithLargeStackBlocking(inputJson)
             
             val proofEndMs = System.currentTimeMillis()
-            android.util.Log.i("SignedByMe", "[TIMING] NativeBridge.generateProof END at $proofEndMs (+${proofEndMs - proofStartMs}ms PROOF TIME)")
+            android.util.Log.i("SignedByMe", "[TIMING] Native proof END at $proofEndMs (+${proofEndMs - proofStartMs}ms PROOF TIME)")
             android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof SUCCESS at $proofEndMs (+${proofEndMs - startMs}ms TOTAL)")
             
             result
@@ -528,6 +531,35 @@ class DidWalletManager(private val context: Context) {
         } else {
             stubGroth16Proof("Could not fetch witness")
         }
+    }
+
+    /**
+     * Run native proof generation on a thread with large stack (blocking version).
+     * 
+     * The secp256k1 ECDSA circuit generates C++ code with huge local arrays
+     * that exceed the default coroutine thread stack (~1MB). We run on a
+     * dedicated thread with 16MB stack to avoid stack overflow.
+     */
+    private fun runNativeProofWithLargeStackBlocking(inputJson: String): String {
+        val stackSize = 16L * 1024 * 1024  // 16MB stack
+        var result: String? = null
+        var exception: Throwable? = null
+        val latch = java.util.concurrent.CountDownLatch(1)
+        
+        Thread(null, {
+            try {
+                result = NativeBridge.generateProof(inputJson)
+            } catch (e: Throwable) {
+                exception = e
+            } finally {
+                latch.countDown()
+            }
+        }, "groth16-prover", stackSize).start()
+        
+        latch.await()
+        
+        exception?.let { throw it }
+        return result ?: throw RuntimeException("No result from native proof")
     }
 
     /**
@@ -1285,12 +1317,12 @@ class DidWalletManager(private val context: Context) {
             
             // Generate Groth16 proof
             val proofStartMs = System.currentTimeMillis()
-            android.util.Log.i("SignedByMe", "[TIMING] NativeBridge.generateProof START at $proofStartMs")
+            android.util.Log.i("SignedByMe", "[TIMING] Native proof (16MB stack) START at $proofStartMs")
             
-            val resultJson = NativeBridge.generateProof(inputJson)
+            val resultJson = runNativeProofWithLargeStackBlocking(inputJson)
             
             val proofEndMs = System.currentTimeMillis()
-            android.util.Log.i("SignedByMe", "[TIMING] NativeBridge.generateProof END at $proofEndMs (+${proofEndMs - proofStartMs}ms)")
+            android.util.Log.i("SignedByMe", "[TIMING] Native proof END at $proofEndMs (+${proofEndMs - proofStartMs}ms)")
             
             val result = org.json.JSONObject(resultJson)
             if (!result.optBoolean("success", false)) {
