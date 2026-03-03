@@ -533,40 +533,52 @@ class DidWalletManager(private val context: Context) {
     /**
      * Build Groth16 circuit input JSON from leaf secret and witness.
      * 
-     * Circuit expects:
-     * - leaf_secret[5]: 5 field elements (decimal strings)
-     * - siblings[20]: 20 field elements (decimal strings)
+     * Circuit expects (all as decimal strings):
+     * - leaf_secret[5]: 5 field elements from 32-byte secret split as [6,6,6,6,8] bytes
+     * - siblings[20]: 20 field elements (32-byte hashes as decimal)
      * - path_bits[20]: 20 bits as strings ("0" or "1")
      */
     private fun buildGroth16InputJson(leafSecret: ByteArray, witness: WitnessData): String {
-        // Convert 32-byte secret to hex for Rust to split into 5 field elements
-        val leafSecretHex = leafSecret.joinToString("") { "%02x".format(it) }
-
-        // Convert siblings to 0x-prefixed hex strings (Rust converts to decimal)
-        val siblingsArray = org.json.JSONArray()
-        for (sibling in witness.siblings) {
-            val hex = "0x" + sibling.joinToString("") { "%02x".format(it) }
-            siblingsArray.put(hex)
+        // Split 32-byte secret into 5 chunks: [0..6), [6..12), [12..18), [18..24), [24..32)
+        // Convert each chunk to BigInteger (big-endian) then to decimal string
+        val leafSecretArray = org.json.JSONArray()
+        val chunks = listOf(
+            leafSecret.sliceArray(0 until 6),
+            leafSecret.sliceArray(6 until 12),
+            leafSecret.sliceArray(12 until 18),
+            leafSecret.sliceArray(18 until 24),
+            leafSecret.sliceArray(24 until 32)
+        )
+        for (chunk in chunks) {
+            val bigInt = java.math.BigInteger(1, chunk)  // 1 = positive
+            leafSecretArray.put(bigInt.toString())  // decimal string
         }
 
-        // Convert path_bits to string array ("0" or "1") - circuit expects strings
+        // Convert siblings (32-byte hashes) to decimal strings
+        val siblingsArray = org.json.JSONArray()
+        for (sibling in witness.siblings) {
+            val bigInt = java.math.BigInteger(1, sibling)  // 1 = positive
+            siblingsArray.put(bigInt.toString())  // decimal string
+        }
+
+        // Convert path_bits to string array ("0" or "1")
         val pathBitsArray = org.json.JSONArray()
         for (bit in witness.pathBits) {
             pathBitsArray.put(bit.toInt().toString())
         }
 
         val json = org.json.JSONObject().apply {
-            put("leaf_secret", leafSecretHex)
+            put("leaf_secret", leafSecretArray)
             put("siblings", siblingsArray)
             put("path_bits", pathBitsArray)
         }.toString()
         
         // DEBUG: Log the full input JSON
         android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
-        android.util.Log.i("SignedByMe", "[DEBUG] GROTH16 INPUT JSON:")
+        android.util.Log.i("SignedByMe", "[DEBUG] GROTH16 INPUT JSON (circuit-ready format):")
         android.util.Log.i("SignedByMe", json)
         android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
-        android.util.Log.i("SignedByMe", "[DEBUG] leaf_secret (hex): $leafSecretHex (${leafSecret.size} bytes)")
+        android.util.Log.i("SignedByMe", "[DEBUG] leaf_secret[5]: $leafSecretArray")
         android.util.Log.i("SignedByMe", "[DEBUG] siblings count: ${witness.siblings.size}")
         android.util.Log.i("SignedByMe", "[DEBUG] path_bits count: ${witness.pathBits.size}")
         android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
