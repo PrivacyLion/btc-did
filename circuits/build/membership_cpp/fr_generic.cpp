@@ -501,36 +501,63 @@ extern "C" void Fr_neq(PFrElement r, PFrElement a, PFrElement b) {
     r->shortVal = Fr_rawIsEq(na.longVal, nb.longVal) ? 0 : 1;
 }
 
-extern "C" void Fr_lt(PFrElement r, PFrElement a, PFrElement b) {
+// Field comparison: uses signed semantics for SHORT values
+// For LONG values, values > (q-1)/2 are considered "negative"
+static const uint64_t Fr_half[4] = {
+    0xa1f0fac9f8000000ULL, 0x9419f4243cdcb848ULL,
+    0xdc2822db40c0ac2eULL, 0x183227397098d014ULL
+};
+
+static int Fr_IsNegative(const FrRawElement a) {
+    // Returns 1 if a > (q-1)/2, meaning it represents a negative field element
+    return raw_cmp(a, Fr_half) > 0;
+}
+
+static int Fr_cmp(PFrElement a, PFrElement b) {
+    // Returns -1, 0, or 1 for a < b, a == b, a > b using field semantics
+    
+    // Both SHORT: simple signed comparison
+    if (!(a->type & Fr_LONG) && !(b->type & Fr_LONG)) {
+        if (a->shortVal < b->shortVal) return -1;
+        if (a->shortVal > b->shortVal) return 1;
+        return 0;
+    }
+    
+    // Convert both to normal form for comparison
     FrElement na, nb;
     Fr_toLongNormalInternal(&na, a);
     Fr_toLongNormalInternal(&nb, b);
+    
+    // Check "sign" (negative if > half)
+    int a_neg = Fr_IsNegative(na.longVal);
+    int b_neg = Fr_IsNegative(nb.longVal);
+    
+    if (a_neg && !b_neg) return -1;  // negative < positive
+    if (!a_neg && b_neg) return 1;   // positive > negative
+    
+    // Same sign: raw compare (both positive or both negative)
+    int cmp = raw_cmp(na.longVal, nb.longVal);
+    return a_neg ? -cmp : cmp;  // if both negative, flip comparison
+}
+
+extern "C" void Fr_lt(PFrElement r, PFrElement a, PFrElement b) {
     r->type = Fr_SHORT;
-    r->shortVal = (raw_cmp(na.longVal, nb.longVal) < 0) ? 1 : 0;
+    r->shortVal = (Fr_cmp(a, b) < 0) ? 1 : 0;
 }
 
 extern "C" void Fr_gt(PFrElement r, PFrElement a, PFrElement b) {
-    FrElement na, nb;
-    Fr_toLongNormalInternal(&na, a);
-    Fr_toLongNormalInternal(&nb, b);
     r->type = Fr_SHORT;
-    r->shortVal = (raw_cmp(na.longVal, nb.longVal) > 0) ? 1 : 0;
+    r->shortVal = (Fr_cmp(a, b) > 0) ? 1 : 0;
 }
 
 extern "C" void Fr_leq(PFrElement r, PFrElement a, PFrElement b) {
-    FrElement na, nb;
-    Fr_toLongNormalInternal(&na, a);
-    Fr_toLongNormalInternal(&nb, b);
     r->type = Fr_SHORT;
-    r->shortVal = (raw_cmp(na.longVal, nb.longVal) <= 0) ? 1 : 0;
+    r->shortVal = (Fr_cmp(a, b) <= 0) ? 1 : 0;
 }
 
 extern "C" void Fr_geq(PFrElement r, PFrElement a, PFrElement b) {
-    FrElement na, nb;
-    Fr_toLongNormalInternal(&na, a);
-    Fr_toLongNormalInternal(&nb, b);
     r->type = Fr_SHORT;
-    r->shortVal = (raw_cmp(na.longVal, nb.longVal) >= 0) ? 1 : 0;
+    r->shortVal = (Fr_cmp(a, b) >= 0) ? 1 : 0;
 }
 
 // Logical operations
