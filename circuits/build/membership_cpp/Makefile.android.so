@@ -23,7 +23,9 @@ GMP_INCLUDE := $(GMP)/include
 GMP_LIB := $(GMP)/lib/libgmp.a
 
 # Flags for shared library
-CFLAGS := -std=c++11 -O2 -fPIC -I. -I$(GMP_INCLUDE) -DANDROID -D__ANDROID__
+# Note: -include throwing_assert.hpp replaces abort-on-assert with throw-on-assert
+# This allows us to catch assertion failures and return error messages
+CFLAGS := -std=c++11 -O2 -fPIC -I. -I$(GMP_INCLUDE) -DANDROID -D__ANDROID__ -include throwing_assert.hpp
 LDFLAGS := -shared -static-libstdc++ $(GMP_LIB)
 
 # Source files (witnesscalc.cpp instead of main.cpp, fr_generic.cpp instead of fr.cpp/fr.asm)
