@@ -549,17 +549,36 @@ class DidWalletManager(private val context: Context) {
         var exception: Throwable? = null
         val latch = java.util.concurrent.CountDownLatch(1)
         
-        Thread(null, {
+        val proverThread = Thread(null, {
             try {
+                android.util.Log.i("SignedByMe", "[TIMING] Prover thread started, calling NativeBridge.generateProof...")
                 result = NativeBridge.generateProof(inputJson)
+                android.util.Log.i("SignedByMe", "[TIMING] NativeBridge.generateProof returned")
             } catch (e: Throwable) {
+                android.util.Log.e("SignedByMe", "[TIMING] Prover thread exception: ${e.message}")
+                e.printStackTrace()
                 exception = e
             } finally {
                 latch.countDown()
             }
-        }, "groth16-prover", stackSize).start()
+        }, "groth16-prover", stackSize)
         
-        latch.await()
+        proverThread.setUncaughtExceptionHandler { _, e ->
+            android.util.Log.e("SignedByMe", "[TIMING] Prover thread CRASHED: ${e.message}")
+            e.printStackTrace()
+            exception = e
+            latch.countDown()
+        }
+        
+        proverThread.start()
+        
+        // Timeout after 5 minutes (secp256k1 circuit can take a while)
+        val completed = latch.await(300, java.util.concurrent.TimeUnit.SECONDS)
+        
+        if (!completed) {
+            android.util.Log.e("SignedByMe", "[TIMING] Prover thread TIMEOUT after 5 minutes!")
+            throw RuntimeException("Native proof generation timed out after 5 minutes")
+        }
         
         exception?.let { throw it }
         return result ?: throw RuntimeException("No result from native proof")
