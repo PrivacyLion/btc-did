@@ -1,0 +1,67 @@
+# Makefile.android.so - Build witness calculator as shared library for Android
+#
+# Builds libmembership.so with C FFI entry point for dlopen/JNI.
+# No subprocess exec needed - call witnesscalc_membership() directly.
+#
+# Usage:
+#   NDK=/path/to/android-ndk GMP=/path/to/gmp-arm64 make -f Makefile.android.so
+#
+# Output: libmembership.so (copy to app/src/main/jniLibs/arm64-v8a/)
+
+# NDK paths
+NDK ?= $(ANDROID_NDK_HOME)
+API_LEVEL ?= 21
+TOOLCHAIN := $(NDK)/toolchains/llvm/prebuilt/linux-x86_64
+
+# Compiler
+CC := $(TOOLCHAIN)/bin/aarch64-linux-android$(API_LEVEL)-clang++
+STRIP := $(TOOLCHAIN)/bin/llvm-strip
+
+# GMP library (must be pre-compiled for ARM64)
+GMP ?= $(HOME)/gmp-arm64
+GMP_INCLUDE := $(GMP)/include
+GMP_LIB := $(GMP)/lib/libgmp.a
+
+# Flags for shared library
+CFLAGS := -std=c++11 -O2 -fPIC -I. -I$(GMP_INCLUDE) -DANDROID -D__ANDROID__
+LDFLAGS := -shared -static-libstdc++ $(GMP_LIB)
+
+# Source files (witnesscalc.cpp instead of main.cpp, fr_generic.cpp instead of fr.cpp/fr.asm)
+SRCS := witnesscalc.cpp calcwit.cpp fr_generic.cpp membership.cpp
+OBJS := $(SRCS:.cpp=.so.o)
+
+# Output
+TARGET := libmembership.so
+
+all: check-env $(TARGET)
+
+check-env:
+ifndef NDK
+	$(error NDK is not set. Set NDK=/path/to/android-ndk)
+endif
+	@if [ ! -f "$(GMP_LIB)" ]; then \
+		echo "ERROR: GMP library not found at $(GMP_LIB)"; \
+		exit 1; \
+	fi
+
+%.so.o: %.cpp
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TARGET): $(OBJS)
+	$(CC) -o $@ $(OBJS) $(LDFLAGS)
+	$(STRIP) $@
+	@echo ""
+	@echo "Built: $(TARGET)"
+	@echo "Size: $$(ls -lh $(TARGET) | awk '{print $$5}')"
+	@echo ""
+	@echo "Copy to app:"
+	@echo "  cp $(TARGET) ../../../app/src/main/jniLibs/arm64-v8a/"
+	@echo ""
+	@echo "API:"
+	@echo "  int witnesscalc_membership(dat_path, json, json_len, wtns_buf, wtns_size, err, err_size)"
+	@echo "  unsigned long witnesscalc_membership_size()"
+
+clean:
+	rm -f *.so.o $(TARGET)
+
+.PHONY: all check-env clean

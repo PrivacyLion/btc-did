@@ -1,23 +1,20 @@
 //! Witness generation for Groth16 proofs
 //!
-//! Calls external witness calculator binary to generate witness from circuit inputs.
-//! 
-//! For ARM64 Android, need cross-compiled witness calculator binary.
-//! See circuits/build/membership_cpp/Makefile for build instructions.
+//! On Android: Uses dlopen to load libmembership.so and call witnesscalc_membership()
+//! On desktop: Falls back to subprocess execution for testing
 //!
 //! Input layout (membership circuit):
 //! - leaf_secret[8]: 8 × 32-bit values (256-bit secret)
 //! - siblings[20]: 20 merkle siblings (depth 20)
 //! - path_bits[20]: 20 path direction bits
 //!
-//! Output: .wtns file for rapidsnark
+//! Output: .wtns witness bytes for rapidsnark
 
 use ark_bn254::Fr;
 use ark_ff::PrimeField;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -32,6 +29,8 @@ pub enum WitnessError {
     IoError(#[from] std::io::Error),
     #[error("Parse error: {0}")]
     ParseError(String),
+    #[error("FFI error: {0}")]
+    FfiError(String),
 }
 
 /// Inputs for membership proof
@@ -92,7 +91,6 @@ impl MembershipInputs {
             .map(|hex| {
                 let clean = hex.strip_prefix("0x").unwrap_or(hex);
                 if let Ok(bytes) = hex::decode(clean) {
-                    // Parse as big-endian integer, convert to decimal
                     let val = num_bigint::BigUint::from_bytes_be(&bytes);
                     val.to_string()
                 } else {
@@ -113,12 +111,38 @@ impl MembershipInputs {
     }
 }
 
-/// Witness calculator using external binary
+// ============================================================================
+// FFI types for witnesscalc library
+// ============================================================================
+
+/// Function signature for witnesscalc_membership
+/// Returns: 0 on success, negative on error
+type WitnesscalcFn = unsafe extern "C" fn(
+    dat_path: *const std::os::raw::c_char,
+    json_input: *const std::os::raw::c_char,
+    json_len: std::os::raw::c_ulong,
+    wtns_buffer: *mut u8,
+    wtns_size: *mut std::os::raw::c_ulong,
+    error_msg: *mut std::os::raw::c_char,
+    error_msg_size: std::os::raw::c_ulong,
+) -> std::os::raw::c_int;
+
+/// Function signature for witnesscalc_membership_size
+type WitnesscalcSizeFn = unsafe extern "C" fn() -> std::os::raw::c_ulong;
+
+// ============================================================================
+// Witness Calculator
+// ============================================================================
+
+/// Witness calculator - uses FFI on Android, subprocess on desktop
 pub struct WitnessCalculator {
-    /// Path to witness calculator (binary or .wasm)
+    /// Path to witness calculator library (.so) or binary
     calculator_path: String,
     /// Path to .dat file
     dat_path: String,
+    /// Loaded library handle (for FFI mode)
+    #[cfg(target_os = "android")]
+    lib_handle: Option<*mut std::os::raw::c_void>,
 }
 
 impl WitnessCalculator {
@@ -127,28 +151,17 @@ impl WitnessCalculator {
         Self {
             calculator_path: calculator_path.to_string(),
             dat_path: dat_path.to_string(),
+            #[cfg(target_os = "android")]
+            lib_handle: None,
         }
     }
     
-    /// Check if calculator exists and is executable
+    /// Check if calculator is available
     pub fn is_available(&self) -> bool {
         let path = Path::new(&self.calculator_path);
         if !path.exists() {
             eprintln!("[witness] Calculator not found: {}", self.calculator_path);
             return false;
-        }
-        
-        // Check if it's executable (skip on Windows)
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Ok(meta) = path.metadata() {
-                let mode = meta.permissions().mode();
-                if mode & 0o111 == 0 {
-                    eprintln!("[witness] Calculator not executable: {}", self.calculator_path);
-                    return false;
-                }
-            }
         }
         
         let dat = Path::new(&self.dat_path);
@@ -160,45 +173,147 @@ impl WitnessCalculator {
         true
     }
     
-    /// Generate witness by calling external calculator
-    pub fn calculate(&self, inputs: &MembershipInputs) -> Result<Vec<Fr>, WitnessError> {
-        // Just call calculate_to_file and parse result
-        let output_path = get_witness_output_path();
-        self.calculate_to_file(inputs, &output_path)?;
+    /// Calculate witness and return bytes
+    pub fn calculate_to_buffer(&self, inputs: &MembershipInputs) -> Result<Vec<u8>, WitnessError> {
+        let input_json = inputs.to_json()?;
         
-        let witness_bytes = std::fs::read(&output_path)?;
-        parse_witness_file(&witness_bytes)
+        #[cfg(target_os = "android")]
+        {
+            self.calculate_via_ffi(&input_json)
+        }
+        
+        #[cfg(not(target_os = "android"))]
+        {
+            self.calculate_via_subprocess(&input_json)
+        }
     }
     
-    /// Generate witness to file
-    pub fn calculate_to_file(&self, inputs: &MembershipInputs, output_path: &str) -> Result<(), WitnessError> {
-        if !self.is_available() {
-            return Err(WitnessError::CalculatorNotFound(format!(
-                "Witness calculator not available.\n\
-                Expected binary: {}\n\
-                Expected dat: {}\n\
-                \n\
-                For ARM64 Android, cross-compile with Android NDK:\n\
-                  cd circuits/build/membership_cpp\n\
-                  $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \\\n\
-                    -O2 -o membership_arm64 membership.cpp calcwit.cpp fr.cpp \\\n\
-                    -I. -static-libstdc++ -lgmp\n\
-                Then copy membership_arm64 to assets/groth16/membership",
-                self.calculator_path, self.dat_path
+    /// Calculate witness via FFI (Android)
+    #[cfg(target_os = "android")]
+    fn calculate_via_ffi(&self, input_json: &str) -> Result<Vec<u8>, WitnessError> {
+        use std::ffi::CString;
+        
+        eprintln!("[witness] Loading library: {}", self.calculator_path);
+        let start = std::time::Instant::now();
+        
+        // dlopen the library
+        let lib_path = CString::new(self.calculator_path.as_str())
+            .map_err(|e| WitnessError::FfiError(format!("Invalid path: {}", e)))?;
+        
+        let handle = unsafe {
+            libc::dlopen(lib_path.as_ptr(), libc::RTLD_NOW)
+        };
+        
+        if handle.is_null() {
+            let error = unsafe {
+                let err = libc::dlerror();
+                if err.is_null() {
+                    "Unknown dlopen error".to_string()
+                } else {
+                    std::ffi::CStr::from_ptr(err).to_string_lossy().into_owned()
+                }
+            };
+            return Err(WitnessError::FfiError(format!("dlopen failed: {}", error)));
+        }
+        
+        eprintln!("[witness] Library loaded in {:?}", start.elapsed());
+        
+        // Get function pointers
+        let size_fn_name = CString::new("witnesscalc_membership_size").unwrap();
+        let calc_fn_name = CString::new("witnesscalc_membership").unwrap();
+        
+        let size_fn: WitnesscalcSizeFn = unsafe {
+            let ptr = libc::dlsym(handle, size_fn_name.as_ptr());
+            if ptr.is_null() {
+                libc::dlclose(handle);
+                return Err(WitnessError::FfiError("witnesscalc_membership_size not found".into()));
+            }
+            std::mem::transmute(ptr)
+        };
+        
+        let calc_fn: WitnesscalcFn = unsafe {
+            let ptr = libc::dlsym(handle, calc_fn_name.as_ptr());
+            if ptr.is_null() {
+                libc::dlclose(handle);
+                return Err(WitnessError::FfiError("witnesscalc_membership not found".into()));
+            }
+            std::mem::transmute(ptr)
+        };
+        
+        // Get required buffer size
+        let required_size = unsafe { size_fn() } as usize;
+        eprintln!("[witness] Required buffer size: {} bytes", required_size);
+        
+        // Allocate buffers
+        let mut witness_buf = vec![0u8; required_size];
+        let mut witness_size = required_size as std::os::raw::c_ulong;
+        let mut error_buf = vec![0i8; 1024];
+        
+        let dat_path_c = CString::new(self.dat_path.as_str())
+            .map_err(|e| WitnessError::FfiError(format!("Invalid dat path: {}", e)))?;
+        let json_c = CString::new(input_json)
+            .map_err(|e| WitnessError::FfiError(format!("Invalid JSON: {}", e)))?;
+        
+        eprintln!("[witness] Calling witnesscalc_membership...");
+        let calc_start = std::time::Instant::now();
+        
+        let result = unsafe {
+            calc_fn(
+                dat_path_c.as_ptr(),
+                json_c.as_ptr(),
+                input_json.len() as std::os::raw::c_ulong,
+                witness_buf.as_mut_ptr(),
+                &mut witness_size,
+                error_buf.as_mut_ptr(),
+                error_buf.len() as std::os::raw::c_ulong,
+            )
+        };
+        
+        let calc_elapsed = calc_start.elapsed();
+        eprintln!("[witness] witnesscalc_membership completed in {:?}, result={}", calc_elapsed, result);
+        
+        // Close library
+        unsafe { libc::dlclose(handle); }
+        
+        if result != 0 {
+            let error_msg = unsafe {
+                std::ffi::CStr::from_ptr(error_buf.as_ptr())
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            return Err(WitnessError::CalculationFailed(format!(
+                "witnesscalc returned {}: {}", result, error_msg
             )));
         }
         
-        // Write input JSON
-        let input_json = inputs.to_json()?;
-        let input_path = get_witness_input_path();
-        std::fs::write(&input_path, &input_json)?;
+        // Truncate to actual size
+        witness_buf.truncate(witness_size as usize);
+        eprintln!("[witness] Generated {} bytes of witness data", witness_buf.len());
+        
+        Ok(witness_buf)
+    }
+    
+    /// Calculate witness via subprocess (desktop/testing)
+    #[cfg(not(target_os = "android"))]
+    fn calculate_via_subprocess(&self, input_json: &str) -> Result<Vec<u8>, WitnessError> {
+        use std::process::Command;
+        
+        if !self.is_available() {
+            return Err(WitnessError::CalculatorNotFound(
+                format!("Calculator not found: {}", self.calculator_path)
+            ));
+        }
+        
+        // Write input JSON to temp file
+        let input_path = "/tmp/signedby_witness_input.json";
+        let output_path = "/tmp/signedby_witness.wtns";
+        std::fs::write(input_path, input_json)?;
         
         eprintln!("[witness] Running: {} {} {}", self.calculator_path, input_path, output_path);
         let start = std::time::Instant::now();
         
-        // Run calculator
         let output = Command::new(&self.calculator_path)
-            .arg(&input_path)
+            .arg(input_path)
             .arg(output_path)
             .output()?;
         
@@ -207,38 +322,29 @@ impl WitnessCalculator {
         
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
             return Err(WitnessError::CalculationFailed(format!(
-                "Exit code: {:?}\nStderr: {}\nStdout: {}",
-                output.status.code(), stderr, stdout
+                "Exit code: {:?}, stderr: {}", output.status.code(), stderr
             )));
         }
         
-        // Verify output exists
-        if !Path::new(output_path).exists() {
-            return Err(WitnessError::CalculationFailed(
-                "Calculator succeeded but output file not created".into()
-            ));
-        }
+        let witness_bytes = std::fs::read(output_path)?;
+        eprintln!("[witness] Read {} bytes from {}", witness_bytes.len(), output_path);
         
+        Ok(witness_bytes)
+    }
+    
+    /// Generate witness to file (for compatibility)
+    pub fn calculate_to_file(&self, inputs: &MembershipInputs, output_path: &str) -> Result<(), WitnessError> {
+        let witness_bytes = self.calculate_to_buffer(inputs)?;
+        std::fs::write(output_path, &witness_bytes)?;
         Ok(())
     }
-}
-
-/// Get witness input path (temp file)
-fn get_witness_input_path() -> String {
-    #[cfg(target_os = "android")]
-    { "/data/local/tmp/signedby_witness_input.json".to_string() }
-    #[cfg(not(target_os = "android"))]
-    { "/tmp/signedby_witness_input.json".to_string() }
-}
-
-/// Get witness output path (temp file)
-fn get_witness_output_path() -> String {
-    #[cfg(target_os = "android")]
-    { "/data/local/tmp/signedby_witness.wtns".to_string() }
-    #[cfg(not(target_os = "android"))]
-    { "/tmp/signedby_witness.wtns".to_string() }
+    
+    /// Generate witness and parse to Fr elements
+    pub fn calculate(&self, inputs: &MembershipInputs) -> Result<Vec<Fr>, WitnessError> {
+        let witness_bytes = self.calculate_to_buffer(inputs)?;
+        parse_witness_file(&witness_bytes)
+    }
 }
 
 /// Parse .wtns witness file format

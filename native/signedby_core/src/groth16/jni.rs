@@ -204,30 +204,22 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generateProof<'local>(
     eprintln!("[generateProof] Starting witness calculation...");
     let witness_start = std::time::Instant::now();
     
-    // Witness output path
-    #[cfg(target_os = "android")]
-    let witness_path = "/data/local/tmp/signedby_witness.wtns";
-    #[cfg(not(target_os = "android"))]
-    let witness_path = "/tmp/signedby_witness.wtns";
-    
-    // Generate witness using external calculator
-    if let Err(e) = calc.calculate_to_file(&inputs, witness_path) {
-        return make_error_string(&mut env, &format!("Witness generation failed: {}", e));
-    }
+    // Generate witness directly to buffer (uses FFI on Android, subprocess on desktop)
+    let witness_bytes = match calc.calculate_to_buffer(&inputs) {
+        Ok(b) => {
+            eprintln!("[generateProof] Witness generated: {} bytes", b.len());
+            b
+        }
+        Err(e) => {
+            drop(witness_calc);
+            return make_error_string(&mut env, &format!("Witness generation failed: {}", e));
+        }
+    };
     
     let witness_elapsed = witness_start.elapsed();
     eprintln!("[generateProof] Witness calculation completed in {:?}", witness_elapsed);
     
     drop(witness_calc);  // Release lock
-    
-    // Read witness file
-    let witness_bytes = match std::fs::read(witness_path) {
-        Ok(b) => {
-            eprintln!("[generateProof] Witness file read: {} bytes", b.len());
-            b
-        }
-        Err(e) => return make_error_string(&mut env, &format!("Failed to read witness file {}: {}", witness_path, e)),
-    };
     
     // Get zkey path from prover
     let prover = match PROVER.lock() {
