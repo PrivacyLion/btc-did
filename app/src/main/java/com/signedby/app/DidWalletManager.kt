@@ -355,8 +355,9 @@ class DidWalletManager(private val context: Context) {
         android.util.Log.i("SignedByMe", "Groth16 Prover Initialization (Native ARM64)")
         android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
         
-        // Native ARM64 witness calculator binary
-        val calcFile = java.io.File(groth16Dir, "membership")
+        // Native ARM64 witness calculator - must be in nativeLibraryDir for exec permission
+        // Bundled as libmembership.so in jniLibs/arm64-v8a/, Gradle installs to nativeLibraryDir
+        val calcFile = java.io.File(nativeLibDir, "libmembership.so")
         
         // Circuit data (extracted from assets)
         val datFile = java.io.File(groth16Dir, "membership.dat")
@@ -382,16 +383,14 @@ class DidWalletManager(private val context: Context) {
 
         // Validate all required files exist
         if (!calcFile.exists()) {
-            android.util.Log.e("SignedByMe", "FATAL: membership (witness calculator) not found")
-            android.util.Log.e("SignedByMe", "  Should be in assets/groth16/membership and extracted at startup")
+            android.util.Log.e("SignedByMe", "FATAL: libmembership.so (witness calculator) not found")
+            android.util.Log.e("SignedByMe", "  Should be in jniLibs/arm64-v8a/libmembership.so")
+            android.util.Log.e("SignedByMe", "  Expected at: ${calcFile.absolutePath}")
             return false
         }
         
-        // Ensure witness calculator is executable
-        if (!calcFile.canExecute()) {
-            android.util.Log.i("SignedByMe", "Setting executable permission on witness calculator...")
-            calcFile.setExecutable(true)
-        }
+        // nativeLibraryDir should already have exec permission, but log status
+        android.util.Log.i("SignedByMe", "Witness calculator executable: ${calcFile.canExecute()}")
         
         if (!datFile.exists()) {
             android.util.Log.e("SignedByMe", "FATAL: membership.dat not found")
