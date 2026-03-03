@@ -359,6 +359,7 @@ int witnesscalc_membership(
     char* error_msg,
     unsigned long error_msg_size
 ) {
+    // Note: error_msg will contain detailed debug info on failure
     try {
         // Load circuit
         Circom_Circuit* circuit = loadCircuit(std::string(dat_path));
@@ -372,12 +373,17 @@ int witnesscalc_membership(
         // Create calculation context
         Circom_CalcWit* ctx = new Circom_CalcWit(circuit);
         
+        // Debug: Log input JSON (first 500 chars)
+        std::string inputStr(json_input, std::min(json_len, 500UL));
+        
         // Load inputs from JSON
         try {
             loadJsonFromString(ctx, json_input, json_len);
         } catch (std::exception& e) {
             if (error_msg && error_msg_size > 0) {
-                snprintf(error_msg, error_msg_size, "JSON parse error: %s", e.what());
+                snprintf(error_msg, error_msg_size, 
+                    "JSON parse error: %s | Input preview: %.200s", 
+                    e.what(), inputStr.c_str());
             }
             delete ctx;
             delete circuit;
@@ -385,12 +391,15 @@ int witnesscalc_membership(
         }
         
         // Check all inputs set
-        if (ctx->getRemaingInputsToBeSet() != 0) {
+        uint remaining = ctx->getRemaingInputsToBeSet();
+        if (remaining != 0) {
             if (error_msg && error_msg_size > 0) {
                 snprintf(error_msg, error_msg_size, 
-                    "Missing inputs: %llu of %u set",
-                    get_main_input_signal_no() - ctx->getRemaingInputsToBeSet(),
-                    get_main_input_signal_no());
+                    "Missing inputs: %u of %u set (remaining=%u) | Input preview: %.200s",
+                    get_main_input_signal_no() - remaining,
+                    get_main_input_signal_no(),
+                    remaining,
+                    inputStr.c_str());
             }
             delete ctx;
             delete circuit;
@@ -410,6 +419,11 @@ int witnesscalc_membership(
             snprintf(error_msg, error_msg_size, "Exception: %s", e.what());
         }
         return -5;
+    } catch (...) {
+        if (error_msg && error_msg_size > 0) {
+            snprintf(error_msg, error_msg_size, "Unknown exception (assertion failure?)");
+        }
+        return -6;
     }
 }
 
