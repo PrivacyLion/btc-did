@@ -30,8 +30,8 @@ GMP_LIB := $(GMP)/lib/libgmp.a
 CFLAGS := -std=c++11 -O2 -I. -I$(GMP_INCLUDE) -DANDROID -D__ANDROID__
 LDFLAGS := -static-libstdc++ $(GMP_LIB)
 
-# Source files (use fr_generic.cpp instead of fr.asm)
-SRCS := main.cpp calcwit.cpp fr.cpp fr_generic.cpp membership.cpp
+# Source files (fr_generic.cpp replaces both fr.cpp and fr.asm)
+SRCS := main.cpp calcwit.cpp fr_generic.cpp membership.cpp
 OBJS := $(SRCS:.cpp=.arm64.o)
 
 # Output
