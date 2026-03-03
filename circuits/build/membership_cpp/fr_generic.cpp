@@ -12,7 +12,28 @@
 
 #include "fr.hpp"
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
+#include <cassert>
 #include <gmp.h>
+
+// Global field modulus for high-level operations
+static mpz_t g_q;
+static mpz_t g_zero;
+static mpz_t g_one;
+static bool g_initialized = false;
+
+static void ensure_initialized() {
+    if (!g_initialized) {
+        mpz_init(g_q);
+        mpz_init(g_zero);
+        mpz_init(g_one);
+        mpz_import(g_q, Fr_N64, -1, 8, -1, 0, Fr_rawq);
+        mpz_set_ui(g_zero, 0);
+        mpz_set_ui(g_one, 1);
+        g_initialized = true;
+    }
+}
 
 // Field modulus q for BN254 Fr
 static const uint64_t Fr_rawq_data[4] = {
@@ -536,4 +557,145 @@ extern "C" void Fr_fail() {
 extern "C" void Fr_rawMMul1(FrRawElement r, const FrRawElement a, uint64_t b) {
     FrRawElement tmp = {b, 0, 0, 0};
     Fr_rawMMul(r, a, tmp);
+}
+
+// ============================================================================
+// High-level helper functions (for Fr_str2element, Fr_div, etc.)
+// ============================================================================
+
+// Convert FrElement to GMP mpz_t
+void Fr_toMpz(mpz_t r, PFrElement pE) {
+    ensure_initialized();
+    FrElement tmp;
+    Fr_toNormal(&tmp, pE);
+    if (!(tmp.type & Fr_LONG)) {
+        mpz_set_si(r, tmp.shortVal);
+        if (tmp.shortVal < 0) {
+            mpz_add(r, r, g_q);
+        }
+    } else {
+        mpz_import(r, Fr_N64, -1, 8, -1, 0, (const void *)tmp.longVal);
+    }
+}
+
+// Convert GMP mpz_t to FrElement
+void Fr_fromMpz(PFrElement pE, mpz_t v) {
+    if (mpz_fits_sint_p(v)) {
+        pE->type = Fr_SHORT;
+        pE->shortVal = mpz_get_si(v);
+    } else {
+        pE->type = Fr_LONG;
+        for (int i = 0; i < Fr_N64; i++) pE->longVal[i] = 0;
+        mpz_export((void *)(pE->longVal), NULL, -1, 8, -1, 0, v);
+    }
+}
+
+// Parse string to field element
+void Fr_str2element(PFrElement pE, char const *s, uint base) {
+    ensure_initialized();
+    mpz_t mr;
+    mpz_init_set_str(mr, s, base);
+    mpz_fdiv_r(mr, mr, g_q);
+    Fr_fromMpz(pE, mr);
+    mpz_clear(mr);
+}
+
+// Convert field element to string (caller must delete[] result)
+char *Fr_element2str(PFrElement pE) {
+    ensure_initialized();
+    FrElement tmp;
+    mpz_t r;
+    if (!(pE->type & Fr_LONG)) {
+        if (pE->shortVal >= 0) {
+            char *res = new char[32];
+            sprintf(res, "%d", pE->shortVal);
+            return res;
+        } else {
+            mpz_init_set_si(r, pE->shortVal);
+            mpz_add(r, r, g_q);
+        }
+    } else {
+        Fr_toNormal(&tmp, pE);
+        mpz_init(r);
+        mpz_import(r, Fr_N64, -1, 8, -1, 0, (const void *)tmp.longVal);
+    }
+    char *res = mpz_get_str(0, 10, r);
+    mpz_clear(r);
+    return res;
+}
+
+// Integer division: r = a / b (integer, not field)
+void Fr_idiv(PFrElement r, PFrElement a, PFrElement b) {
+    ensure_initialized();
+    mpz_t ma, mb, mr;
+    mpz_init(ma);
+    mpz_init(mb);
+    mpz_init(mr);
+
+    Fr_toMpz(ma, a);
+    Fr_toMpz(mb, b);
+    mpz_fdiv_q(mr, ma, mb);
+    Fr_fromMpz(r, mr);
+
+    mpz_clear(ma);
+    mpz_clear(mb);
+    mpz_clear(mr);
+}
+
+// Modulo: r = a % b
+void Fr_mod(PFrElement r, PFrElement a, PFrElement b) {
+    ensure_initialized();
+    mpz_t ma, mb, mr;
+    mpz_init(ma);
+    mpz_init(mb);
+    mpz_init(mr);
+
+    Fr_toMpz(ma, a);
+    Fr_toMpz(mb, b);
+    mpz_fdiv_r(mr, ma, mb);
+    Fr_fromMpz(r, mr);
+
+    mpz_clear(ma);
+    mpz_clear(mb);
+    mpz_clear(mr);
+}
+
+// Power: r = a^b mod q
+void Fr_pow(PFrElement r, PFrElement a, PFrElement b) {
+    ensure_initialized();
+    mpz_t ma, mb, mr;
+    mpz_init(ma);
+    mpz_init(mb);
+    mpz_init(mr);
+
+    Fr_toMpz(ma, a);
+    Fr_toMpz(mb, b);
+    mpz_powm(mr, ma, mb, g_q);
+    Fr_fromMpz(r, mr);
+
+    mpz_clear(ma);
+    mpz_clear(mb);
+    mpz_clear(mr);
+}
+
+// Inverse: r = a^(-1) mod q
+void Fr_inv(PFrElement r, PFrElement a) {
+    ensure_initialized();
+    mpz_t ma, mr;
+    mpz_init(ma);
+    mpz_init(mr);
+
+    Fr_toMpz(ma, a);
+    mpz_invert(mr, ma, g_q);
+    Fr_fromMpz(r, mr);
+
+    mpz_clear(ma);
+    mpz_clear(mr);
+}
+
+// Field division: r = a / b = a * b^(-1) mod q
+void Fr_div(PFrElement r, PFrElement a, PFrElement b) {
+    FrElement tmp;
+    Fr_inv(&tmp, b);
+    Fr_mul(r, a, &tmp);
 }
