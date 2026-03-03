@@ -541,7 +541,10 @@ class DidWalletManager(private val context: Context) {
      * dedicated thread with 16MB stack to avoid stack overflow.
      */
     private fun runNativeProofWithLargeStackBlocking(inputJson: String): String {
-        val stackSize = 16L * 1024 * 1024  // 16MB stack
+        // ECDSAPrivToPub_241_run alone has FrElement lvar[67916] = 2.7MB
+        // Plus nested calls with lvarcall[1405] arrays (56KB each)
+        // Need 64MB+ to be safe
+        val stackSize = 64L * 1024 * 1024  // 64MB stack
         var result: String? = null
         var exception: Throwable? = null
         val latch = java.util.concurrent.CountDownLatch(1)
