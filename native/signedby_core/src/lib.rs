@@ -416,9 +416,9 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_getXOnlyPubkey(
 }
 
 // ============================================================================
-// GROTH16 MEMBERSHIP JNI FUNCTIONS (Phase 14 - to be implemented)
+// GROTH16 MEMBERSHIP JNI FUNCTIONS (Phase 14)
 // ============================================================================
 
-// TODO: Add JNI functions for Groth16 proof generation when mobile is updated
-// - generateMembershipProof(leaf_secret, siblings, path_bits) -> proof JSON
-// - These will call rapidsnark or similar native prover
+// Re-export JNI functions from groth16 module to prevent LTO stripping.
+// These provide: initRapidsnarkPath, initProver, isProverReady, generateProof
+pub use groth16::jni::*;

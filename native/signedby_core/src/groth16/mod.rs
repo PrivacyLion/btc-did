@@ -23,6 +23,9 @@ pub mod zkey;
 pub mod rapidsnark_ffi;
 pub mod jni;
 
+// Re-export JNI functions to prevent LTO from stripping them
+pub use jni::*;
+
 #[derive(Error, Debug)]
 pub enum ProverError {
     #[error("Failed to load proving key: {0}")]

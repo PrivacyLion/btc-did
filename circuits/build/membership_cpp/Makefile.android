@@ -1,0 +1,75 @@
+# Makefile.android - Cross-compile witness calculator for Android ARM64
+#
+# Prerequisites:
+# 1. Android NDK installed (r25+ recommended)
+# 2. GMP static library for ARM64:
+#    - Download: https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz
+#    - Cross-compile with NDK toolchain
+#    - Or use prebuilt from: https://github.com/nicebyte/nicegmp
+#
+# Usage:
+#   NDK=/path/to/android-ndk GMP=/path/to/gmp-arm64 make -f Makefile.android
+#
+# Output: membership_arm64 (copy to app/src/main/assets/groth16/)
+
+# NDK paths
+NDK ?= $(ANDROID_NDK_HOME)
+API_LEVEL ?= 21
+TOOLCHAIN := $(NDK)/toolchains/llvm/prebuilt/linux-x86_64
+
+# Compiler
+CC := $(TOOLCHAIN)/bin/aarch64-linux-android$(API_LEVEL)-clang++
+STRIP := $(TOOLCHAIN)/bin/llvm-strip
+
+# GMP library (must be pre-compiled for ARM64)
+GMP ?= $(HOME)/gmp-arm64
+GMP_INCLUDE := $(GMP)/include
+GMP_LIB := $(GMP)/lib/libgmp.a
+
+# Flags
+CFLAGS := -std=c++11 -O2 -I. -I$(GMP_INCLUDE) -DANDROID -D__ANDROID__
+LDFLAGS := -static-libstdc++ $(GMP_LIB)
+
+# Source files (use fr_generic.cpp instead of fr.asm)
+SRCS := main.cpp calcwit.cpp fr.cpp fr_generic.cpp membership.cpp
+OBJS := $(SRCS:.cpp=.arm64.o)
+
+# Output
+TARGET := membership_arm64
+
+all: check-env $(TARGET)
+
+check-env:
+ifndef NDK
+	$(error NDK is not set. Set NDK=/path/to/android-ndk)
+endif
+	@if [ ! -f "$(GMP_LIB)" ]; then \
+		echo "ERROR: GMP library not found at $(GMP_LIB)"; \
+		echo ""; \
+		echo "Build GMP for ARM64:"; \
+		echo "  wget https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz"; \
+		echo "  tar xf gmp-6.3.0.tar.xz && cd gmp-6.3.0"; \
+		echo "  ./configure --host=aarch64-linux-android \\"; \
+		echo "    CC=\"$(TOOLCHAIN)/bin/aarch64-linux-android$(API_LEVEL)-clang\" \\"; \
+		echo "    --prefix=$(HOME)/gmp-arm64 --disable-shared"; \
+		echo "  make -j4 && make install"; \
+		exit 1; \
+	fi
+
+%.arm64.o: %.cpp
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TARGET): $(OBJS)
+	$(CC) -o $@ $(OBJS) $(LDFLAGS)
+	$(STRIP) $@
+	@echo ""
+	@echo "Built: $(TARGET)"
+	@echo "Size: $$(ls -lh $(TARGET) | awk '{print $$5}')"
+	@echo ""
+	@echo "Copy to app:"
+	@echo "  cp $(TARGET) ../../../app/src/main/assets/groth16/membership"
+
+clean:
+	rm -f *.arm64.o $(TARGET)
+
+.PHONY: all check-env clean
