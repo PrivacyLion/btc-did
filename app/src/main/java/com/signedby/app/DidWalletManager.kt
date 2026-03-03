@@ -532,28 +532,46 @@ class DidWalletManager(private val context: Context) {
 
     /**
      * Build Groth16 circuit input JSON from leaf secret and witness.
+     * 
+     * Circuit expects:
+     * - leaf_secret[5]: 5 field elements (decimal strings)
+     * - siblings[20]: 20 field elements (decimal strings)
+     * - path_bits[20]: 20 bits as strings ("0" or "1")
      */
     private fun buildGroth16InputJson(leafSecret: ByteArray, witness: WitnessData): String {
+        // Convert 32-byte secret to hex for Rust to split into 5 field elements
         val leafSecretHex = leafSecret.joinToString("") { "%02x".format(it) }
 
-        // Convert siblings to 0x-prefixed hex strings
+        // Convert siblings to 0x-prefixed hex strings (Rust converts to decimal)
         val siblingsArray = org.json.JSONArray()
         for (sibling in witness.siblings) {
             val hex = "0x" + sibling.joinToString("") { "%02x".format(it) }
             siblingsArray.put(hex)
         }
 
-        // Convert path_bits to int array
+        // Convert path_bits to string array ("0" or "1") - circuit expects strings
         val pathBitsArray = org.json.JSONArray()
         for (bit in witness.pathBits) {
-            pathBitsArray.put(bit.toInt())
+            pathBitsArray.put(bit.toInt().toString())
         }
 
-        return org.json.JSONObject().apply {
+        val json = org.json.JSONObject().apply {
             put("leaf_secret", leafSecretHex)
             put("siblings", siblingsArray)
             put("path_bits", pathBitsArray)
         }.toString()
+        
+        // DEBUG: Log the full input JSON
+        android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
+        android.util.Log.i("SignedByMe", "[DEBUG] GROTH16 INPUT JSON:")
+        android.util.Log.i("SignedByMe", json)
+        android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
+        android.util.Log.i("SignedByMe", "[DEBUG] leaf_secret (hex): $leafSecretHex (${leafSecret.size} bytes)")
+        android.util.Log.i("SignedByMe", "[DEBUG] siblings count: ${witness.siblings.size}")
+        android.util.Log.i("SignedByMe", "[DEBUG] path_bits count: ${witness.pathBits.size}")
+        android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
+        
+        return json
     }
 
     /**
