@@ -36,8 +36,9 @@ pub enum WitnessError {
 /// Inputs for membership proof
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MembershipInputs {
-    /// Leaf secret (256 bits as 8 × 32-bit values)
-    pub leaf_secret: [u64; 8],
+    /// Leaf secret (5 field elements for Poseidon hash)
+    /// Circuit: signal input leaf_secret[5]
+    pub leaf_secret: [String; 5],
     /// Merkle siblings (depth 20)
     pub siblings: Vec<String>,
     /// Path direction bits
@@ -45,7 +46,32 @@ pub struct MembershipInputs {
 }
 
 impl MembershipInputs {
-    /// Create from raw bytes
+    /// Create from 5 field element strings (decimal)
+    pub fn from_field_elements(
+        leaf_secret: [String; 5],
+        siblings: &[String],
+        path_bits: &[u8],
+    ) -> Result<Self, WitnessError> {
+        if siblings.len() != 20 {
+            return Err(WitnessError::InvalidInput(
+                format!("Expected 20 siblings, got {}", siblings.len())
+            ));
+        }
+        if path_bits.len() != 20 {
+            return Err(WitnessError::InvalidInput(
+                format!("Expected 20 path bits, got {}", path_bits.len())
+            ));
+        }
+        
+        Ok(Self {
+            leaf_secret,
+            siblings: siblings.to_vec(),
+            path_bits: path_bits.to_vec(),
+        })
+    }
+    
+    /// Create from 32-byte secret (derives 5 field elements)
+    /// Each field element is derived from ~6 bytes of the secret
     pub fn from_bytes(
         secret: &[u8; 32],
         siblings: &[String],
@@ -62,11 +88,24 @@ impl MembershipInputs {
             ));
         }
         
-        // Split 32-byte secret into 8 × 32-bit chunks (little-endian)
-        let mut leaf_secret = [0u64; 8];
-        for i in 0..8 {
-            let chunk = &secret[i * 4..(i + 1) * 4];
-            leaf_secret[i] = u32::from_le_bytes(chunk.try_into().unwrap()) as u64;
+        // Derive 5 field elements from 32-byte secret
+        // Split into 5 chunks: 6+6+6+6+8 bytes = 32 bytes
+        // Convert each chunk to a decimal string (field element)
+        let mut leaf_secret: [String; 5] = Default::default();
+        
+        // Chunks: bytes 0-5, 6-11, 12-17, 18-23, 24-31
+        let chunks: [&[u8]; 5] = [
+            &secret[0..6],
+            &secret[6..12],
+            &secret[12..18],
+            &secret[18..24],
+            &secret[24..32],
+        ];
+        
+        for (i, chunk) in chunks.iter().enumerate() {
+            // Convert bytes to big integer (big-endian) then to decimal string
+            let val = num_bigint::BigUint::from_bytes_be(chunk);
+            leaf_secret[i] = val.to_string();
         }
         
         Ok(Self {
@@ -77,14 +116,12 @@ impl MembershipInputs {
     }
     
     /// Convert to JSON for witness calculator
+    /// Format matches circuit: leaf_secret[5], siblings[20], path_bits[20]
     pub fn to_json(&self) -> Result<String, WitnessError> {
         let mut map = HashMap::<String, serde_json::Value>::new();
         
-        // leaf_secret as array of decimal strings
-        let secret_strs: Vec<String> = self.leaf_secret.iter()
-            .map(|v| v.to_string())
-            .collect();
-        map.insert("leaf_secret".into(), serde_json::json!(secret_strs));
+        // leaf_secret as array of 5 decimal strings
+        map.insert("leaf_secret".into(), serde_json::json!(self.leaf_secret));
         
         // siblings as array of decimal strings (from hex)
         let sibling_strs: Vec<String> = self.siblings.iter()
@@ -94,13 +131,14 @@ impl MembershipInputs {
                     let val = num_bigint::BigUint::from_bytes_be(&bytes);
                     val.to_string()
                 } else {
-                    "0".to_string()
+                    // Already decimal string
+                    hex.clone()
                 }
             })
             .collect();
         map.insert("siblings".into(), serde_json::json!(sibling_strs));
         
-        // path_bits as array of strings
+        // path_bits as array of strings ("0" or "1")
         let path_strs: Vec<String> = self.path_bits.iter()
             .map(|v| v.to_string())
             .collect();
@@ -395,15 +433,36 @@ mod tests {
     use super::*;
     
     #[test]
-    fn test_membership_inputs() {
+    fn test_membership_inputs_from_bytes() {
         let secret = [0u8; 32];
-        let siblings: Vec<String> = (0..20).map(|_| "0x00".to_string()).collect();
+        let siblings: Vec<String> = (0..20).map(|_| "0".to_string()).collect();
         let path_bits: Vec<u8> = vec![0; 20];
         
         let inputs = MembershipInputs::from_bytes(&secret, &siblings, &path_bits).unwrap();
-        assert_eq!(inputs.leaf_secret.len(), 8);
+        assert_eq!(inputs.leaf_secret.len(), 5);
         
         let json = inputs.to_json().unwrap();
         assert!(json.contains("leaf_secret"));
+        assert!(json.contains("siblings"));
+        assert!(json.contains("path_bits"));
+    }
+    
+    #[test]
+    fn test_membership_inputs_from_field_elements() {
+        let leaf_secret: [String; 5] = [
+            "123".to_string(),
+            "456".to_string(),
+            "789".to_string(),
+            "101112".to_string(),
+            "131415".to_string(),
+        ];
+        let siblings: Vec<String> = (0..20).map(|_| "0".to_string()).collect();
+        let path_bits: Vec<u8> = vec![0; 20];
+        
+        let inputs = MembershipInputs::from_field_elements(leaf_secret, &siblings, &path_bits).unwrap();
+        assert_eq!(inputs.leaf_secret[0], "123");
+        
+        let json = inputs.to_json().unwrap();
+        assert!(json.contains("\"123\""));
     }
 }

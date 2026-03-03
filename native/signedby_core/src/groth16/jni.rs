@@ -159,8 +159,11 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generateProof<'local>(
     };
     
     // Extract fields
-    let secret_hex = match parsed.get("leaf_secret").and_then(|v| v.as_str()) {
-        Some(s) => s,
+    // leaf_secret can be:
+    //   - Array of 5 strings (field elements in decimal) 
+    //   - Single hex string (32 bytes, will be converted to 5 field elements)
+    let leaf_secret_val = match parsed.get("leaf_secret") {
+        Some(v) => v,
         None => return make_error_string(&mut env, "Missing leaf_secret"),
     };
     
@@ -174,20 +177,46 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generateProof<'local>(
         None => return make_error_string(&mut env, "Missing path_bits"),
     };
     
-    // Parse secret
-    let secret_bytes = match hex::decode(secret_hex.trim_start_matches("0x")) {
-        Ok(b) if b.len() == 32 => {
-            let mut arr = [0u8; 32];
-            arr.copy_from_slice(&b);
-            arr
+    // Parse leaf_secret based on format
+    let inputs = if let Some(arr) = leaf_secret_val.as_array() {
+        // Array of 5 field element strings
+        if arr.len() != 5 {
+            return make_error_string(&mut env, &format!(
+                "leaf_secret array must have 5 elements, got {}", arr.len()
+            ));
         }
-        _ => return make_error_string(&mut env, "Invalid leaf_secret (must be 32 bytes hex)"),
-    };
-    
-    // Create inputs
-    let inputs = match MembershipInputs::from_bytes(&secret_bytes, &siblings, &path_bits) {
-        Ok(i) => i,
-        Err(e) => return make_error_string(&mut env, &format!("Invalid inputs: {}", e)),
+        let leaf_secret: [String; 5] = match arr.iter()
+            .map(|v| v.as_str().map(String::from).ok_or("not a string"))
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(v) => match v.try_into() {
+                Ok(arr) => arr,
+                Err(_) => return make_error_string(&mut env, "Failed to convert leaf_secret"),
+            },
+            Err(_) => return make_error_string(&mut env, "leaf_secret elements must be strings"),
+        };
+        
+        match MembershipInputs::from_field_elements(leaf_secret, &siblings, &path_bits) {
+            Ok(i) => i,
+            Err(e) => return make_error_string(&mut env, &format!("Invalid inputs: {}", e)),
+        }
+    } else if let Some(hex_str) = leaf_secret_val.as_str() {
+        // Single hex string (32 bytes) - convert to 5 field elements
+        let secret_bytes = match hex::decode(hex_str.trim_start_matches("0x")) {
+            Ok(b) if b.len() == 32 => {
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&b);
+                arr
+            }
+            _ => return make_error_string(&mut env, "Invalid leaf_secret hex (must be 32 bytes)"),
+        };
+        
+        match MembershipInputs::from_bytes(&secret_bytes, &siblings, &path_bits) {
+            Ok(i) => i,
+            Err(e) => return make_error_string(&mut env, &format!("Invalid inputs: {}", e)),
+        }
+    } else {
+        return make_error_string(&mut env, "leaf_secret must be array of 5 strings or hex string");
     };
     
     // Generate witness
