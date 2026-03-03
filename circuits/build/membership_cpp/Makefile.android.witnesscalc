@@ -1,0 +1,70 @@
+# Makefile.android.witnesscalc - Use iden3/witnesscalc field arithmetic
+#
+# Uses production-tested ARM64 field arithmetic from 0xPolygonID/witnesscalc.
+# This is the same code used by Polygon ID's mobile SDKs.
+#
+# Usage:
+#   export ANDROID_NDK=/path/to/ndk
+#   export GMP=/path/to/gmp-arm64
+#   make -f Makefile.android.witnesscalc
+
+ifndef ANDROID_NDK
+$(error ANDROID_NDK is not set)
+endif
+
+ifndef GMP
+$(error GMP is not set. Cross-compiled GMP for ARM64.)
+endif
+
+# NDK paths
+TOOLCHAIN = $(ANDROID_NDK)/toolchains/llvm/prebuilt/linux-x86_64
+TARGET = aarch64-linux-android
+API = 24
+
+CC = $(TOOLCHAIN)/bin/$(TARGET)$(API)-clang
+CXX = $(TOOLCHAIN)/bin/$(TARGET)$(API)-clang++
+AS = $(TOOLCHAIN)/bin/clang
+
+# Flags - USE_ASM + ARCH_ARM64 enables ARM64 assembly path in fr_witnesscalc.hpp
+CXXFLAGS = -O3 -fPIC -std=c++17 -DUSE_ASM -DARCH_ARM64 -I. -Inlohmann -I$(GMP)/include
+ASFLAGS = --target=$(TARGET)
+LDFLAGS = -L$(GMP)/lib -lgmp
+
+# Sources from witnesscalc for ARM64:
+# - fr_raw_arm64_witnesscalc.s: ARM64 assembly (UMULH, MUL, ADC)
+# - fr_raw_generic.cpp: Generic raw ops (fallback for missing asm functions)  
+# - fr_generic_witnesscalc.cpp: High-level Fr_* functions
+# - fr_witnesscalc.cpp: Helper functions (div, mod, pow, str conversion)
+
+FR_SRCS = fr_generic_witnesscalc.cpp fr_raw_generic.cpp fr_witnesscalc.cpp
+ASM_SRCS = fr_raw_arm64_witnesscalc.s
+CIRCUIT_SRCS = membership.cpp calcwit.cpp witnesscalc.cpp
+
+OBJS = $(FR_SRCS:.cpp=.wc.o) $(CIRCUIT_SRCS:.cpp=.wc.o)
+ASM_OBJS = $(ASM_SRCS:.s=.wc.o)
+
+OUTPUT = libmembership.so
+
+.PHONY: all clean setup
+
+all: setup $(OUTPUT)
+	@echo "✓ Built $(OUTPUT) with witnesscalc ARM64 assembly"
+	@ls -lh $(OUTPUT)
+
+# Copy witnesscalc headers as the main headers (membership.cpp includes fr.hpp)
+setup:
+	@if [ ! -f fr.hpp.orig ]; then cp fr.hpp fr.hpp.orig; fi
+	@cp fr_witnesscalc.hpp fr.hpp
+
+$(OUTPUT): $(OBJS) $(ASM_OBJS)
+	$(CXX) -shared -o $@ $^ $(LDFLAGS)
+
+%.wc.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+%.wc.o: %.s
+	$(AS) $(ASFLAGS) -c -o $@ $<
+
+clean:
+	rm -f $(OBJS) $(ASM_OBJS) $(OUTPUT)
+	@if [ -f fr.hpp.orig ]; then mv fr.hpp.orig fr.hpp; fi
