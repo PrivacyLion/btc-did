@@ -91,6 +91,10 @@ android {
             excludes += "/META-INF/NOTICE.txt"
             excludes += "/META-INF/notice.txt"
         }
+        // Extract native libs to disk so we can exec the witness calculator
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
