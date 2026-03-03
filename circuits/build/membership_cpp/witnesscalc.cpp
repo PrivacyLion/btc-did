@@ -187,14 +187,7 @@ static void qualify_input(std::string prefix, json &in, json &in1) {
     }
 }
 
-static u64 fnv1a(std::string s) {
-    u64 hash = 0xCBF29CE484222325LL;
-    for (char c : s) {
-        hash ^= (u64)c;
-        hash *= 0x100000001B3LL;
-    }
-    return hash;
-}
+// fnv1a is declared in calcwit.hpp, use that version
 
 void loadJsonFromString(Circom_CalcWit *ctx, const char* jsonStr, unsigned long jsonLen) {
     std::string jsonString(jsonStr, jsonLen);

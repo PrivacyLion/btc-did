@@ -140,9 +140,6 @@ pub struct WitnessCalculator {
     calculator_path: String,
     /// Path to .dat file
     dat_path: String,
-    /// Loaded library handle (for FFI mode)
-    #[cfg(target_os = "android")]
-    lib_handle: Option<*mut std::os::raw::c_void>,
 }
 
 impl WitnessCalculator {
@@ -151,8 +148,6 @@ impl WitnessCalculator {
         Self {
             calculator_path: calculator_path.to_string(),
             dat_path: dat_path.to_string(),
-            #[cfg(target_os = "android")]
-            lib_handle: None,
         }
     }
     
@@ -247,7 +242,7 @@ impl WitnessCalculator {
         // Allocate buffers
         let mut witness_buf = vec![0u8; required_size];
         let mut witness_size = required_size as std::os::raw::c_ulong;
-        let mut error_buf = vec![0i8; 1024];
+        let mut error_buf: Vec<std::os::raw::c_char> = vec![0; 1024];
         
         let dat_path_c = CString::new(self.dat_path.as_str())
             .map_err(|e| WitnessError::FfiError(format!("Invalid dat path: {}", e)))?;
