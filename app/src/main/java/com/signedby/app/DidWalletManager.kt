@@ -485,7 +485,7 @@ class DidWalletManager(private val context: Context) {
             android.util.Log.i("SignedByMe", "[TIMING] Input JSON built at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
 
             val proofStartMs = System.currentTimeMillis()
-            android.util.Log.i("SignedByMe", "[TIMING] Native proof (16MB stack) START at $proofStartMs")
+            android.util.Log.i("SignedByMe", "[TIMING] Native proof (64MB stack) START at $proofStartMs")
             
             val result = runNativeProofWithLargeStackBlocking(inputJson)
             
@@ -538,7 +538,7 @@ class DidWalletManager(private val context: Context) {
      * 
      * The secp256k1 ECDSA circuit generates C++ code with huge local arrays
      * that exceed the default coroutine thread stack (~1MB). We run on a
-     * dedicated thread with 16MB stack to avoid stack overflow.
+     * dedicated thread with 64MB stack to avoid stack overflow.
      */
     private fun runNativeProofWithLargeStackBlocking(inputJson: String): String {
         // ECDSAPrivToPub_241_run alone has FrElement lvar[67916] = 2.7MB
@@ -1320,7 +1320,7 @@ class DidWalletManager(private val context: Context) {
             
             // Generate Groth16 proof
             val proofStartMs = System.currentTimeMillis()
-            android.util.Log.i("SignedByMe", "[TIMING] Native proof (16MB stack) START at $proofStartMs")
+            android.util.Log.i("SignedByMe", "[TIMING] Native proof (64MB stack) START at $proofStartMs")
             
             val resultJson = runNativeProofWithLargeStackBlocking(inputJson)
             
