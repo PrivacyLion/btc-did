@@ -210,6 +210,16 @@ impl WitnessCalculator {
     pub fn calculate_to_buffer(&self, inputs: &MembershipInputs) -> Result<Vec<u8>, WitnessError> {
         let input_json = inputs.to_json()?;
         
+        // CRITICAL DEBUG: Log the full JSON being sent to witness calculator
+        eprintln!("═══════════════════════════════════════════════════════════════");
+        eprintln!("[witness] INPUT JSON FOR WITNESS CALCULATOR:");
+        eprintln!("{}", input_json);
+        eprintln!("═══════════════════════════════════════════════════════════════");
+        eprintln!("[witness] leaf_secret count: {}", inputs.leaf_secret.len());
+        eprintln!("[witness] siblings count: {}", inputs.siblings.len());
+        eprintln!("[witness] path_bits count: {}", inputs.path_bits.len());
+        eprintln!("═══════════════════════════════════════════════════════════════");
+        
         #[cfg(target_os = "android")]
         {
             self.calculate_via_ffi(&input_json)
