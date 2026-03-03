@@ -1,0 +1,70 @@
+# Makefile.android.arm64 - ARM64 assembly optimized build
+#
+# Uses ffiasm-generated fr_raw_arm64.s for field arithmetic instead of GMP.
+# This gives ~100x speedup over fr_generic.cpp.
+#
+# Usage:
+#   export ANDROID_NDK=/path/to/ndk
+#   export GMP=/path/to/gmp-arm64  (cross-compiled GMP for ARM64)
+#   make -f Makefile.android.arm64
+
+ifndef ANDROID_NDK
+$(error ANDROID_NDK is not set. Set it to the path of your Android NDK.)
+endif
+
+ifndef GMP
+$(error GMP is not set. Set it to the path of cross-compiled GMP for ARM64.)
+endif
+
+# NDK paths
+TOOLCHAIN = $(ANDROID_NDK)/toolchains/llvm/prebuilt/linux-x86_64
+TARGET = aarch64-linux-android
+API = 24
+
+CC = $(TOOLCHAIN)/bin/$(TARGET)$(API)-clang
+CXX = $(TOOLCHAIN)/bin/$(TARGET)$(API)-clang++
+AS = $(TOOLCHAIN)/bin/$(TARGET)$(API)-clang
+
+# Flags
+CXXFLAGS = -O3 -fPIC -std=c++17 -DARCH_ARM64 -I. -Inlohmann -I$(GMP)/include
+ASFLAGS = -target $(TARGET)
+LDFLAGS = -L$(GMP)/lib -lgmp
+
+# Sources
+# - membership.cpp: circom-generated circuit
+# - calcwit.cpp: witness calculator infrastructure
+# - witnesscalc.cpp: C API wrapper
+# - fr_arm64.cpp: high-level Fr_* functions calling Fr_raw* assembly
+# - fr_raw_arm64.s: ARM64 assembly for Fr_raw* (Montgomery mul, add, etc.)
+
+SRCS = membership.cpp calcwit.cpp witnesscalc.cpp fr_arm64.cpp
+ASM_SRCS = fr_raw_arm64.s
+
+OBJS = $(SRCS:.cpp=.arm64.o)
+ASM_OBJS = $(ASM_SRCS:.s=.arm64.o)
+
+OUTPUT = libmembership.so
+
+.PHONY: all clean
+
+all: $(OUTPUT)
+	@echo "Built $(OUTPUT) with ARM64 assembly optimization"
+	@ls -lh $(OUTPUT)
+
+$(OUTPUT): $(OBJS) $(ASM_OBJS)
+	$(CXX) -shared -o $@ $^ $(LDFLAGS)
+
+%.arm64.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+%.arm64.o: %.s
+	$(AS) $(ASFLAGS) -c -o $@ $<
+
+clean:
+	rm -f $(OBJS) $(ASM_OBJS) $(OUTPUT)
+
+# Note: You still need GMP cross-compiled for ARM64.
+# GMP is only used for:
+# - Fr_str2element / Fr_element2str (string conversion)
+# - Fr_div / Fr_mod / Fr_pow / Fr_inv (division operations)
+# The core field arithmetic (add, sub, mul) is all ARM64 assembly.
