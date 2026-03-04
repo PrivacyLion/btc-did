@@ -573,6 +573,59 @@ def prune_root_history(tree_id: str, keep: int = 100) -> int:
     return cursor.rowcount
 
 
+def is_root_valid_for_client(client_id: str, root_hash: str, limit: int = 30) -> bool:
+    """
+    Check if a merkle root is valid for ANY tree belonging to a client.
+    
+    Searches the last N roots across all trees owned by client_id.
+    This is the check for Phase 8: "merkle_root is in the valid root set (last 30 roots)"
+    """
+    conn = get_connection()
+    
+    # Find all trees for this client
+    trees = conn.execute(
+        "SELECT id FROM merkle_trees WHERE client_id = ?",
+        (client_id,)
+    ).fetchall()
+    
+    if not trees:
+        return False
+    
+    tree_ids = [t[0] for t in trees]
+    
+    # Check if root_hash is in any of these trees' recent history
+    placeholders = ",".join("?" * len(tree_ids))
+    row = conn.execute(f"""
+        SELECT 1 FROM root_history
+        WHERE tree_id IN ({placeholders}) AND root_hash = ?
+        AND id >= (
+            SELECT COALESCE(MIN(cutoff.id), 0)
+            FROM (
+                SELECT id FROM root_history
+                WHERE tree_id IN ({placeholders})
+                ORDER BY id DESC
+                LIMIT ?
+            ) cutoff
+        )
+        LIMIT 1
+    """, tree_ids + [root_hash] + tree_ids + [limit]).fetchone()
+    
+    return row is not None
+
+
+def is_root_in_history(root_hash: str) -> bool:
+    """
+    Check if a root exists in any root_history (any tree).
+    Simpler check than is_root_valid_for_client - just checks existence.
+    """
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT 1 FROM root_history WHERE root_hash = ? LIMIT 1",
+        (root_hash,)
+    ).fetchone()
+    return row is not None
+
+
 # ============================================================================
 # ENROLLMENT TOKENS
 # ============================================================================

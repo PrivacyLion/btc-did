@@ -15,7 +15,7 @@ from .routes.roots import router as roots_router
 from .routes.membership import router as membership_router
 from .routes.session import router as session_router
 from .routes.admin import router as admin_router
-from .routes.groth16_login import router as groth16_router
+from .routes.login import router as login_router  # Phase 8: Stateless login
 from .routes.enroll import router as enroll_router
 
 from app.oidc_discovery import router as oidc_router
@@ -45,7 +45,7 @@ app.add_middleware(
 )
 
 # v1 routes
-app.include_router(groth16_router)  # Groth16 stateless login (/v1/login/verify)
+app.include_router(login_router)  # Phase 8: Stateless login (/v1/login/verify)
 app.include_router(session_router)  # Session management
 app.include_router(enroll_router)   # Enrollment API (3-step + direct)
 app.include_router(admin_router)  # Admin dashboard API
