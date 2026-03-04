@@ -28,7 +28,8 @@ AS = $(TOOLCHAIN)/bin/$(TARGET)$(API)-clang
 # Flags
 CXXFLAGS = -O3 -fPIC -std=c++17 -DARCH_ARM64 -I. -Inlohmann -I$(GMP)/include
 ASFLAGS = -target $(TARGET)
-LDFLAGS = -L$(GMP)/lib -lgmp
+# Static link GMP - no libgmp.so needed at runtime
+LDFLAGS = $(GMP)/lib/libgmp.a -static-libstdc++
 
 # Sources
 # - membership.cpp: circom-generated circuit

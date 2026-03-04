@@ -28,7 +28,8 @@ AS = $(TOOLCHAIN)/bin/clang
 # Flags - USE_ASM + ARCH_ARM64 enables ARM64 assembly path in fr_witnesscalc.hpp
 CXXFLAGS = -O3 -fPIC -std=c++17 -DUSE_ASM -DARCH_ARM64 -I. -Inlohmann -I$(GMP)/include
 ASFLAGS = --target=$(TARGET)
-LDFLAGS = -L$(GMP)/lib -lgmp
+# Static link GMP - no libgmp.so needed at runtime
+LDFLAGS = $(GMP)/lib/libgmp.a -static-libstdc++
 
 # Sources from witnesscalc for ARM64:
 # - fr_raw_arm64_witnesscalc.s: ARM64 assembly (UMULH, MUL, ADC)
