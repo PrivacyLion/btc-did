@@ -9,11 +9,8 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from .routes.auth import router as auth_router
-from .routes.unlock import router as unlock_router
-from .routes.claims import router as claims_router
 from .routes.roots import router as roots_router
 from .routes.membership import router as membership_router
-from .routes.session import router as session_router
 from .routes.admin import router as admin_router
 from .routes.login import router as login_router  # Phase 8: Stateless login
 from .routes.enroll import router as enroll_router
@@ -46,14 +43,11 @@ app.add_middleware(
 
 # v1 routes
 app.include_router(login_router)  # Phase 8: Stateless login (/v1/login/verify)
-app.include_router(session_router)  # Session management
 app.include_router(enroll_router)   # Enrollment API (3-step + direct)
 app.include_router(admin_router)  # Admin dashboard API
 app.include_router(roots_router)  # Merkle root registry
 app.include_router(membership_router)  # Legacy enrollment + tree building
 app.include_router(auth_router, prefix="/v1")
-app.include_router(unlock_router, prefix="/v1")
-app.include_router(claims_router, prefix="/v1")
 
 @app.get("/healthz")
 def health():
