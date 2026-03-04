@@ -72,7 +72,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 /**
  * Extract Groth16 assets from APK assets to filesystem.
  * Assets in assets/groth16/ are copied to the target directory.
- * Large files (zkey) are sideloaded to Downloads, not bundled.
+ * Large files (zkey) are sideloaded to internal storage via adb, not bundled.
  */
 private fun extractGroth16Assets(context: Context, targetDir: java.io.File) {
     try {
@@ -155,7 +155,7 @@ class MainActivity : FragmentActivity() {
             // Initialize Groth16 prover with:
             // - witness calculator from jniLibs or extracted assets
             // - membership.dat from extracted assets
-            // - zkey from externalFilesDir or Downloads (sideloaded, 85MB)
+            // - zkey from internal storage (filesDir/groth16/, sideloaded via adb, 85MB)
             val initialized = didMgr.initGroth16Prover(
                 nativeLibDir = applicationInfo.nativeLibraryDir,
                 groth16Dir = groth16Dir,

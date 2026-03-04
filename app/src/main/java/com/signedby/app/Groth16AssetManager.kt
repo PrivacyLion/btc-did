@@ -9,11 +9,14 @@ import java.io.IOException
 /**
  * Manages Groth16 proving assets (witness calculator, circuit data, zkey).
  * 
- * Assets are extracted from APK to app data directory on first use.
- * The .zkey file (85MB) can be:
- * - Bundled in APK assets
- * - Sideloaded to /sdcard/Download/
- * - Downloaded from CDN
+ * Assets are extracted from APK to internal data directory on first use.
+ * The .zkey file (85MB) should be at:
+ *   /data/user/0/com.privacylion.signedby.me/files/groth16/membership_final.zkey
+ * 
+ * Sideload with:
+ *   adb push membership_final.zkey /data/local/tmp/
+ *   adb shell run-as com.privacylion.signedby.me mkdir -p files/groth16
+ *   adb shell run-as com.privacylion.signedby.me cp /data/local/tmp/membership_final.zkey files/groth16/
  */
 object Groth16AssetManager {
     private const val TAG = "Groth16AssetManager"
@@ -125,20 +128,22 @@ object Groth16AssetManager {
      * Find or extract zkey file.
      * 
      * Search order:
-     * 1. Already in app data dir
-     * 2. APK assets
-     * 3. /sdcard/Download/ (sideloaded)
+     * 1. Already in app internal data dir (filesDir/groth16/)
+     * 2. APK assets (if bundled)
+     * 
+     * The zkey must be at: /data/user/0/com.privacylion.signedby.me/files/groth16/membership_final.zkey
+     * Use: adb push membership_final.zkey /data/local/tmp/ && adb shell run-as com.privacylion.signedby.me cp /data/local/tmp/membership_final.zkey files/groth16/
      */
     private fun findOrExtractZkey(context: Context, destDir: File): String? {
         val destFile = File(destDir, ZKEY_NAME)
         
-        // 1. Already extracted
+        // 1. Already in internal data dir
         if (destFile.exists() && destFile.length() > 0) {
-            Log.d(TAG, "zkey already in data dir")
+            Log.d(TAG, "zkey found in internal storage")
             return destFile.absolutePath
         }
         
-        // 2. Try APK assets
+        // 2. Try APK assets (if bundled in future)
         try {
             val assetPath = "$ASSET_DIR/$ZKEY_NAME"
             context.assets.open(assetPath).use { input ->
@@ -152,22 +157,8 @@ object Groth16AssetManager {
             Log.d(TAG, "zkey not in APK assets")
         }
         
-        // 3. Check sideload location
-        val sideloadFile = File("/sdcard/Download/$ZKEY_NAME")
-        if (sideloadFile.exists() && sideloadFile.length() > 0) {
-            // Copy to app data dir for consistent access
-            try {
-                sideloadFile.inputStream().use { input ->
-                    FileOutputStream(destFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                Log.i(TAG, "Copied zkey from Download (${destFile.length()} bytes)")
-                return destFile.absolutePath
-            } catch (e: IOException) {
-                Log.e(TAG, "Failed to copy sideloaded zkey: ${e.message}")
-            }
-        }
+        Log.e(TAG, "zkey not found at: ${destFile.absolutePath}")
+        Log.e(TAG, "Sideload with: adb push membership_final.zkey /data/local/tmp/ && adb shell run-as com.privacylion.signedby.me mkdir -p files/groth16 && adb shell run-as com.privacylion.signedby.me cp /data/local/tmp/membership_final.zkey files/groth16/")
         
         return null
     }
@@ -191,7 +182,7 @@ object Groth16AssetManager {
     fun getZkeySize(): Long = 85_000_000L  // ~85MB
     
     /**
-     * Check if zkey needs to be downloaded.
+     * Check if zkey needs to be downloaded/sideloaded.
      */
     fun needsZkeyDownload(context: Context): Boolean {
         val dataDir = context.filesDir
@@ -205,9 +196,7 @@ object Groth16AssetManager {
             context.assets.open("$ASSET_DIR/$ZKEY_NAME").close()
             false  // Found in APK
         } catch (e: IOException) {
-            // Check sideload
-            val sideload = File("/sdcard/Download/$ZKEY_NAME")
-            !sideload.exists()
+            true  // Not found - needs sideload
         }
     }
 }

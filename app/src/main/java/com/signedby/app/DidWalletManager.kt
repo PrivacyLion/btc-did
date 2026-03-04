@@ -346,7 +346,7 @@ class DidWalletManager(private val context: Context) {
      * Asset locations on device:
      * - membership.wasm: assets/groth16/membership.wasm → extracted to filesDir/groth16/
      * - membership.dat: assets/groth16/membership.dat → extracted to filesDir/groth16/
-     * - membership_final.zkey: externalFilesDir OR Downloads (85MB, sideloaded)
+     * - membership_final.zkey: filesDir/groth16/ (85MB, sideloaded via adb)
      *
      * @param nativeLibDir context.applicationInfo.nativeLibraryDir (unused with WASM)
      * @param groth16Dir Directory for extracted assets (filesDir/groth16)
@@ -365,11 +365,11 @@ class DidWalletManager(private val context: Context) {
         // Circuit data (extracted from assets)
         val datFile = java.io.File(groth16Dir, "membership.dat")
         
-        // Proving key - check multiple locations (85MB, sideloaded)
+        // Proving key - internal storage only (85MB, sideloaded via adb)
+        // Primary: /data/user/0/com.privacylion.signedby.me/files/groth16/membership_final.zkey
         val zkeyCandidates = listOfNotNull(
-            externalFilesDir?.let { java.io.File(it, "membership_final.zkey") },  // App's external files
-            java.io.File("/storage/emulated/0/Download", "membership_final.zkey"), // Downloads
-            java.io.File(groth16Dir, "membership_final.zkey")  // Extracted from assets (if bundled)
+            java.io.File(groth16Dir, "membership_final.zkey"),  // Internal storage (preferred)
+            externalFilesDir?.let { java.io.File(it, "membership_final.zkey") }  // App's external files (fallback)
         )
         val zkeyFile = zkeyCandidates.firstOrNull { it.exists() }
 
@@ -403,9 +403,10 @@ class DidWalletManager(private val context: Context) {
         
         if (zkeyFile == null) {
             android.util.Log.e("SignedByMe", "FATAL: Proving key not found")
-            android.util.Log.e("SignedByMe", "  Sideload membership_final.zkey (85MB) to one of:")
-            android.util.Log.e("SignedByMe", "  - ${externalFilesDir?.absolutePath ?: "[no external files dir]"}/membership_final.zkey")
-            android.util.Log.e("SignedByMe", "  - /storage/emulated/0/Download/membership_final.zkey")
+            android.util.Log.e("SignedByMe", "  Sideload membership_final.zkey (85MB) with:")
+            android.util.Log.e("SignedByMe", "  adb push membership_final.zkey /data/local/tmp/")
+            android.util.Log.e("SignedByMe", "  adb shell run-as com.privacylion.signedby.me mkdir -p files/groth16")
+            android.util.Log.e("SignedByMe", "  adb shell run-as com.privacylion.signedby.me cp /data/local/tmp/membership_final.zkey files/groth16/")
             return false
         }
         
