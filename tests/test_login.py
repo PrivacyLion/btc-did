@@ -151,6 +151,7 @@ def test_valid_proof_valid_preimages_returns_id_token(
     )
     
     with patch("app.routes.login.load_clients", return_value=mock_clients), \
+         patch("app.routes.login.is_verifier_ready", return_value=(True, "ready")), \
          patch("app.routes.login.verify_groth16_proof", return_value=mock_verification_result), \
          patch("app.routes.login.is_root_valid_for_client", return_value=True), \
          patch("app.routes.login.KEYS_DIR", Path(__file__).parent.parent / "keys"):
@@ -290,6 +291,7 @@ def test_wrong_preimage_hash_mismatch_rejected(
     )
     
     with patch("app.routes.login.load_clients", return_value=mock_clients), \
+         patch("app.routes.login.is_verifier_ready", return_value=(True, "ready")), \
          patch("app.routes.login.verify_groth16_proof", return_value=mock_verification_result), \
          patch("app.routes.login.is_root_valid_for_client", return_value=True):
         
@@ -330,6 +332,7 @@ def test_stale_merkle_root_rejected(
     )
     
     with patch("app.routes.login.load_clients", return_value=mock_clients), \
+         patch("app.routes.login.is_verifier_ready", return_value=(True, "ready")), \
          patch("app.routes.login.verify_groth16_proof", return_value=mock_verification_result), \
          patch("app.routes.login.is_root_valid_for_client", return_value=False):  # Root is stale
         
