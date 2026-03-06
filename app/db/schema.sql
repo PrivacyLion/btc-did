@@ -1,68 +1,12 @@
 -- SignedByMe SQLite Schema
--- Phase 13: Persistent storage migration
+-- Phase 8: Stateless architecture (no sessions, no DIDs on server)
 
 -- Version tracking
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
     applied_at TEXT DEFAULT (datetime('now'))
 );
-INSERT OR IGNORE INTO schema_version (version) VALUES (1);
-
--- ============================================================================
--- SESSIONS
--- Login sessions created by /v1/login/start, consumed by /v1/login/verify
--- ============================================================================
-CREATE TABLE IF NOT EXISTS sessions (
-    session_id TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    nonce TEXT NOT NULL,
-    enterprise TEXT,
-    amount_sats INTEGER DEFAULT 500,
-    expires_at INTEGER NOT NULL,
-    
-    -- Membership requirements
-    required_root_id TEXT,
-    required_purpose_id INTEGER DEFAULT 0,
-    
-    -- Proof verification state
-    verified INTEGER DEFAULT 0,
-    npub TEXT,
-    merkle_root TEXT,
-    
-    -- Payment state
-    paid INTEGER DEFAULT 0,
-    paid_at INTEGER,
-    preimage_hex TEXT,
-    
-    -- Timestamps
-    created_at INTEGER DEFAULT (strftime('%s', 'now')),
-    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_client ON sessions(client_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
-
--- ============================================================================
--- OIDC CODES
--- Short-lived auth codes for OIDC token exchange
--- ============================================================================
-CREATE TABLE IF NOT EXISTS oidc_codes (
-    code TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    redirect_uri TEXT,
-    nonce TEXT,
-    code_challenge TEXT,
-    code_challenge_method TEXT DEFAULT 'S256',
-    
-    -- Session binding
-    session_id TEXT,
-    npub TEXT,
-    
-    -- Timestamps
-    iat INTEGER NOT NULL,
-    exp INTEGER NOT NULL,
-    used INTEGER DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS idx_oidc_codes_exp ON oidc_codes(exp);
+INSERT OR IGNORE INTO schema_version (version) VALUES (2);
 
 -- ============================================================================
 -- ENROLLMENTS
@@ -174,63 +118,21 @@ CREATE INDEX IF NOT EXISTS idx_root_history_tree ON root_history(tree_id);
 CREATE INDEX IF NOT EXISTS idx_root_history_hash ON root_history(root_hash);
 
 -- ============================================================================
--- NULLIFIERS
--- Used nullifiers for replay protection
+-- LOGIN VERIFICATIONS
+-- Phase 8: Log of successful Groth16 verifications (receipts only, no preimages)
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS nullifiers (
-    nullifier TEXT PRIMARY KEY,
-    session_id TEXT,
-    npub TEXT,
-    used_at INTEGER DEFAULT (strftime('%s', 'now'))
-);
-CREATE INDEX IF NOT EXISTS idx_nullifiers_session ON nullifiers(session_id);
-
--- ============================================================================
--- PAYMENT CONFIRMATIONS
--- Preimage confirmations for payment verification
--- ============================================================================
-CREATE TABLE IF NOT EXISTS payment_confirmations (
-    payment_hash TEXT PRIMARY KEY,
-    preimage_hex TEXT NOT NULL,
-    session_id TEXT,
-    amount_sats INTEGER,
-    confirmed_at INTEGER DEFAULT (strftime('%s', 'now'))
-);
-CREATE INDEX IF NOT EXISTS idx_payments_session ON payment_confirmations(session_id);
-
--- ============================================================================
--- CLIENTS (optional - can stay in JSON for admin edits)
--- ============================================================================
--- Keeping clients.json for now - easier to edit manually
--- Could migrate later if needed
-
--- ============================================================================
--- ENROLLMENT TOKENS
--- Short-lived tokens for enrollment/witness retrieval
--- ============================================================================
-CREATE TABLE IF NOT EXISTS enrollment_tokens (
-    token TEXT PRIMARY KEY,
-    enrollment_id TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS login_verifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    npub TEXT NOT NULL,
     client_id TEXT NOT NULL,
-    did TEXT NOT NULL,
-    expires_at INTEGER NOT NULL,
-    consumed INTEGER DEFAULT 0,
-    created_at INTEGER DEFAULT (strftime('%s', 'now'))
+    merkle_root TEXT NOT NULL,
+    payment_hash_user TEXT NOT NULL,
+    payment_hash_operator TEXT NOT NULL,
+    verified_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_tokens_exp ON enrollment_tokens(expires_at);
-
--- ============================================================================
--- DID CHALLENGES
--- Challenges for DID signature verification
--- ============================================================================
-CREATE TABLE IF NOT EXISTS did_challenges (
-    challenge TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    did TEXT NOT NULL,
-    expires_at INTEGER NOT NULL,
-    created_at INTEGER DEFAULT (strftime('%s', 'now'))
-);
-CREATE INDEX IF NOT EXISTS idx_challenges_exp ON did_challenges(expires_at);
+CREATE INDEX IF NOT EXISTS idx_verifications_client ON login_verifications(client_id);
+CREATE INDEX IF NOT EXISTS idx_verifications_npub ON login_verifications(npub);
+CREATE INDEX IF NOT EXISTS idx_verifications_time ON login_verifications(verified_at);
 
 -- ============================================================================
 -- AUDIT LOG (optional - for debugging)
@@ -238,7 +140,6 @@ CREATE INDEX IF NOT EXISTS idx_challenges_exp ON did_challenges(expires_at);
 CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_type TEXT NOT NULL,
-    session_id TEXT,
     client_id TEXT,
     details_json TEXT,
     created_at INTEGER DEFAULT (strftime('%s', 'now'))

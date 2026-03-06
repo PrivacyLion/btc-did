@@ -24,7 +24,7 @@ import logging
 from pathlib import Path
 
 from ..lib.verifier import verify_groth16_proof, verify_preimage, is_verifier_ready
-from ..db import is_root_valid_for_client
+from ..db import is_root_valid_for_client, log_verification
 
 logger = logging.getLogger("login")
 router = APIRouter(tags=["login"])
@@ -276,8 +276,19 @@ def verify_login(
         })
     
     # =========================================================================
-    # ALL 4 CHECKS PASSED → Issue id_token
+    # ALL 4 CHECKS PASSED → Log verification + Issue id_token
     # =========================================================================
+    
+    # Log successful verification to SQLite (before issuing token)
+    now = int(time.time())
+    log_verification(
+        npub=result.npub_bech32,
+        client_id=client_id,
+        merkle_root=merkle_root,
+        payment_hash_user=body.user_payment_hash.lower(),
+        payment_hash_operator=body.operator_payment_hash.lower(),
+        verified_at=now,
+    )
     
     # Load signing keys
     jwks_path = KEYS_DIR / "jwks.json"
@@ -301,8 +312,7 @@ def verify_login(
     kid = jwks["keys"][0].get("kid", "signedby-1")
     
     # Build OIDC claims
-    now = int(time.time())
-    exp = now + 3600  # 1 hour
+    exp = now + 3600  # 1 hour (now defined above when logging)
     
     claims = {
         "iss": ISSUER,

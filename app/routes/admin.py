@@ -1,8 +1,11 @@
 """
-SignedByMe Admin API - Read-Only Dashboard Endpoints
+SignedByMe Admin API - Read-Only Dashboard Endpoints (Phase 8)
 
 All endpoints require Basic Auth with SBM_ADMIN_PASSWORD.
 No write operations - config changes via clients.json + redeploy.
+
+Phase 8: Stateless architecture - no sessions, no Strike.
+All data from SQLite (roots, enrollments, login_verifications).
 """
 
 import os
@@ -14,8 +17,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Header, Query
 from pydantic import BaseModel
 
-from . import session as session_module
-from ..lib import strike
+from ..db import (
+    get_connection,
+    count_verifications,
+    get_verifications,
+    list_roots,
+    list_enrollments,
+)
 
 logger = logging.getLogger("admin")
 
@@ -71,21 +79,20 @@ class AdminStatusResponse(BaseModel):
     """Service status overview."""
     ok: bool
     timestamp: str
-    strike_configured: bool
-    strike_balance: Optional[dict] = None
-    active_sessions: int
-    total_login_events: int
-    total_payout_attempts: int
+    valid_root_count: int
+    total_login_verifications: int
+    merkle_tree_size: int
 
 
 class LoginEvent(BaseModel):
-    """A login event for the dashboard."""
-    event_id: str
-    session_id: str
+    """A login verification event for the dashboard."""
+    id: int
+    npub: str
     client_id: str
-    did: str
+    merkle_root: str
+    payment_hash_user: str
+    payment_hash_operator: str
     verified_at: int
-    payout: Optional[dict] = None
     timestamp: str
 
 
@@ -95,19 +102,19 @@ class LoginEventsResponse(BaseModel):
     total: int
 
 
-class PayoutAttempt(BaseModel):
-    """A payout attempt for the dashboard."""
-    attempt_id: str
-    session_id: str
+class VerificationRecord(BaseModel):
+    """A verification record (renamed from PayoutAttempt)."""
+    id: int
+    npub: str
     client_id: str
-    invoice_prefix: str
-    result: dict
-    timestamp: str
+    payment_hash_user: str
+    payment_hash_operator: str
+    verified_at: int
 
 
-class PayoutAttemptsResponse(BaseModel):
-    """List of payout attempts."""
-    attempts: list[PayoutAttempt]
+class VerificationsResponse(BaseModel):
+    """List of verification records."""
+    verifications: list[VerificationRecord]
     total: int
 
 
@@ -134,28 +141,31 @@ async def get_admin_status(authorization: Optional[str] = Header(None)):
     """
     Get service status overview.
     
-    Includes Strike configuration status and balance (if configured).
+    Returns counts from SQLite: roots, verifications, enrollments.
     """
     require_admin(authorization)
     
-    # Check Strike
-    strike_configured = strike.is_strike_configured()
-    strike_balance = None
-    if strike_configured:
-        strike_balance = await strike.get_account_balance()
+    conn = get_connection()
     
-    # Get counts
-    events = session_module.get_login_events(limit=1)
-    payouts = session_module.get_payout_attempts(limit=1)
+    # Count valid (active) roots
+    valid_root_count = conn.execute(
+        "SELECT COUNT(*) FROM merkle_roots WHERE active = 1"
+    ).fetchone()[0]
+    
+    # Count login verifications
+    total_verifications = count_verifications()
+    
+    # Count enrollments (merkle tree size = approved enrollments)
+    merkle_tree_size = conn.execute(
+        "SELECT COUNT(*) FROM enrollments"
+    ).fetchone()[0]
     
     return AdminStatusResponse(
         ok=True,
         timestamp=datetime.now(timezone.utc).isoformat(),
-        strike_configured=strike_configured,
-        strike_balance=strike_balance,
-        active_sessions=0,  # TODO: count non-expired sessions
-        total_login_events=len(session_module._login_events),
-        total_payout_attempts=len(session_module._payout_attempts)
+        valid_root_count=valid_root_count,
+        total_login_verifications=total_verifications,
+        merkle_tree_size=merkle_tree_size,
     )
 
 
@@ -166,46 +176,63 @@ async def get_login_events(
     client_id: Optional[str] = Query(None)
 ):
     """
-    Get recent login events.
+    Get recent login verification events.
     
     Optionally filter by client_id.
     """
     require_admin(authorization)
     
-    events = session_module.get_login_events(limit=limit)
+    verifications = get_verifications(client_id=client_id, limit=limit)
     
-    # Filter by client_id if specified
-    if client_id:
-        events = [e for e in events if e.get("client_id") == client_id]
+    events = []
+    for v in verifications:
+        events.append(LoginEvent(
+            id=v["id"],
+            npub=v["npub"],
+            client_id=v["client_id"],
+            merkle_root=v["merkle_root"],
+            payment_hash_user=v["payment_hash_user"],
+            payment_hash_operator=v["payment_hash_operator"],
+            verified_at=v["verified_at"],
+            timestamp=datetime.fromtimestamp(v["verified_at"], timezone.utc).isoformat(),
+        ))
     
     return LoginEventsResponse(
-        events=[LoginEvent(**e) for e in events],
+        events=events,
         total=len(events)
     )
 
 
-@router.get("/payments", response_model=PayoutAttemptsResponse)
-async def get_payout_attempts(
+@router.get("/verifications", response_model=VerificationsResponse)
+async def get_verification_records(
     authorization: Optional[str] = Header(None),
     limit: int = Query(100, ge=1, le=1000),
     client_id: Optional[str] = Query(None)
 ):
     """
-    Get recent payout attempts.
+    Get verification records (payment hash receipts).
     
+    Renamed from /payments - server verifies preimages but doesn't process payments.
     Optionally filter by client_id.
     """
     require_admin(authorization)
     
-    attempts = session_module.get_payout_attempts(limit=limit)
+    verifications = get_verifications(client_id=client_id, limit=limit)
     
-    # Filter by client_id if specified
-    if client_id:
-        attempts = [a for a in attempts if a.get("client_id") == client_id]
+    records = []
+    for v in verifications:
+        records.append(VerificationRecord(
+            id=v["id"],
+            npub=v["npub"],
+            client_id=v["client_id"],
+            payment_hash_user=v["payment_hash_user"],
+            payment_hash_operator=v["payment_hash_operator"],
+            verified_at=v["verified_at"],
+        ))
     
-    return PayoutAttemptsResponse(
-        attempts=[PayoutAttempt(**a) for a in attempts],
-        total=len(attempts)
+    return VerificationsResponse(
+        verifications=records,
+        total=len(records)
     )
 
 

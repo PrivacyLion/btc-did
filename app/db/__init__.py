@@ -2,12 +2,13 @@
 SignedByMe Database Module
 
 SQLite-based persistent storage for:
-- Sessions (login flows)
 - Enrollments (membership)
 - Merkle roots & witnesses
-- Nullifiers (replay protection)
-- Payment confirmations
-- OIDC codes
+- Incremental Merkle trees
+- Root history (validity window)
+- Login verifications (receipts)
+
+Phase 8: Stateless architecture - no sessions, no DIDs on server.
 """
 
 import sqlite3
@@ -60,138 +61,6 @@ def transaction():
     except Exception:
         conn.rollback()
         raise
-
-
-# ============================================================================
-# SESSIONS
-# ============================================================================
-
-def create_session(
-    session_id: str,
-    client_id: str,
-    nonce: str,
-    enterprise: str,
-    amount_sats: int = 500,
-    expires_at: int = 0,
-    required_root_id: Optional[str] = None,
-    required_purpose_id: int = 0,
-) -> None:
-    """Create a new login session."""
-    conn = get_connection()
-    conn.execute("""
-        INSERT INTO sessions (
-            session_id, client_id, nonce, enterprise, amount_sats,
-            expires_at, required_root_id, required_purpose_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (session_id, client_id, nonce, enterprise, amount_sats,
-          expires_at, required_root_id, required_purpose_id))
-    conn.commit()
-
-
-def get_session(session_id: str) -> Optional[Dict[str, Any]]:
-    """Get session by ID."""
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT * FROM sessions WHERE session_id = ?",
-        (session_id,)
-    ).fetchone()
-    return dict(row) if row else None
-
-
-def update_session(session_id: str, **kwargs) -> None:
-    """Update session fields."""
-    if not kwargs:
-        return
-    conn = get_connection()
-    fields = ", ".join(f"{k} = ?" for k in kwargs.keys())
-    values = list(kwargs.values()) + [session_id]
-    conn.execute(
-        f"UPDATE sessions SET {fields}, updated_at = strftime('%s', 'now') WHERE session_id = ?",
-        values
-    )
-    conn.commit()
-
-
-def verify_session(session_id: str, npub: str, merkle_root: str) -> None:
-    """Mark session as verified with proof data."""
-    update_session(session_id, verified=1, npub=npub, merkle_root=merkle_root)
-
-
-def confirm_payment(session_id: str, preimage_hex: str) -> None:
-    """Mark session as paid."""
-    import time
-    update_session(session_id, paid=1, paid_at=int(time.time()), preimage_hex=preimage_hex)
-
-
-def delete_expired_sessions(before_ts: int) -> int:
-    """Delete sessions that expired before timestamp. Returns count deleted."""
-    conn = get_connection()
-    cursor = conn.execute(
-        "DELETE FROM sessions WHERE expires_at < ? AND expires_at > 0",
-        (before_ts,)
-    )
-    conn.commit()
-    return cursor.rowcount
-
-
-# ============================================================================
-# OIDC CODES
-# ============================================================================
-
-def create_oidc_code(
-    code: str,
-    client_id: str,
-    iat: int,
-    exp: int,
-    redirect_uri: Optional[str] = None,
-    nonce: Optional[str] = None,
-    code_challenge: Optional[str] = None,
-    session_id: Optional[str] = None,
-    npub: Optional[str] = None,
-) -> None:
-    """Create a new OIDC auth code."""
-    conn = get_connection()
-    conn.execute("""
-        INSERT INTO oidc_codes (
-            code, client_id, redirect_uri, nonce, code_challenge,
-            session_id, npub, iat, exp
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (code, client_id, redirect_uri, nonce, code_challenge,
-          session_id, npub, iat, exp))
-    conn.commit()
-
-
-def get_oidc_code(code: str) -> Optional[Dict[str, Any]]:
-    """Get OIDC code if valid and unused."""
-    import time
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT * FROM oidc_codes WHERE code = ? AND used = 0 AND exp > ?",
-        (code, int(time.time()))
-    ).fetchone()
-    return dict(row) if row else None
-
-
-def use_oidc_code(code: str) -> bool:
-    """Mark code as used. Returns True if code was valid."""
-    conn = get_connection()
-    cursor = conn.execute(
-        "UPDATE oidc_codes SET used = 1 WHERE code = ? AND used = 0",
-        (code,)
-    )
-    conn.commit()
-    return cursor.rowcount > 0
-
-
-def delete_expired_oidc_codes(before_ts: int) -> int:
-    """Delete expired OIDC codes. Returns count deleted."""
-    conn = get_connection()
-    cursor = conn.execute(
-        "DELETE FROM oidc_codes WHERE exp < ?",
-        (before_ts,)
-    )
-    conn.commit()
-    return cursor.rowcount
 
 
 # ============================================================================
@@ -380,82 +249,6 @@ def get_witness(enrollment_id: str) -> Optional[Dict[str, Any]]:
 
 
 # ============================================================================
-# NULLIFIERS
-# ============================================================================
-
-def check_nullifier(nullifier: str) -> bool:
-    """Check if nullifier has been used. Returns True if already used."""
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT 1 FROM nullifiers WHERE nullifier = ?",
-        (nullifier,)
-    ).fetchone()
-    return row is not None
-
-
-def use_nullifier(nullifier: str, session_id: Optional[str] = None, npub: Optional[str] = None) -> bool:
-    """Mark nullifier as used. Returns False if already used."""
-    if check_nullifier(nullifier):
-        return False
-    conn = get_connection()
-    conn.execute(
-        "INSERT INTO nullifiers (nullifier, session_id, npub) VALUES (?, ?, ?)",
-        (nullifier, session_id, npub)
-    )
-    conn.commit()
-    return True
-
-
-# ============================================================================
-# PAYMENT CONFIRMATIONS
-# ============================================================================
-
-def confirm_payment_hash(
-    payment_hash: str,
-    preimage_hex: str,
-    session_id: Optional[str] = None,
-    amount_sats: Optional[int] = None,
-) -> None:
-    """Record a payment confirmation."""
-    conn = get_connection()
-    conn.execute("""
-        INSERT OR REPLACE INTO payment_confirmations
-        (payment_hash, preimage_hex, session_id, amount_sats)
-        VALUES (?, ?, ?, ?)
-    """, (payment_hash, preimage_hex, session_id, amount_sats))
-    conn.commit()
-
-
-def get_payment_confirmation(payment_hash: str) -> Optional[Dict[str, Any]]:
-    """Get payment confirmation by hash."""
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT * FROM payment_confirmations WHERE payment_hash = ?",
-        (payment_hash,)
-    ).fetchone()
-    return dict(row) if row else None
-
-
-# ============================================================================
-# AUDIT LOG
-# ============================================================================
-
-def audit_log(
-    event_type: str,
-    session_id: Optional[str] = None,
-    client_id: Optional[str] = None,
-    details: Optional[Dict[str, Any]] = None,
-) -> None:
-    """Log an audit event."""
-    conn = get_connection()
-    conn.execute("""
-        INSERT INTO audit_log (event_type, session_id, client_id, details_json)
-        VALUES (?, ?, ?, ?)
-    """, (event_type, session_id, client_id, json.dumps(details) if details else None))
-    conn.commit()
-
-
-# ============================================================================
 # INCREMENTAL MERKLE TREES
 # ============================================================================
 
@@ -627,138 +420,84 @@ def is_root_in_history(root_hash: str) -> bool:
 
 
 # ============================================================================
-# ENROLLMENT TOKENS
+# LOGIN VERIFICATIONS
+# Phase 8: Log successful Groth16 verifications (receipts only)
 # ============================================================================
 
-def create_enrollment_token(
-    token: str,
-    enrollment_id: str,
+def log_verification(
+    npub: str,
     client_id: str,
-    did: str,
-    expires_at: int,
+    merkle_root: str,
+    payment_hash_user: str,
+    payment_hash_operator: str,
+    verified_at: int,
+) -> int:
+    """Log a successful login verification. Returns the row ID."""
+    conn = get_connection()
+    cursor = conn.execute("""
+        INSERT INTO login_verifications
+        (npub, client_id, merkle_root, payment_hash_user, payment_hash_operator, verified_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (npub, client_id, merkle_root, payment_hash_user, payment_hash_operator, verified_at))
+    conn.commit()
+    return cursor.lastrowid
+
+
+def get_verifications(
+    client_id: Optional[str] = None,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    """Get login verifications with optional client_id filter."""
+    conn = get_connection()
+    if client_id:
+        rows = conn.execute("""
+            SELECT * FROM login_verifications
+            WHERE client_id = ?
+            ORDER BY verified_at DESC
+            LIMIT ?
+        """, (client_id, limit)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT * FROM login_verifications
+            ORDER BY verified_at DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+    return [dict(row) for row in rows]
+
+
+def count_verifications() -> int:
+    """Get total count of login verifications."""
+    conn = get_connection()
+    return conn.execute("SELECT COUNT(*) FROM login_verifications").fetchone()[0]
+
+
+# ============================================================================
+# AUDIT LOG
+# ============================================================================
+
+def audit_log(
+    event_type: str,
+    client_id: Optional[str] = None,
+    details: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Create an enrollment token."""
+    """Log an audit event."""
     conn = get_connection()
     conn.execute("""
-        INSERT INTO enrollment_tokens (token, enrollment_id, client_id, did, expires_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (token, enrollment_id, client_id, did, expires_at))
+        INSERT INTO audit_log (event_type, client_id, details_json)
+        VALUES (?, ?, ?)
+    """, (event_type, client_id, json.dumps(details) if details else None))
     conn.commit()
-
-
-def get_enrollment_token(token: str) -> Optional[Dict[str, Any]]:
-    """Get enrollment token if valid and not consumed."""
-    import time
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT * FROM enrollment_tokens WHERE token = ? AND consumed = 0 AND expires_at > ?",
-        (token, int(time.time()))
-    ).fetchone()
-    return dict(row) if row else None
-
-
-def consume_enrollment_token(token: str) -> bool:
-    """Mark token as consumed. Returns True if token was valid."""
-    conn = get_connection()
-    cursor = conn.execute(
-        "UPDATE enrollment_tokens SET consumed = 1 WHERE token = ? AND consumed = 0",
-        (token,)
-    )
-    conn.commit()
-    return cursor.rowcount > 0
-
-
-def delete_expired_tokens(before_ts: int) -> int:
-    """Delete expired tokens. Returns count deleted."""
-    conn = get_connection()
-    cursor = conn.execute(
-        "DELETE FROM enrollment_tokens WHERE expires_at < ?",
-        (before_ts,)
-    )
-    conn.commit()
-    return cursor.rowcount
 
 
 # ============================================================================
-# DID CHALLENGES
+# STATS
 # ============================================================================
-
-def create_challenge(
-    challenge: str,
-    client_id: str,
-    did: str,
-    expires_at: int,
-) -> None:
-    """Create a DID signature challenge (replaces any existing for same client+did)."""
-    conn = get_connection()
-    # Remove old challenges for same (client_id, did)
-    conn.execute(
-        "DELETE FROM did_challenges WHERE client_id = ? AND did = ?",
-        (client_id, did)
-    )
-    conn.execute("""
-        INSERT INTO did_challenges (challenge, client_id, did, expires_at)
-        VALUES (?, ?, ?, ?)
-    """, (challenge, client_id, did, expires_at))
-    conn.commit()
-
-
-def get_challenge(challenge: str, client_id: str, did: str) -> Optional[Dict[str, Any]]:
-    """Get challenge if valid."""
-    import time
-    conn = get_connection()
-    row = conn.execute("""
-        SELECT * FROM did_challenges 
-        WHERE challenge = ? AND client_id = ? AND did = ? AND expires_at > ?
-    """, (challenge, client_id, did, int(time.time()))).fetchone()
-    return dict(row) if row else None
-
-
-def delete_challenge(challenge: str) -> bool:
-    """Delete challenge (single-use). Returns True if deleted."""
-    conn = get_connection()
-    cursor = conn.execute(
-        "DELETE FROM did_challenges WHERE challenge = ?",
-        (challenge,)
-    )
-    conn.commit()
-    return cursor.rowcount > 0
-
-
-def delete_expired_challenges(before_ts: int) -> int:
-    """Delete expired challenges. Returns count deleted."""
-    conn = get_connection()
-    cursor = conn.execute(
-        "DELETE FROM did_challenges WHERE expires_at < ?",
-        (before_ts,)
-    )
-    conn.commit()
-    return cursor.rowcount
-
-
-# ============================================================================
-# MAINTENANCE
-# ============================================================================
-
-def cleanup_expired(max_age_hours: int = 24) -> Dict[str, int]:
-    """Clean up expired records. Returns counts of deleted records."""
-    import time
-    cutoff = int(time.time()) - (max_age_hours * 3600)
-    
-    return {
-        "sessions": delete_expired_sessions(cutoff),
-        "oidc_codes": delete_expired_oidc_codes(cutoff),
-        "tokens": delete_expired_tokens(cutoff),
-        "challenges": delete_expired_challenges(cutoff),
-    }
-
 
 def get_stats() -> Dict[str, int]:
     """Get database statistics."""
     conn = get_connection()
     return {
-        "sessions": conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0],
         "enrollments": conn.execute("SELECT COUNT(*) FROM enrollments").fetchone()[0],
         "roots": conn.execute("SELECT COUNT(*) FROM merkle_roots WHERE active = 1").fetchone()[0],
-        "nullifiers": conn.execute("SELECT COUNT(*) FROM nullifiers").fetchone()[0],
+        "verifications": conn.execute("SELECT COUNT(*) FROM login_verifications").fetchone()[0],
     }
