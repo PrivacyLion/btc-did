@@ -165,12 +165,15 @@ class MainActivity : FragmentActivity() {
         }
         val breezMgr = BreezWalletManager(applicationContext)
         
+        // Initialize NOSTR manager (Phase 9)
+        val nostrMgr = NostrManager(applicationContext)
+        
         // Parse deep link from intent
         val initialLoginSession = parseLoginIntent(intent)
 
         setContent {
             SignedByMeTheme {
-                SignedByMeApp(didMgr, breezMgr, initialLoginSession)
+                SignedByMeApp(didMgr, breezMgr, nostrMgr, initialLoginSession)
             }
         }
     }
@@ -577,6 +580,7 @@ fun formatSats(sats: Long): String {
 fun SignedByMeApp(
     didMgr: DidWalletManager, 
     breezMgr: BreezWalletManager,
+    nostrMgr: NostrManager,
     initialLoginSession: LoginSession? = null
 ) {
     val context = LocalContext.current
@@ -810,9 +814,42 @@ fun SignedByMeApp(
                                     attestation = attestation,
                                     receipt = lastSettlementReceipt
                                 )
+                                
+                                // === Phase 9: Publish payment_receipt and login_complete to NOSTR ===
+                                if (nostrMgr.isConnected()) {
+                                    // Publish payment_receipt (kind 28102)
+                                    nostrMgr.publishPaymentReceipt(
+                                        nonce = loginSession?.nonce ?: lastLoginId,
+                                        paymentHash = lastPaymentHash,
+                                        preimageHex = "", // TODO: Get from payment details
+                                        amountSats = userAmt
+                                    )
+                                    
+                                    // Publish login_complete (kind 28103)
+                                    nostrMgr.publishLoginComplete(
+                                        nonce = loginSession?.nonce ?: lastLoginId,
+                                        clientId = loginSession?.clientId ?: "demo"
+                                    )
+                                    
+                                    // Disconnect from relays (discard ephemeral keys)
+                                    nostrMgr.disconnect()
+                                }
+                                // === End Phase 9 NOSTR events ===
                             }
                         } else {
                             statusMessage = "✅ Payment received! Log In verified."
+                            
+                            // === Phase 9: Publish login_complete even without DLC ===
+                            scope.launch(Dispatchers.IO) {
+                                if (nostrMgr.isConnected()) {
+                                    nostrMgr.publishLoginComplete(
+                                        nonce = loginSession?.nonce ?: lastLoginId,
+                                        clientId = loginSession?.clientId ?: "demo"
+                                    )
+                                    nostrMgr.disconnect()
+                                }
+                            }
+                            // === End Phase 9 ===
                         }
                     } catch (e: Exception) {
                         android.util.Log.e("SignedByMe", "DLC completion error: ${e.message}")
@@ -975,6 +1012,31 @@ fun SignedByMeApp(
                     isCreatingInvoice = true
                     statusMessage = ""
                     
+                    // === Phase 9: Initialize NOSTR and connect to relays ===
+                    // Non-blocking - connection happens in background
+                    val leafSecret = didMgr.loadLeafSecret()
+                    if (leafSecret != null) {
+                        nostrMgr.initializeIdentity(leafSecret)
+                        java.util.Arrays.fill(leafSecret, 0.toByte())  // Zeroize
+                        
+                        // Generate ephemeral keypair for NWC (DECISION 2)
+                        nostrMgr.generateEphemeralNwcKeypair()
+                        
+                        // Connect to relays (async, don't block login)
+                        nostrMgr.connectToRelays(
+                            scope = scope,
+                            onConnected = {
+                                android.util.Log.i("SignedByMe", "NOSTR relays connected - audit trail ready")
+                            },
+                            onFailed = {
+                                android.util.Log.w("SignedByMe", "NOSTR relay connection failed - login proceeds without audit trail")
+                            }
+                        )
+                    } else {
+                        android.util.Log.w("SignedByMe", "No leaf_secret - NOSTR identity not initialized")
+                    }
+                    // === End Phase 9 NOSTR init ===
+                    
                     // Use session ID from login session, or generate one for demo
                     val sessionId = loginSession?.sessionId ?: "demo_${System.currentTimeMillis()}"
                     lastLoginId = sessionId
@@ -1109,6 +1171,27 @@ fun SignedByMeApp(
                                         return@launch
                                     }
                                 }
+                                
+                                // === Phase 9: Publish proof_event to NOSTR ===
+                                // Enterprise watches NOSTR for this event (tagged with nonce)
+                                if (nostrMgr.isConnected()) {
+                                    val proofHex = membershipBundle?.proofBase64 ?: ""
+                                    val merkleRoot = "" // TODO: Extract from proof public outputs
+                                    val npub = nostrMgr.getNpub() ?: ""
+                                    val operatorInvoice = "" // TODO: Generate operator invoice via NWC
+                                    
+                                    scope.launch(Dispatchers.IO) {
+                                        nostrMgr.publishProofEvent(
+                                            nonce = sessionNonce,
+                                            clientId = clientId ?: "demo",
+                                            proofHex = proofHex,
+                                            merkleRoot = merkleRoot,
+                                            userInvoice = invoice,
+                                            operatorInvoice = operatorInvoice
+                                        )
+                                    }
+                                }
+                                // === End Phase 9 NOSTR publish ===
                                 
                                 // 3. Submit to API with proof + DLC metadata + membership
                                 val apiResult = sendInvoiceToApiWithDlc(
