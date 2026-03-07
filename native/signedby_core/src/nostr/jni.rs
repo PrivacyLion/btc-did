@@ -3,14 +3,30 @@
 // These functions are called from Kotlin via NativeBridge.kt
 
 use anyhow::Result;
-use jni::objects::{JByteArray, JClass, JString};
-use jni::sys::{jbyteArray, jstring, jlong, jboolean};
+use jni::objects::{JByteArray, JClass, JString, JObjectArray};
+use jni::sys::{jbyteArray, jstring, jlong, jboolean, jobjectArray, JNI_TRUE, JNI_FALSE};
 use jni::JNIEnv;
 use ark_bn254::Fr;
 use ark_ff::PrimeField;
 use nostr_sdk::ToBech32;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
 
 use super::derive_nsec_from_leaf_secret;
+use super::client::NostrClient;
+use super::events::{ProofEvent, PaymentReceiptEvent, LoginCompleteEvent};
+
+// Global Tokio runtime for async operations
+static RUNTIME: Lazy<tokio::runtime::Runtime> = Lazy::new(|| {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .expect("Failed to create Tokio runtime")
+});
+
+// Global NOSTR client (protected by mutex)
+static NOSTR_CLIENT: Lazy<Mutex<Option<NostrClient>>> = Lazy::new(|| Mutex::new(None));
 
 /// Derive nsec from leaf_secret bytes
 /// 
@@ -159,6 +175,313 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generateEphemeralNwcKe
     
     env.new_string(json.to_string()).unwrap().into_raw()
 }
+
+// ============================================================================
+// NOSTR Client Operations (Step 9.4 - Real Publishing)
+// ============================================================================
+
+/// Initialize NOSTR client with keys derived from leaf_secret
+/// 
+/// Must be called before connect/publish. Creates the global client instance.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrInitClient(
+    mut env: JNIEnv,
+    _clazz: JClass,
+    leaf_secret_bytes: JByteArray,
+) -> jboolean {
+    let bytes = match env.convert_byte_array(leaf_secret_bytes) {
+        Ok(b) => b,
+        Err(_) => return JNI_FALSE,
+    };
+    
+    if bytes.len() != 160 {
+        return JNI_FALSE;
+    }
+    
+    let leaf_secret = match parse_leaf_secret(&bytes) {
+        Ok(ls) => ls,
+        Err(_) => return JNI_FALSE,
+    };
+    
+    let nsec = match derive_nsec_from_leaf_secret(&leaf_secret) {
+        Ok(k) => k,
+        Err(_) => return JNI_FALSE,
+    };
+    
+    let keys = nostr_sdk::Keys::new(nsec);
+    let client = NostrClient::new(keys);
+    
+    if let Ok(mut guard) = NOSTR_CLIENT.lock() {
+        *guard = Some(client);
+        JNI_TRUE
+    } else {
+        JNI_FALSE
+    }
+}
+
+/// Connect to NOSTR relays
+/// 
+/// Connects to default relays (SignedByMe audit relay + public relays).
+/// Blocks until connected or 3-second timeout.
+/// 
+/// Returns: true if connected to at least one relay
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrConnect(
+    _env: JNIEnv,
+    _clazz: JClass,
+) -> jboolean {
+    let mut guard = match NOSTR_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return JNI_FALSE,
+    };
+    
+    let client = match guard.as_mut() {
+        Some(c) => c,
+        None => return JNI_FALSE,
+    };
+    
+    match RUNTIME.block_on(client.connect()) {
+        Ok(_) => JNI_TRUE,
+        Err(e) => {
+            eprintln!("NOSTR connect failed: {}", e);
+            JNI_FALSE
+        }
+    }
+}
+
+/// Check if connected to at least one relay
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrIsConnected(
+    _env: JNIEnv,
+    _clazz: JClass,
+) -> jboolean {
+    let guard = match NOSTR_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return JNI_FALSE,
+    };
+    
+    match guard.as_ref() {
+        Some(c) if c.is_connected() => JNI_TRUE,
+        _ => JNI_FALSE,
+    }
+}
+
+/// Disconnect from all relays and cleanup client
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrDisconnect(
+    _env: JNIEnv,
+    _clazz: JClass,
+) {
+    if let Ok(mut guard) = NOSTR_CLIENT.lock() {
+        if let Some(ref mut client) = *guard {
+            let _ = RUNTIME.block_on(client.disconnect());
+        }
+        *guard = None;  // Drop the client
+    }
+}
+
+/// Get the npub of the current client
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrGetNpub(
+    mut env: JNIEnv,
+    _clazz: JClass,
+) -> jstring {
+    let guard = match NOSTR_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return env.new_string("").unwrap().into_raw(),
+    };
+    
+    match guard.as_ref() {
+        Some(c) => env.new_string(c.npub_bech32()).unwrap().into_raw(),
+        None => env.new_string("").unwrap().into_raw(),
+    }
+}
+
+/// Publish proof_event (kind 28101) to all connected relays
+/// 
+/// Returns: event ID (hex) on success, "error:..." on failure
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPublishProofEvent(
+    mut env: JNIEnv,
+    _clazz: JClass,
+    nonce: JString,
+    client_id: JString,
+    proof_hex: JString,
+    merkle_root: JString,
+    user_invoice: JString,
+    operator_invoice: JString,
+) -> jstring {
+    // Extract strings
+    let nonce = match env.get_string(&nonce) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_nonce").unwrap().into_raw(),
+    };
+    let client_id = match env.get_string(&client_id) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_client_id").unwrap().into_raw(),
+    };
+    let proof_hex = match env.get_string(&proof_hex) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_proof_hex").unwrap().into_raw(),
+    };
+    let merkle_root = match env.get_string(&merkle_root) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_merkle_root").unwrap().into_raw(),
+    };
+    let user_invoice = match env.get_string(&user_invoice) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_user_invoice").unwrap().into_raw(),
+    };
+    let operator_invoice = match env.get_string(&operator_invoice) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_operator_invoice").unwrap().into_raw(),
+    };
+    
+    // Get client and npub
+    let guard = match NOSTR_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return env.new_string("error:client_lock_failed").unwrap().into_raw(),
+    };
+    
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => return env.new_string("error:client_not_initialized").unwrap().into_raw(),
+    };
+    
+    if !client.is_connected() {
+        return env.new_string("error:not_connected").unwrap().into_raw();
+    }
+    
+    let npub = client.npub_bech32();
+    
+    // Build event
+    let event = ProofEvent::new(
+        nonce,
+        client_id,
+        proof_hex,
+        merkle_root,
+        npub,
+        user_invoice,
+        operator_invoice,
+    );
+    
+    // Publish (drop guard first to avoid holding lock during async)
+    drop(guard);
+    
+    let guard = match NOSTR_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return env.new_string("error:client_lock_failed").unwrap().into_raw(),
+    };
+    
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => return env.new_string("error:client_not_initialized").unwrap().into_raw(),
+    };
+    
+    match RUNTIME.block_on(client.publish_proof_event(&event)) {
+        Ok(event_id) => env.new_string(event_id.to_hex()).unwrap().into_raw(),
+        Err(e) => env.new_string(format!("error:{}", e)).unwrap().into_raw(),
+    }
+}
+
+/// Publish payment_receipt (kind 28102) to all connected relays
+/// 
+/// Returns: event ID (hex) on success, "error:..." on failure
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPublishPaymentReceipt(
+    mut env: JNIEnv,
+    _clazz: JClass,
+    nonce: JString,
+    payment_hash: JString,
+    preimage_hex: JString,
+    amount_sats: jlong,
+) -> jstring {
+    let nonce = match env.get_string(&nonce) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_nonce").unwrap().into_raw(),
+    };
+    let payment_hash = match env.get_string(&payment_hash) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_payment_hash").unwrap().into_raw(),
+    };
+    let preimage_hex = match env.get_string(&preimage_hex) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_preimage").unwrap().into_raw(),
+    };
+    
+    let guard = match NOSTR_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return env.new_string("error:client_lock_failed").unwrap().into_raw(),
+    };
+    
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => return env.new_string("error:client_not_initialized").unwrap().into_raw(),
+    };
+    
+    if !client.is_connected() {
+        return env.new_string("error:not_connected").unwrap().into_raw();
+    }
+    
+    let event = PaymentReceiptEvent::new(
+        nonce,
+        payment_hash,
+        preimage_hex,
+        amount_sats as u64,
+    );
+    
+    match RUNTIME.block_on(client.publish_payment_receipt(&event)) {
+        Ok(event_id) => env.new_string(event_id.to_hex()).unwrap().into_raw(),
+        Err(e) => env.new_string(format!("error:{}", e)).unwrap().into_raw(),
+    }
+}
+
+/// Publish login_complete (kind 28103) to all connected relays
+/// 
+/// Returns: event ID (hex) on success, "error:..." on failure
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPublishLoginComplete(
+    mut env: JNIEnv,
+    _clazz: JClass,
+    nonce: JString,
+    client_id: JString,
+) -> jstring {
+    let nonce = match env.get_string(&nonce) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_nonce").unwrap().into_raw(),
+    };
+    let client_id = match env.get_string(&client_id) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_client_id").unwrap().into_raw(),
+    };
+    
+    let guard = match NOSTR_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return env.new_string("error:client_lock_failed").unwrap().into_raw(),
+    };
+    
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => return env.new_string("error:client_not_initialized").unwrap().into_raw(),
+    };
+    
+    if !client.is_connected() {
+        return env.new_string("error:not_connected").unwrap().into_raw();
+    }
+    
+    let npub = client.npub_bech32();
+    
+    let event = LoginCompleteEvent::new(nonce, client_id, npub);
+    
+    match RUNTIME.block_on(client.publish_login_complete(&event)) {
+        Ok(event_id) => env.new_string(event_id.to_hex()).unwrap().into_raw(),
+        Err(e) => env.new_string(format!("error:{}", e)).unwrap().into_raw(),
+    }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
 
 /// Parse leaf_secret from 160 bytes (5 * 32-byte big-endian Fr elements)
 fn parse_leaf_secret(bytes: &[u8]) -> Result<[Fr; 5]> {

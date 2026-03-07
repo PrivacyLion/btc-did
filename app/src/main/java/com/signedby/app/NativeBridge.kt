@@ -510,4 +510,95 @@ object NativeBridge {
      * @return JSON: { "ephemeral_nsec_hex": "...", "ephemeral_npub": "npub1..." }
      */
     @JvmStatic external fun generateEphemeralNwcKeypair(): String
+
+    // ============================================================================
+    // NOSTR Client Operations (Step 9.4 - Real Publishing)
+    // ============================================================================
+
+    /**
+     * Initialize the NOSTR client with keys derived from leaf_secret.
+     * Must be called before connect/publish operations.
+     * 
+     * @param leafSecretBytes leaf_secret as 160 bytes (5 × 32-byte Fr elements)
+     * @return true if client initialized successfully
+     */
+    @JvmStatic external fun nostrInitClient(leafSecretBytes: ByteArray): Boolean
+
+    /**
+     * Connect to NOSTR relays (SignedByMe audit relay + public relays).
+     * Blocks until connected or 3-second timeout.
+     * 
+     * @return true if connected to at least one relay
+     */
+    @JvmStatic external fun nostrConnect(): Boolean
+
+    /**
+     * Check if connected to at least one relay.
+     * 
+     * @return true if connected
+     */
+    @JvmStatic external fun nostrIsConnected(): Boolean
+
+    /**
+     * Disconnect from all relays and cleanup client.
+     */
+    @JvmStatic external fun nostrDisconnect()
+
+    /**
+     * Get the npub of the current NOSTR client.
+     * 
+     * @return npub as bech32 string, or empty if not initialized
+     */
+    @JvmStatic external fun nostrGetNpub(): String
+
+    /**
+     * Publish proof_event (kind 28101) to all connected relays.
+     * 
+     * Contains the Groth16 proof, merkle root, npub, and both BOLT11 invoices.
+     * Enterprise watches NOSTR for this event (tagged with nonce).
+     * 
+     * @param nonce Session nonce from QR (32 hex chars)
+     * @param clientId Enterprise client_id
+     * @param proofHex Groth16 proof as hex
+     * @param merkleRoot Merkle root from proof public outputs
+     * @param userInvoice BOLT11 invoice for user's 90%
+     * @param operatorInvoice BOLT11 invoice for operator's 10%
+     * @return Event ID (hex) on success, "error:..." on failure
+     */
+    @JvmStatic external fun nostrPublishProofEvent(
+        nonce: String,
+        clientId: String,
+        proofHex: String,
+        merkleRoot: String,
+        userInvoice: String,
+        operatorInvoice: String
+    ): String
+
+    /**
+     * Publish payment_receipt (kind 28102) after receiving payment.
+     * 
+     * @param nonce Session nonce
+     * @param paymentHash Payment hash (hex)
+     * @param preimageHex Preimage proving payment (hex)
+     * @param amountSats Amount received in satoshis
+     * @return Event ID (hex) on success, "error:..." on failure
+     */
+    @JvmStatic external fun nostrPublishPaymentReceipt(
+        nonce: String,
+        paymentHash: String,
+        preimageHex: String,
+        amountSats: Long
+    ): String
+
+    /**
+     * Publish login_complete (kind 28103) after successful authentication.
+     * 
+     * @param nonce Session nonce
+     * @param clientId Enterprise client_id
+     * @return Event ID (hex) on success, "error:..." on failure
+     */
+    @JvmStatic external fun nostrPublishLoginComplete(
+        nonce: String,
+        clientId: String
+    ): String
 }

@@ -61,17 +61,10 @@ class NostrManager(private val context: Context) {
         require(leafSecret.size == 32) { "leaf_secret must be 32 bytes" }
         
         // Convert 32-byte leaf_secret to 160 bytes (5 x 32-byte Fr elements)
-        // Each Fr element is the same 32 bytes padded (for the JNI interface)
-        // Actually: the Rust side expects 5 field elements, but we only have 32 bytes
-        // The Poseidon2 uses leaf_secret[0..2] which are the first 3 elements
-        // For now, we'll pad the 32 bytes into 160 bytes by repeating/zeroing
-        
-        // TODO: Match the exact format from DidWalletManager's leaf_secret storage
-        // For Phase 9, we'll derive npub directly from the 32-byte secret
-        val paddedLeafSecret = ByteArray(160)
-        
         // Split 32 bytes into 5 chunks of ~6 bytes each, padded to 32 bytes each
         // This matches buildGroth16InputJson: [0..6), [6..12), [12..18), [18..24), [24..32)
+        val paddedLeafSecret = ByteArray(160)
+        
         val chunks = listOf(
             leafSecret.sliceArray(0 until 6),
             leafSecret.sliceArray(6 until 12),
@@ -86,9 +79,17 @@ class NostrManager(private val context: Context) {
         }
         
         return try {
-            val npub = NativeBridge.deriveNpubFromLeafSecret(paddedLeafSecret)
-            if (npub.startsWith("error:")) {
-                Log.e(TAG, "Failed to derive npub: $npub")
+            // Initialize the NOSTR client with our keys (Step 9.4: real client)
+            val initialized = NativeBridge.nostrInitClient(paddedLeafSecret)
+            if (!initialized) {
+                Log.e(TAG, "Failed to initialize NOSTR client")
+                return null
+            }
+            
+            // Get npub from the initialized client
+            val npub = NativeBridge.nostrGetNpub()
+            if (npub.isEmpty() || npub.startsWith("error:")) {
+                Log.e(TAG, "Failed to get npub: $npub")
                 null
             } else {
                 currentNpub = npub
@@ -96,7 +97,7 @@ class NostrManager(private val context: Context) {
                 npub
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Exception deriving npub: ${e.message}")
+            Log.e(TAG, "Exception initializing NOSTR identity: ${e.message}")
             null
         } finally {
             // Zeroize padded copy
@@ -149,29 +150,25 @@ class NostrManager(private val context: Context) {
         connectionJob = scope.launch(Dispatchers.IO) {
             Log.i(TAG, "Connecting to NOSTR relays...")
             
-            // TODO: Implement actual WebSocket connections via Rust nostr-sdk
-            // For Phase 9 MVP, we'll stub this and add real connections in Phase 9.4
-            
             try {
-                // Simulate connection attempt with timeout
-                withTimeout(3000) {
-                    // In production: call into Rust to connect
-                    // For now: simulate success
-                    delay(100)
-                    isConnected = true
-                }
+                // Step 9.4: Real connection via Rust nostr-sdk
+                // The Rust side handles the 3-second timeout
+                val connected = NativeBridge.nostrConnect()
                 
-                withContext(Dispatchers.Main) {
-                    Log.i(TAG, "Connected to NOSTR relays")
-                    onConnected()
-                }
-            } catch (e: TimeoutCancellationException) {
-                Log.w(TAG, "NOSTR relay connection timed out - login will proceed without audit trail")
-                withContext(Dispatchers.Main) {
-                    onFailed()
+                if (connected) {
+                    isConnected = true
+                    withContext(Dispatchers.Main) {
+                        Log.i(TAG, "Connected to NOSTR relays")
+                        onConnected()
+                    }
+                } else {
+                    Log.w(TAG, "NOSTR relay connection failed - login will proceed without audit trail")
+                    withContext(Dispatchers.Main) {
+                        onFailed()
+                    }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "NOSTR relay connection failed: ${e.message}")
+                Log.e(TAG, "NOSTR relay connection exception: ${e.message}")
                 withContext(Dispatchers.Main) {
                     onFailed()
                 }
@@ -185,7 +182,16 @@ class NostrManager(private val context: Context) {
      */
     fun disconnect() {
         connectionJob?.cancel()
+        
+        // Step 9.4: Real disconnect via Rust
+        try {
+            NativeBridge.nostrDisconnect()
+        } catch (e: Exception) {
+            Log.w(TAG, "Exception during NOSTR disconnect: ${e.message}")
+        }
+        
         isConnected = false
+        currentNpub = null
         
         // Discard ephemeral NWC keypair (DECISION 2)
         ephemeralNwcNsecHex = null
@@ -197,43 +203,30 @@ class NostrManager(private val context: Context) {
     /**
      * Check if connected to at least one relay.
      */
-    fun isConnected(): Boolean = isConnected
+    fun isConnected(): Boolean {
+        // Check both local state and Rust state
+        return isConnected && try {
+            NativeBridge.nostrIsConnected()
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     /**
      * Get the current npub (proof identity).
      */
-    fun getNpub(): String? = currentNpub
-
-    /**
-     * Build a proof_event (kind 28101) for publishing.
-     * 
-     * Contains: proof bytes, merkle_root, npub, both BOLT11 invoices
-     * Tags: nonce, client_id
-     * 
-     * @return JSON string representing the event content
-     */
-    fun buildProofEvent(
-        nonce: String,
-        clientId: String,
-        proofHex: String,
-        merkleRoot: String,
-        npub: String,
-        userInvoice: String,
-        operatorInvoice: String
-    ): String {
-        return JSONObject().apply {
-            put("kind", KIND_PROOF_EVENT)
-            put("nonce", nonce)
-            put("client_id", clientId)
-            put("proof", proofHex)
-            put("merkle_root", merkleRoot)
-            put("npub", npub)
-            put("user_invoice", userInvoice)
-            put("operator_invoice", operatorInvoice)
-            put("timestamp", System.currentTimeMillis() / 1000)
-        }.toString()
+    fun getNpub(): String? {
+        // Prefer cached value, fall back to Rust
+        return currentNpub ?: try {
+            val npub = NativeBridge.nostrGetNpub()
+            if (npub.isNotEmpty() && !npub.startsWith("error:")) {
+                currentNpub = npub
+                npub
+            } else null
+        } catch (e: Exception) {
+            null
+        }
     }
-
     /**
      * Publish proof_event to all connected relays.
      * 
@@ -253,30 +246,35 @@ class NostrManager(private val context: Context) {
         userInvoice: String,
         operatorInvoice: String
     ): String? = withContext(Dispatchers.IO) {
-        val npub = currentNpub ?: run {
-            Log.e(TAG, "Cannot publish proof_event: no npub initialized")
-            return@withContext null
-        }
-        
-        if (!isConnected) {
+        if (!isConnected()) {
             Log.w(TAG, "Not connected to relays - proof_event not published")
             return@withContext null
         }
         
-        val eventContent = buildProofEvent(
-            nonce, clientId, proofHex, merkleRoot, npub, userInvoice, operatorInvoice
-        )
-        
         Log.i(TAG, "Publishing proof_event for nonce=$nonce, client=$clientId")
         
-        // TODO: Call into Rust nostr-sdk to actually publish the event
-        // For Phase 9.3, we're setting up the structure
-        // Real publishing will be wired in Phase 9.4
-        
-        // Return stub event ID for now
-        val stubEventId = "event_${System.currentTimeMillis()}"
-        Log.i(TAG, "proof_event published (stub): $stubEventId")
-        stubEventId
+        try {
+            // Step 9.4: Real publishing via Rust nostr-sdk
+            val result = NativeBridge.nostrPublishProofEvent(
+                nonce,
+                clientId,
+                proofHex,
+                merkleRoot,
+                userInvoice,
+                operatorInvoice
+            )
+            
+            if (result.startsWith("error:")) {
+                Log.e(TAG, "Failed to publish proof_event: $result")
+                null
+            } else {
+                Log.i(TAG, "proof_event published: $result")
+                result
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception publishing proof_event: ${e.message}")
+            null
+        }
     }
 
     /**
@@ -288,26 +286,33 @@ class NostrManager(private val context: Context) {
         preimageHex: String,
         amountSats: Long
     ): String? = withContext(Dispatchers.IO) {
-        if (!isConnected) {
+        if (!isConnected()) {
             Log.w(TAG, "Not connected to relays - payment_receipt not published")
             return@withContext null
         }
         
-        val eventContent = JSONObject().apply {
-            put("kind", KIND_PAYMENT_RECEIPT)
-            put("nonce", nonce)
-            put("payment_hash", paymentHash)
-            put("preimage", preimageHex)
-            put("amount_sats", amountSats)
-            put("timestamp", System.currentTimeMillis() / 1000)
-        }.toString()
-        
         Log.i(TAG, "Publishing payment_receipt for nonce=$nonce")
         
-        // TODO: Real publishing via Rust nostr-sdk
-        val stubEventId = "event_${System.currentTimeMillis()}"
-        Log.i(TAG, "payment_receipt published (stub): $stubEventId")
-        stubEventId
+        try {
+            // Step 9.4: Real publishing via Rust nostr-sdk
+            val result = NativeBridge.nostrPublishPaymentReceipt(
+                nonce,
+                paymentHash,
+                preimageHex,
+                amountSats
+            )
+            
+            if (result.startsWith("error:")) {
+                Log.e(TAG, "Failed to publish payment_receipt: $result")
+                null
+            } else {
+                Log.i(TAG, "payment_receipt published: $result")
+                result
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception publishing payment_receipt: ${e.message}")
+            null
+        }
     }
 
     /**
@@ -317,27 +322,27 @@ class NostrManager(private val context: Context) {
         nonce: String,
         clientId: String
     ): String? = withContext(Dispatchers.IO) {
-        val npub = currentNpub
-        
-        if (!isConnected) {
+        if (!isConnected()) {
             Log.w(TAG, "Not connected to relays - login_complete not published")
             return@withContext null
         }
         
-        val eventContent = JSONObject().apply {
-            put("kind", KIND_LOGIN_COMPLETE)
-            put("nonce", nonce)
-            put("client_id", clientId)
-            put("npub", npub ?: "")
-            put("status", "complete")
-            put("timestamp", System.currentTimeMillis() / 1000)
-        }.toString()
-        
         Log.i(TAG, "Publishing login_complete for nonce=$nonce")
         
-        // TODO: Real publishing via Rust nostr-sdk
-        val stubEventId = "event_${System.currentTimeMillis()}"
-        Log.i(TAG, "login_complete published (stub): $stubEventId")
-        stubEventId
+        try {
+            // Step 9.4: Real publishing via Rust nostr-sdk
+            val result = NativeBridge.nostrPublishLoginComplete(nonce, clientId)
+            
+            if (result.startsWith("error:")) {
+                Log.e(TAG, "Failed to publish login_complete: $result")
+                null
+            } else {
+                Log.i(TAG, "login_complete published: $result")
+                result
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception publishing login_complete: ${e.message}")
+            null
+        }
     }
 }
