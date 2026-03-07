@@ -54,7 +54,7 @@ pub fn derive_nsec_from_leaf_secret(leaf_secret: &[Fr; 5]) -> Result<SecretKey> 
 
 /// Derive npub (NOSTR public key) from nsec
 pub fn derive_npub_from_nsec(nsec: &SecretKey) -> PublicKey {
-    nsec.public_key()
+    Keys::new(nsec.clone()).public_key()
 }
 
 /// Derive both nsec and npub from leaf_secret in one call

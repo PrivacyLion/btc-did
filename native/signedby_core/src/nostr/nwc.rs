@@ -172,15 +172,16 @@ impl NwcClient {
         let nwc = self.nwc.as_ref()
             .ok_or_else(|| anyhow!("NWC not connected"))?;
         
-        let response = nwc.get_balance().await
+        let balance_msats = nwc.get_balance().await
             .map_err(|e| anyhow!("NWC get_balance failed: {}", e))?;
         
         // Convert from millisats to sats
-        Ok(response.balance / 1000)
+        Ok(balance_msats / 1000)
     }
     
     /// List recent transactions
-    pub async fn list_transactions(&self, limit: u16) -> Result<Vec<LookupInvoiceResponseResult>> {
+    /// Returns a vec of transaction JSON strings (simplified for compatibility)
+    pub async fn list_transactions(&self, limit: u16) -> Result<Vec<String>> {
         let nwc = self.nwc.as_ref()
             .ok_or_else(|| anyhow!("NWC not connected"))?;
         
@@ -193,10 +194,11 @@ impl NwcClient {
             transaction_type: None,
         };
         
-        let response = nwc.list_transactions(params).await
+        let transactions = nwc.list_transactions(params).await
             .map_err(|e| anyhow!("NWC list_transactions failed: {}", e))?;
         
-        Ok(response.transactions)
+        // Convert to JSON strings for flexibility across API versions
+        Ok(transactions.iter().map(|t| serde_json::to_string(t).unwrap_or_default()).collect())
     }
     
     /// Wait for payment notification (preimage received)

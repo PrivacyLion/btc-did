@@ -8,8 +8,9 @@ use jni::sys::{jbyteArray, jstring, jlong, jboolean};
 use jni::JNIEnv;
 use ark_bn254::Fr;
 use ark_ff::PrimeField;
+use nostr_sdk::ToBech32;
 
-use super::{derive_nsec_from_leaf_secret, derive_nostr_keypair};
+use super::derive_nsec_from_leaf_secret;
 
 /// Derive nsec from leaf_secret bytes
 /// 
@@ -71,10 +72,12 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_deriveNpubFromLeafSecr
         Err(e) => return env.new_string(format!("error:{}", e)).unwrap().into_raw(),
     };
     
-    let keys = match derive_nostr_keypair(&leaf_secret) {
+    let nsec = match derive_nsec_from_leaf_secret(&leaf_secret) {
         Ok(k) => k,
         Err(e) => return env.new_string(format!("error:{}", e)).unwrap().into_raw(),
     };
+    
+    let keys = nostr_sdk::Keys::new(nsec);
     
     match keys.public_key().to_bech32() {
         Ok(npub) => env.new_string(npub).unwrap().into_raw(),
@@ -112,10 +115,12 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_signNostrEvent(
         Err(e) => return env.new_string(format!("error:{}", e)).unwrap().into_raw(),
     };
     
-    let keys = match derive_nostr_keypair(&leaf_secret) {
+    let nsec = match derive_nsec_from_leaf_secret(&leaf_secret) {
         Ok(k) => k,
         Err(e) => return env.new_string(format!("error:{}", e)).unwrap().into_raw(),
     };
+    
+    let keys = nostr_sdk::Keys::new(nsec);
     
     // Sign the content hash
     use sha2::{Sha256, Digest};
@@ -128,9 +133,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_signNostrEvent(
         Err(e) => return env.new_string(format!("error:{}", e)).unwrap().into_raw(),
     };
     
-    let keypair = match nostr_sdk::secp256k1::Keypair::from_secret_key(&secp, &keys.secret_key().inner) {
-        keypair => keypair,
-    };
+    let keypair = keys.secret_key().keypair(&secp);
     
     let sig = secp.sign_schnorr(&msg, &keypair);
     

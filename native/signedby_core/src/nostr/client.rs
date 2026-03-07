@@ -54,7 +54,7 @@ impl NostrClient {
             Err(_) => {
                 // Timeout - but don't fail completely
                 // Check if we connected to any relay
-                let stats = self.client.relay_pool().relays().await;
+                let stats = self.client.relays().await;
                 if stats.is_empty() {
                     Err(anyhow!("Failed to connect to any relay within 3 seconds"))
                 } else {
@@ -110,15 +110,12 @@ impl NostrClient {
             "timestamp": event.timestamp,
         }).to_string();
         
-        let event_builder = EventBuilder::new(
-            Kind::Custom(KIND_PROOF_EVENT),
-            content,
-        ).tags(tags);
+        let event_builder = EventBuilder::new(Kind::Custom(KIND_PROOF_EVENT), content, tags);
         
-        let event_id = self.client.send_event_builder(event_builder).await
+        let output = self.client.send_event_builder(event_builder).await
             .map_err(|e| anyhow!("Failed to publish proof_event: {}", e))?;
         
-        Ok(event_id.id)
+        Ok(output.val)
     }
     
     /// Publish payment_receipt (kind 28102) after receiving payment via NWC
@@ -135,15 +132,12 @@ impl NostrClient {
             "timestamp": event.timestamp,
         }).to_string();
         
-        let event_builder = EventBuilder::new(
-            Kind::Custom(KIND_PAYMENT_RECEIPT),
-            content,
-        ).tags(tags);
+        let event_builder = EventBuilder::new(Kind::Custom(KIND_PAYMENT_RECEIPT), content, tags);
         
-        let event_id = self.client.send_event_builder(event_builder).await
+        let output = self.client.send_event_builder(event_builder).await
             .map_err(|e| anyhow!("Failed to publish payment_receipt: {}", e))?;
         
-        Ok(event_id.id)
+        Ok(output.val)
     }
     
     /// Publish login_complete (kind 28103) after successful authentication
@@ -159,15 +153,12 @@ impl NostrClient {
             "timestamp": event.timestamp,
         }).to_string();
         
-        let event_builder = EventBuilder::new(
-            Kind::Custom(KIND_LOGIN_COMPLETE),
-            content,
-        ).tags(tags);
+        let event_builder = EventBuilder::new(Kind::Custom(KIND_LOGIN_COMPLETE), content, tags);
         
-        let event_id = self.client.send_event_builder(event_builder).await
+        let output = self.client.send_event_builder(event_builder).await
             .map_err(|e| anyhow!("Failed to publish login_complete: {}", e))?;
         
-        Ok(event_id.id)
+        Ok(output.val)
     }
 }
 
