@@ -601,4 +601,76 @@ object NativeBridge {
         nonce: String,
         clientId: String
     ): String
+
+    // ============================================================================
+    // NWC (NOSTR Wallet Connect) - Step 9.5
+    // ============================================================================
+
+    /**
+     * Initialize NWC client with connection string.
+     * Creates ephemeral keypair for this session (DECISION 2).
+     * 
+     * @param connectionString nostr+walletconnect://... URI from Strike
+     * @return true if initialized successfully
+     */
+    @JvmStatic external fun nwcInit(connectionString: String): Boolean
+
+    /**
+     * Connect NWC client to relay.
+     * 
+     * @return true if connected successfully
+     */
+    @JvmStatic external fun nwcConnect(): Boolean
+
+    /**
+     * Generate login invoices (90% user, 10% operator).
+     * 
+     * @param totalSats Total amount from QR code
+     * @param clientId Enterprise client_id for description
+     * @return JSON: { "user_invoice": "lnbc...", "operator_invoice": "lnbc..." }
+     *         or { "error": "message" } on failure
+     */
+    @JvmStatic external fun nwcGenerateLoginInvoices(
+        totalSats: Long,
+        clientId: String
+    ): String
+
+    /**
+     * Make a single invoice via NWC.
+     * 
+     * @param amountSats Amount in satoshis
+     * @param description Invoice description
+     * @param expirySecs Invoice expiry in seconds
+     * @return BOLT11 invoice string, or "error:..." on failure
+     */
+    @JvmStatic external fun nwcMakeInvoice(
+        amountSats: Long,
+        description: String,
+        expirySecs: Long
+    ): String
+
+    /**
+     * Get wallet balance in satoshis.
+     * 
+     * @return Balance as string, or "error:..." on failure
+     */
+    @JvmStatic external fun nwcGetBalance(): String
+
+    /**
+     * Wait for payment (poll for preimage).
+     * 
+     * @param paymentHash Payment hash to watch for (hex)
+     * @param timeoutSecs Maximum time to wait
+     * @return Preimage hex on success, "error:..." on failure/timeout
+     */
+    @JvmStatic external fun nwcWaitForPayment(
+        paymentHash: String,
+        timeoutSecs: Long
+    ): String
+
+    /**
+     * Disconnect NWC and discard ephemeral keys.
+     * Must be called after payment received. Keys are unrecoverable (DECISION 2).
+     */
+    @JvmStatic external fun nwcDisconnect()
 }

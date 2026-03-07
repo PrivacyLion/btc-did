@@ -28,6 +28,9 @@ static RUNTIME: Lazy<tokio::runtime::Runtime> = Lazy::new(|| {
 // Global NOSTR client (protected by mutex)
 static NOSTR_CLIENT: Lazy<Mutex<Option<NostrClient>>> = Lazy::new(|| Mutex::new(None));
 
+// Global NWC client (protected by mutex) - Step 9.5
+static NWC_CLIENT: Lazy<Mutex<Option<super::nwc::NwcClient>>> = Lazy::new(|| Mutex::new(None));
+
 /// Derive nsec from leaf_secret bytes
 /// 
 /// Input: leaf_secret as 5 * 32 bytes (5 BN254 field elements, big-endian)
@@ -476,6 +479,210 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPublishLoginCompl
     match RUNTIME.block_on(client.publish_login_complete(&event)) {
         Ok(event_id) => env.new_string(event_id.to_hex()).unwrap().into_raw(),
         Err(e) => env.new_string(format!("error:{}", e)).unwrap().into_raw(),
+    }
+}
+
+// ============================================================================
+// NWC Client Operations (Step 9.5 - Lightning Wallet via NOSTR)
+// ============================================================================
+
+/// Initialize NWC client with connection string
+/// 
+/// Creates ephemeral keypair for this session (DECISION 2).
+/// Connection string format: nostr+walletconnect://pubkey?relay=wss://...&secret=...
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcInit(
+    mut env: JNIEnv,
+    _clazz: JClass,
+    connection_string: JString,
+) -> jboolean {
+    let conn_str = match env.get_string(&connection_string) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return JNI_FALSE,
+    };
+    
+    match super::nwc::NwcClient::new(&conn_str) {
+        Ok(client) => {
+            if let Ok(mut guard) = NWC_CLIENT.lock() {
+                *guard = Some(client);
+                JNI_TRUE
+            } else {
+                JNI_FALSE
+            }
+        }
+        Err(e) => {
+            eprintln!("NWC init failed: {}", e);
+            JNI_FALSE
+        }
+    }
+}
+
+/// Connect NWC client to relay
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcConnect(
+    _env: JNIEnv,
+    _clazz: JClass,
+) -> jboolean {
+    let mut guard = match NWC_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return JNI_FALSE,
+    };
+    
+    let client = match guard.as_mut() {
+        Some(c) => c,
+        None => return JNI_FALSE,
+    };
+    
+    match RUNTIME.block_on(client.connect()) {
+        Ok(_) => JNI_TRUE,
+        Err(e) => {
+            eprintln!("NWC connect failed: {}", e);
+            JNI_FALSE
+        }
+    }
+}
+
+/// Generate login invoices (90% user, 10% operator)
+/// 
+/// Returns: JSON with { user_invoice, operator_invoice } or error
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcGenerateLoginInvoices(
+    mut env: JNIEnv,
+    _clazz: JClass,
+    total_sats: jlong,
+    client_id: JString,
+) -> jstring {
+    let client_id = match env.get_string(&client_id) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string(r#"{"error":"invalid_client_id"}"#).unwrap().into_raw(),
+    };
+    
+    let guard = match NWC_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return env.new_string(r#"{"error":"lock_failed"}"#).unwrap().into_raw(),
+    };
+    
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => return env.new_string(r#"{"error":"not_initialized"}"#).unwrap().into_raw(),
+    };
+    
+    match RUNTIME.block_on(client.generate_login_invoices(total_sats as u64, &client_id)) {
+        Ok((user_invoice, operator_invoice)) => {
+            let json = serde_json::json!({
+                "user_invoice": user_invoice,
+                "operator_invoice": operator_invoice,
+            });
+            env.new_string(json.to_string()).unwrap().into_raw()
+        }
+        Err(e) => {
+            let json = serde_json::json!({ "error": e.to_string() });
+            env.new_string(json.to_string()).unwrap().into_raw()
+        }
+    }
+}
+
+/// Make a single invoice via NWC
+/// 
+/// Returns: BOLT11 invoice string or "error:..."
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcMakeInvoice(
+    mut env: JNIEnv,
+    _clazz: JClass,
+    amount_sats: jlong,
+    description: JString,
+    expiry_secs: jlong,
+) -> jstring {
+    let description = match env.get_string(&description) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_description").unwrap().into_raw(),
+    };
+    
+    let guard = match NWC_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return env.new_string("error:lock_failed").unwrap().into_raw(),
+    };
+    
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => return env.new_string("error:not_initialized").unwrap().into_raw(),
+    };
+    
+    match RUNTIME.block_on(client.make_invoice(amount_sats as u64, &description, expiry_secs as u32)) {
+        Ok(invoice) => env.new_string(invoice).unwrap().into_raw(),
+        Err(e) => env.new_string(format!("error:{}", e)).unwrap().into_raw(),
+    }
+}
+
+/// Get wallet balance in satoshis
+/// 
+/// Returns: balance as string, or "error:..."
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcGetBalance(
+    mut env: JNIEnv,
+    _clazz: JClass,
+) -> jstring {
+    let guard = match NWC_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return env.new_string("error:lock_failed").unwrap().into_raw(),
+    };
+    
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => return env.new_string("error:not_initialized").unwrap().into_raw(),
+    };
+    
+    match RUNTIME.block_on(client.get_balance()) {
+        Ok(balance) => env.new_string(balance.to_string()).unwrap().into_raw(),
+        Err(e) => env.new_string(format!("error:{}", e)).unwrap().into_raw(),
+    }
+}
+
+/// Wait for payment (poll for preimage)
+/// 
+/// Returns: preimage hex on success, "error:..." on failure/timeout
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcWaitForPayment(
+    mut env: JNIEnv,
+    _clazz: JClass,
+    payment_hash: JString,
+    timeout_secs: jlong,
+) -> jstring {
+    let payment_hash = match env.get_string(&payment_hash) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_payment_hash").unwrap().into_raw(),
+    };
+    
+    let guard = match NWC_CLIENT.lock() {
+        Ok(g) => g,
+        Err(_) => return env.new_string("error:lock_failed").unwrap().into_raw(),
+    };
+    
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => return env.new_string("error:not_initialized").unwrap().into_raw(),
+    };
+    
+    match RUNTIME.block_on(client.wait_for_payment(&payment_hash, timeout_secs as u64)) {
+        Ok(preimage) => env.new_string(preimage).unwrap().into_raw(),
+        Err(e) => env.new_string(format!("error:{}", e)).unwrap().into_raw(),
+    }
+}
+
+/// Disconnect NWC and discard ephemeral keys
+/// 
+/// Must be called after payment received. Ephemeral keys are discarded
+/// and cannot be recovered (DECISION 2).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcDisconnect(
+    _env: JNIEnv,
+    _clazz: JClass,
+) {
+    if let Ok(mut guard) = NWC_CLIENT.lock() {
+        if let Some(client) = guard.take() {
+            // Explicitly discard keys
+            client.disconnect_and_discard();
+        }
     }
 }
 

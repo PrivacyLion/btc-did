@@ -1012,8 +1012,8 @@ fun SignedByMeApp(
                     isCreatingInvoice = true
                     statusMessage = ""
                     
-                    // === Phase 9: Initialize NOSTR and connect to relays ===
-                    // Non-blocking - connection happens in background
+                    // === Phase 9: Initialize NOSTR + NWC ===
+                    // Non-blocking - connections happen in background
                     val leafSecret = didMgr.loadLeafSecret()
                     if (leafSecret != null) {
                         nostrMgr.initializeIdentity(leafSecret)
@@ -1022,7 +1022,7 @@ fun SignedByMeApp(
                         // Generate ephemeral keypair for NWC (DECISION 2)
                         nostrMgr.generateEphemeralNwcKeypair()
                         
-                        // Connect to relays (async, don't block login)
+                        // Connect to NOSTR relays (async, don't block login)
                         nostrMgr.connectToRelays(
                             scope = scope,
                             onConnected = {
@@ -1032,10 +1032,24 @@ fun SignedByMeApp(
                                 android.util.Log.w("SignedByMe", "NOSTR relay connection failed - login proceeds without audit trail")
                             }
                         )
+                        
+                        // === Step 9.5: Initialize NWC for Lightning wallet ===
+                        if (nostrMgr.initNwc()) {
+                            nostrMgr.connectNwc(
+                                scope = scope,
+                                onConnected = {
+                                    android.util.Log.i("SignedByMe", "NWC connected - can generate invoices via Strike")
+                                },
+                                onFailed = {
+                                    android.util.Log.w("SignedByMe", "NWC connection failed - falling back to Breez")
+                                }
+                            )
+                        }
+                        // === End Step 9.5 NWC init ===
                     } else {
-                        android.util.Log.w("SignedByMe", "No leaf_secret - NOSTR identity not initialized")
+                        android.util.Log.w("SignedByMe", "No leaf_secret - NOSTR/NWC not initialized")
                     }
-                    // === End Phase 9 NOSTR init ===
+                    // === End Phase 9 init ===
                     
                     // Use session ID from login session, or generate one for demo
                     val sessionId = loginSession?.sessionId ?: "demo_${System.currentTimeMillis()}"
