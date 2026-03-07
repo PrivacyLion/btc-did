@@ -463,4 +463,51 @@ object NativeBridge {
      * @return JSON with proof or error
      */
     @JvmStatic external fun generateProof(inputJson: String): String
+
+    // ============================================================================
+    // NOSTR + NWC (Phase 9)
+    // ============================================================================
+
+    /**
+     * Derive nsec (NOSTR secret key) from leaf_secret using Poseidon2.
+     * 
+     * Formula: nsec = Poseidon2(leaf_secret[0], leaf_secret[1], leaf_secret[2])
+     * DECISION 1: Global npub - NO client_id in derivation.
+     * Same npub across all enterprises.
+     * 
+     * @param leafSecretBytes leaf_secret as 160 bytes (5 × 32-byte Fr elements)
+     * @return 32-byte nsec (secp256k1 secret key)
+     */
+    @JvmStatic external fun deriveNsecFromLeafSecret(leafSecretBytes: ByteArray): ByteArray
+
+    /**
+     * Derive npub (NOSTR public key, bech32) from leaf_secret.
+     * 
+     * @param leafSecretBytes leaf_secret as 160 bytes (5 × 32-byte Fr elements)
+     * @return npub as bech32 string (e.g., "npub1xyz...")
+     */
+    @JvmStatic external fun deriveNpubFromLeafSecret(leafSecretBytes: ByteArray): String
+
+    /**
+     * Sign a NOSTR event with nsec derived from leaf_secret.
+     * 
+     * @param leafSecretBytes leaf_secret as 160 bytes
+     * @param eventContent The event content to sign (will be SHA256 hashed)
+     * @return Schnorr signature as 128-character hex string (64 bytes)
+     */
+    @JvmStatic external fun signNostrEvent(
+        leafSecretBytes: ByteArray,
+        eventContent: String
+    ): String
+
+    /**
+     * Generate ephemeral keypair for NWC communication.
+     * 
+     * DECISION 2: The proof npub NEVER touches Strike.
+     * Use this ephemeral keypair for all NWC make_invoice and payment notifications.
+     * Discard after preimage is received.
+     * 
+     * @return JSON: { "ephemeral_nsec_hex": "...", "ephemeral_npub": "npub1..." }
+     */
+    @JvmStatic external fun generateEphemeralNwcKeypair(): String
 }
