@@ -1,0 +1,17 @@
+# SignedByMe API Server - 134.199.198.192
+# Managed config - deploy via: scp infra/Caddyfile root@134.199.198.192:/etc/caddy/Caddyfile
+
+api.beta.privacy-lion.com {
+	reverse_proxy 127.0.0.1:8000
+}
+
+beta.privacy-lion.com {
+	root * /var/www/site
+	file_server
+}
+
+acme.beta.privacy-lion.com {
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	root * /var/www/site
+	file_server
+}
