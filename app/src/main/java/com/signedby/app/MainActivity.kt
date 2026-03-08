@@ -1100,173 +1100,171 @@ fun SignedByMeApp(
                     lastOperatorInvoice = operatorInvoice ?: ""
                     lastPaymentHash = NativeBridge.extractPaymentHashFromBolt11(invoice)
                     // === End Step 9.6 invoice generation ===
-                        isLoginActive = true
-                        isPollingPayment = true
-                        
-                        // Send invoice to API for enterprise to pay (with STWO proof + DLC)
-                        launch(Dispatchers.IO) {
-                            try {
-                                // Get wallet address for the login proof
-                                val walletAddress = (breezMgr.walletState.value as? BreezWalletManager.WalletState.Connected)?.sparkAddress ?: "unknown"
+                    
+                    isLoginActive = true
+                    isPollingPayment = true
+                    
+                    // Send invoice to API for enterprise to pay (with STWO proof + DLC)
+                    launch(Dispatchers.IO) {
+                        try {
+                            // Get wallet address for the login proof
+                            val walletAddress = (breezMgr.walletState.value as? BreezWalletManager.WalletState.Connected)?.sparkAddress ?: "unknown"
                                 
-                                // v3 only: Use session nonce from QR, or generate random for demo
-                                val sessionNonce = loginSession?.nonce?.takeIf { it.length == 32 }
-                                    ?: run {
-                                        // Generate random 16-byte nonce for demo mode (32 hex chars)
-                                        val bytes = ByteArray(16)
-                                        java.security.SecureRandom().nextBytes(bytes)
-                                        bytes.joinToString("") { "%02x".format(it) }
-                                    }
-                                val sessionAmount = loginSession?.amountSats?.toLong() ?: 100L
-                                val enterpriseDomain = loginSession?.enterpriseName ?: "demo.signedby.me"
-                                
-                                android.util.Log.i("SignedByMe", "Generating v3 proof: domain=$enterpriseDomain, amount=$sessionAmount")
-                                
-                                // 1. Generate STWO v3 proof
-                                val stwoproof = try {
-                                    didMgr.generateLoginProofV3(
-                                        walletAddress = walletAddress,
-                                        paymentHashHex = lastPaymentHash,
-                                        amountSats = sessionAmount,
-                                        eaDomain = enterpriseDomain,
-                                        nonceHex = sessionNonce,
-                                        expiryMinutes = 5
-                                    )
-                                } catch (e: Exception) {
-                                    android.util.Log.e("SignedByMe", "Failed to generate v3 login proof: ${e.message}")
-                                    null
+                            // v3 only: Use session nonce from QR, or generate random for demo
+                            val sessionNonce = loginSession?.nonce?.takeIf { it.length == 32 }
+                                ?: run {
+                                    // Generate random 16-byte nonce for demo mode (32 hex chars)
+                                    val bytes = ByteArray(16)
+                                    java.security.SecureRandom().nextBytes(bytes)
+                                    bytes.joinToString("") { "%02x".format(it) }
                                 }
+                            val sessionAmount = loginSession?.amountSats?.toLong() ?: 100L
+                            val enterpriseDomain = loginSession?.enterpriseName ?: "demo.signedby.me"
+                            
+                            android.util.Log.i("SignedByMe", "Generating v3 proof: domain=$enterpriseDomain, amount=$sessionAmount")
+                            
+                            // 1. Generate STWO v3 proof
+                            val stwoproof = try {
+                                didMgr.generateLoginProofV3(
+                                    walletAddress = walletAddress,
+                                    paymentHashHex = lastPaymentHash,
+                                    amountSats = sessionAmount,
+                                    eaDomain = enterpriseDomain,
+                                    nonceHex = sessionNonce,
+                                    expiryMinutes = 5
+                                )
+                            } catch (e: Exception) {
+                                android.util.Log.e("SignedByMe", "Failed to generate v3 login proof: ${e.message}")
+                                null
+                            }
+                            
+                            // 2. Build DLC contract for 90/10 split
+                            val dlcContract = try {
+                                dlcManager.buildAuthContract(
+                                    loginId = sessionId,
+                                    did = did!!,
+                                    amountSats = sessionAmount
+                                )
+                            } catch (e: Exception) {
+                                android.util.Log.e("SignedByMe", "Failed to build DLC contract: ${e.message}")
+                                null
+                            }
+                            
+                            // Store DLC contract for later (when payment is received)
+                            withContext(Dispatchers.Main) {
+                                lastDlcContract = dlcContract
+                            }
+                            
+                            android.util.Log.i("SignedByMe", "DLC contract built: ${dlcContract?.contractId}")
+                            
+                            // 2.5. Generate membership proof if required
+                            var membershipBundle: MembershipBundle? = null
+                            val requiredRootId = loginSession?.requiredRootId
+                            val clientId = loginSession?.clientId
+                            
+                            if (requiredRootId != null && clientId != null) {
+                                android.util.Log.i("SignedByMe", "Membership required: client=$clientId, root=$requiredRootId")
                                 
-                                // 2. Build DLC contract for 90/10 split
-                                val dlcContract = try {
-                                    dlcManager.buildAuthContract(
-                                        loginId = sessionId,
-                                        did = did!!,
-                                        amountSats = sessionAmount
-                                    )
-                                } catch (e: Exception) {
-                                    android.util.Log.e("SignedByMe", "Failed to build DLC contract: ${e.message}")
-                                    null
-                                }
-                                
-                                // Store DLC contract for later (when payment is received)
-                                withContext(Dispatchers.Main) {
-                                    lastDlcContract = dlcContract
-                                }
-                                
-                                android.util.Log.i("SignedByMe", "DLC contract built: ${dlcContract?.contractId}")
-                                
-                                // 2.5. Generate membership proof if required
-                                var membershipBundle: MembershipBundle? = null
-                                val requiredRootId = loginSession?.requiredRootId
-                                val clientId = loginSession?.clientId
-                                
-                                if (requiredRootId != null && clientId != null) {
-                                    android.util.Log.i("SignedByMe", "Membership required: client=$clientId, root=$requiredRootId")
+                                val witness = didMgr.loadWitness(clientId, requiredRootId)
+                                if (witness != null) {
+                                    // Get DID pubkey bytes for binding hash
+                                    val didPubkeyHex = did!!.removePrefix("did:btcr:")
+                                    val didPubkeyBytes = didPubkeyHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                                    val paymentHashBytes = lastPaymentHash.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                                    val nonceBytes = sessionNonce.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
                                     
-                                    val witness = didMgr.loadWitness(clientId, requiredRootId)
-                                    if (witness != null) {
-                                        // Get DID pubkey bytes for binding hash
-                                        val didPubkeyHex = did!!.removePrefix("did:btcr:")
-                                        val didPubkeyBytes = didPubkeyHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-                                        val paymentHashBytes = lastPaymentHash.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-                                        val nonceBytes = sessionNonce.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-                                        
-                                        // Compute V4 binding hash (must match server)
-                                        val bindingHash = NativeBridge.computeBindingHashV4(
-                                            didPubkey = didPubkeyBytes,
-                                            walletAddress = walletAddress,
-                                            clientId = clientId,
-                                            sessionId = sessionId,
-                                            paymentHash = paymentHashBytes,
-                                            amountSats = sessionAmount,
-                                            expiresAt = loginSession?.expiresAt ?: (System.currentTimeMillis() / 1000 + 300),
-                                            nonce = nonceBytes,
-                                            eaDomain = enterpriseDomain,
-                                            purposeId = witness.purposeId,
-                                            rootId = requiredRootId
+                                    // Compute V4 binding hash (must match server)
+                                    val bindingHash = NativeBridge.computeBindingHashV4(
+                                        didPubkey = didPubkeyBytes,
+                                        walletAddress = walletAddress,
+                                        clientId = clientId,
+                                        sessionId = sessionId,
+                                        paymentHash = paymentHashBytes,
+                                        amountSats = sessionAmount,
+                                        expiresAt = loginSession?.expiresAt ?: (System.currentTimeMillis() / 1000 + 300),
+                                        nonce = nonceBytes,
+                                        eaDomain = enterpriseDomain,
+                                        purposeId = witness.purposeId,
+                                        rootId = requiredRootId
+                                    )
+                                    
+                                    // Generate membership proof
+                                    // sessionId is base64url-encoded 16 bytes - decode and zero-pad to 32
+                                    val sessionIdDecoded = android.util.Base64.decode(
+                                        sessionId, 
+                                        android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING
+                                    )
+                                    val sessionIdBytes = ByteArray(32)
+                                    sessionIdDecoded.copyInto(sessionIdBytes, 0, 0, minOf(sessionIdDecoded.size, 32))
+                                    val proofBase64 = didMgr.generateMembershipProof(witness, bindingHash, sessionIdBytes)
+                                    if (proofBase64 != null) {
+                                        membershipBundle = MembershipBundle(
+                                            rootId = requiredRootId,
+                                            purpose = didMgr.purposeIdToString(witness.purposeId),
+                                            proofBase64 = proofBase64
                                         )
-                                        
-                                        // Generate membership proof
-                                        // sessionId is base64url-encoded 16 bytes - decode and zero-pad to 32
-                                        val sessionIdDecoded = android.util.Base64.decode(
-                                            sessionId, 
-                                            android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING
-                                        )
-                                        val sessionIdBytes = ByteArray(32)
-                                        sessionIdDecoded.copyInto(sessionIdBytes, 0, 0, minOf(sessionIdDecoded.size, 32))
-                                        val proofBase64 = didMgr.generateMembershipProof(witness, bindingHash, sessionIdBytes)
-                                        if (proofBase64 != null) {
-                                            membershipBundle = MembershipBundle(
-                                                rootId = requiredRootId,
-                                                purpose = didMgr.purposeIdToString(witness.purposeId),
-                                                proofBase64 = proofBase64
-                                            )
-                                            android.util.Log.i("SignedByMe", "Membership proof generated successfully")
-                                        } else {
-                                            android.util.Log.e("SignedByMe", "Failed to generate membership proof")
-                                            withContext(Dispatchers.Main) {
-                                                statusMessage = "Error: Could not generate membership proof. Please re-enroll with this employer."
-                                            }
-                                            return@launch
-                                        }
+                                        android.util.Log.i("SignedByMe", "Membership proof generated successfully")
                                     } else {
-                                        android.util.Log.e("SignedByMe", "No witness found for client=$clientId, root=$requiredRootId")
+                                        android.util.Log.e("SignedByMe", "Failed to generate membership proof")
                                         withContext(Dispatchers.Main) {
-                                            statusMessage = "Error: Not enrolled with this employer. Contact your admin."
+                                            statusMessage = "Error: Could not generate membership proof. Please re-enroll with this employer."
                                         }
                                         return@launch
                                     }
-                                }
-                                
-                                // === Phase 9: Publish proof_event to NOSTR ===
-                                // Enterprise watches NOSTR for this event (tagged with nonce)
-                                if (nostrMgr.isConnected()) {
-                                    val proofHex = membershipBundle?.proofBase64 ?: ""
-                                    val merkleRoot = "" // TODO: Extract from proof public outputs
-                                    val npub = nostrMgr.getNpub() ?: ""
-                                    
-                                    scope.launch(Dispatchers.IO) {
-                                        nostrMgr.publishProofEvent(
-                                            nonce = sessionNonce,
-                                            clientId = clientId ?: "demo",
-                                            proofHex = proofHex,
-                                            merkleRoot = merkleRoot,
-                                            userInvoice = invoice,
-                                            operatorInvoice = lastOperatorInvoice  // Step 9.6: real operator invoice
-                                        )
+                                } else {
+                                    android.util.Log.e("SignedByMe", "No witness found for client=$clientId, root=$requiredRootId")
+                                    withContext(Dispatchers.Main) {
+                                        statusMessage = "Error: Not enrolled with this employer. Contact your admin."
                                     }
-                                }
-                                // === End Phase 9 NOSTR publish ===
-                                
-                                // 3. Submit to API with proof + DLC metadata + membership
-                                val apiResult = sendInvoiceToApiWithDlc(
-                                    sessionToken = loginSession?.sessionToken,
-                                    sessionId = sessionId,
-                                    invoice = invoice,
-                                    did = did!!,
-                                    enterpriseName = enterpriseDomain,
-                                    amountSats = sessionAmount,
-                                    stwoproof = stwoproof,
-                                    nonce = sessionNonce,
-                                    dlcContractJson = dlcContract?.toJson(),
-                                    membership = membershipBundle,
-                                    walletAddress = walletAddress
-                                )
-                                
-                                withContext(Dispatchers.Main) {
-                                    if (!apiResult.success) {
-                                        statusMessage = "Error: ${apiResult.errorMessage ?: "Could not reach API"}"
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) {
-                                    statusMessage = "API error: ${e.message}"
+                                    return@launch
                                 }
                             }
+                            
+                            // === Phase 9: Publish proof_event to NOSTR ===
+                            // Enterprise watches NOSTR for this event (tagged with nonce)
+                            if (nostrMgr.isConnected()) {
+                                val proofHex = membershipBundle?.proofBase64 ?: ""
+                                val merkleRoot = "" // TODO: Extract from proof public outputs
+                                val npub = nostrMgr.getNpub() ?: ""
+                                
+                                scope.launch(Dispatchers.IO) {
+                                    nostrMgr.publishProofEvent(
+                                        nonce = sessionNonce,
+                                        clientId = clientId ?: "demo",
+                                        proofHex = proofHex,
+                                        merkleRoot = merkleRoot,
+                                        userInvoice = invoice,
+                                        operatorInvoice = lastOperatorInvoice  // Step 9.6: real operator invoice
+                                    )
+                                }
+                            }
+                            // === End Phase 9 NOSTR publish ===
+                            
+                            // 3. Submit to API with proof + DLC metadata + membership
+                            val apiResult = sendInvoiceToApiWithDlc(
+                                sessionToken = loginSession?.sessionToken,
+                                sessionId = sessionId,
+                                invoice = invoice,
+                                did = did!!,
+                                enterpriseName = enterpriseDomain,
+                                amountSats = sessionAmount,
+                                stwoproof = stwoproof,
+                                nonce = sessionNonce,
+                                dlcContractJson = dlcContract?.toJson(),
+                                membership = membershipBundle,
+                                walletAddress = walletAddress
+                            )
+                            
+                            withContext(Dispatchers.Main) {
+                                if (!apiResult.success) {
+                                    statusMessage = "Error: ${apiResult.errorMessage ?: "Could not reach API"}"
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                statusMessage = "API error: ${e.message}"
+                            }
                         }
-                    }.onFailure { e ->
-                        statusMessage = "Failed to create invoice: ${e.message}"
                     }
                     
                     isCreatingInvoice = false
