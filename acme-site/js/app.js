@@ -15,8 +15,8 @@ const RELAY_URL = 'wss://relay.privacy-lion.com';
 const CLIENT_ID = 'acme';
 const DOMAIN = 'acme.beta.privacy-lion.com';
 
-// Strike API - signedby-demo key (set by Scott)
-const STRIKE_API_KEY = ''; // TODO: Scott sends this separately
+// Strike API - signedby-demo key
+const STRIKE_API_KEY = '4F683B6BDAD5E8ED8A345B47AA3674060B49412A51352BB183B55ABDBCAC92BC';
 
 // State
 let currentSession = null;

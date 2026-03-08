@@ -12,6 +12,6 @@ beta.privacy-lion.com {
 
 acme.beta.privacy-lion.com {
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-	root * /var/www/site
+	root * /var/www/acme-site
 	file_server
 }
