@@ -629,6 +629,7 @@ fun SignedByMeApp(
     var lastSigHex by remember { mutableStateOf("") }
     var lastPrpJson by remember { mutableStateOf("") }
     var lastInvoice by remember { mutableStateOf("") }
+    var lastOperatorInvoice by remember { mutableStateOf("") }  // Step 9.6: 10% fee invoice
     var lastPaymentHash by remember { mutableStateOf("") }
     
     // DLC state
@@ -777,11 +778,19 @@ fun SignedByMeApp(
     }
 
     // Poll for payment when invoice is active
+    // Step 9.6: Use NWC for payment polling (was: breezMgr.isPaymentReceived)
     LaunchedEffect(isPollingPayment, lastPaymentHash) {
         if (isPollingPayment && lastPaymentHash.isNotEmpty()) {
             while (isPollingPayment && !paymentReceived) {
-                val received = breezMgr.isPaymentReceived(lastPaymentHash)
+                // Poll NWC for payment (3 second timeout per poll)
+                val preimage = if (nostrMgr.isNwcConnected()) {
+                    nostrMgr.waitForPayment(lastPaymentHash, timeoutSecs = 3)
+                } else {
+                    null
+                }
+                val received = preimage != null
                 if (received) {
+                    val receivedPreimage = preimage ?: ""  // Store for use below
                     paymentReceived = true
                     isPollingPayment = false
                     isLoginActive = false
@@ -797,7 +806,7 @@ fun SignedByMeApp(
                             lastSettlementReceipt = dlcManager.buildSettlementReceipt(
                                 contract = lastDlcContract!!,
                                 paymentHash = lastPaymentHash,
-                                preimageHex = null, // Would come from payment details
+                                preimageHex = receivedPreimage.ifEmpty { null },  // Step 9.6: real preimage from NWC
                                 attestation = attestation
                             )
                             
@@ -821,7 +830,7 @@ fun SignedByMeApp(
                                     nostrMgr.publishPaymentReceipt(
                                         nonce = loginSession?.nonce ?: lastLoginId,
                                         paymentHash = lastPaymentHash,
-                                        preimageHex = "", // TODO: Get from payment details
+                                        preimageHex = receivedPreimage,  // Step 9.6: real preimage from NWC
                                         amountSats = userAmt
                                     )
                                     
@@ -871,7 +880,7 @@ fun SignedByMeApp(
                         showBackupPrompt = true
                     }
                 }
-                delay(3000) // Poll every 3 seconds
+                // Note: No explicit delay needed - nwcWaitForPayment has 3s timeout
             }
         }
     }
@@ -1057,16 +1066,40 @@ fun SignedByMeApp(
                     
                     // Use amount from login session (set by enterprise in QR/link)
                     val amountSats = loginSession?.amountSats ?: 100UL
+                    val clientId = loginSession?.clientId ?: "demo"
                     
-                    // Create invoice using Breez SDK
-                    val result = breezMgr.createInvoice(
-                        amountSats = amountSats,
-                        description = "SignedByMe Log In: ${loginSession?.enterpriseName ?: "Demo"} - $sessionId"
-                    )
+                    // === Step 9.6: Generate invoices via NWC (90/10 split) ===
+                    var userInvoice: String? = null
+                    var operatorInvoice: String? = null
                     
-                    result.onSuccess { invoice ->
-                        lastInvoice = invoice
-                        lastPaymentHash = breezMgr.extractPaymentHash(invoice)
+                    if (nostrMgr.isNwcConnected()) {
+                        val invoices = nostrMgr.generateLoginInvoices(
+                            totalSats = amountSats.toLong(),
+                            clientId = clientId
+                        )
+                        if (invoices != null) {
+                            userInvoice = invoices.first
+                            operatorInvoice = invoices.second
+                            android.util.Log.i("SignedByMe", "NWC invoices generated: user=${userInvoice.take(30)}..., op=${operatorInvoice.take(30)}...")
+                        } else {
+                            android.util.Log.e("SignedByMe", "NWC invoice generation failed")
+                        }
+                    } else {
+                        android.util.Log.w("SignedByMe", "NWC not connected - cannot generate invoices")
+                    }
+                    
+                    // If NWC failed, we can't proceed
+                    if (userInvoice == null) {
+                        statusMessage = "Error: Could not generate invoice. Check wallet connection."
+                        isCreatingInvoice = false
+                        return@launch
+                    }
+                    
+                    val invoice = userInvoice  // For compatibility with existing code
+                    lastInvoice = invoice
+                    lastOperatorInvoice = operatorInvoice ?: ""
+                    lastPaymentHash = NativeBridge.extractPaymentHashFromBolt11(invoice)
+                    // === End Step 9.6 invoice generation ===
                         isLoginActive = true
                         isPollingPayment = true
                         
@@ -1192,7 +1225,6 @@ fun SignedByMeApp(
                                     val proofHex = membershipBundle?.proofBase64 ?: ""
                                     val merkleRoot = "" // TODO: Extract from proof public outputs
                                     val npub = nostrMgr.getNpub() ?: ""
-                                    val operatorInvoice = "" // TODO: Generate operator invoice via NWC
                                     
                                     scope.launch(Dispatchers.IO) {
                                         nostrMgr.publishProofEvent(
@@ -1201,7 +1233,7 @@ fun SignedByMeApp(
                                             proofHex = proofHex,
                                             merkleRoot = merkleRoot,
                                             userInvoice = invoice,
-                                            operatorInvoice = operatorInvoice
+                                            operatorInvoice = lastOperatorInvoice  // Step 9.6: real operator invoice
                                         )
                                     }
                                 }
@@ -1257,6 +1289,7 @@ fun SignedByMeApp(
             },
             onResetLogin = {
                 lastInvoice = ""
+                lastOperatorInvoice = ""  // Step 9.6
                 lastPaymentHash = ""
                 lastLoginId = ""
                 lastDlcContract = null
