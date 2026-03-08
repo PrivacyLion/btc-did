@@ -29,7 +29,7 @@ use lightning::{Preimage, PaymentRequestPackage, verify_payment};
 /// Simple sanity check
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_helloFromRust(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     env.new_string("Hello from Rust core v3 (Groth16) 👋")
@@ -57,7 +57,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_sha256Hex(
 /// Generate 32-byte secp256k1 private key
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_generateSecp256k1PrivateKey(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
 ) -> jbyteArray {
     match ManagedKey::generate() {
@@ -76,7 +76,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generateSecp256k1Priva
 /// Derive compressed public key hex from private key bytes
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_derivePublicKeyHex(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
     priv_bytes: JByteArray,
 ) -> jstring {
@@ -195,7 +195,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_signDlcOutcome(
 /// Get oracle x-only public key (BIP340 format)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_oraclePubkeyHex(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     env.new_string(dlc_oracle::oracle_pubkey_hex())
@@ -206,7 +206,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_oraclePubkeyHex(
 /// Oracle sign outcome (alias for signDlcOutcome)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleSignOutcome(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
     outcome: JString,
 ) -> jstring {
@@ -262,7 +262,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleVerifyAttestatio
 /// Generate a Lightning preimage and payment hash
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_generatePreimage(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     let preimage = Preimage::generate();
@@ -399,7 +399,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_signSchnorr(
 /// Get x-only public key (for Taproot)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_getXOnlyPubkey(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
     priv_bytes: JByteArray,
 ) -> jstring {

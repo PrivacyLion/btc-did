@@ -37,7 +37,7 @@ static NWC_CLIENT: Lazy<Mutex<Option<super::nwc::NwcClient>>> = Lazy::new(|| Mut
 /// Output: nsec as 32-byte secret key
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_deriveNsecFromLeafSecret(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
     leaf_secret_bytes: JByteArray,
 ) -> jbyteArray {
@@ -73,7 +73,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_deriveNsecFromLeafSecr
 /// Derive npub (bech32) from leaf_secret
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_deriveNpubFromLeafSecret(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
     leaf_secret_bytes: JByteArray,
 ) -> jstring {
@@ -164,7 +164,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_signNostrEvent(
 /// Returns: JSON with { ephemeral_nsec_hex, ephemeral_npub }
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_generateEphemeralNwcKeypair(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     use nostr_sdk::Keys;
@@ -188,7 +188,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generateEphemeralNwcKe
 /// Must be called before connect/publish. Creates the global client instance.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrInitClient(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
     leaf_secret_bytes: JByteArray,
 ) -> jboolean {
@@ -286,7 +286,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrDisconnect(
 /// Get the npub of the current client
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrGetNpub(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     let guard = match NOSTR_CLIENT.lock() {
@@ -619,7 +619,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcMakeInvoice(
 /// Returns: balance as string, or "error:..."
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcGetBalance(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     let guard = match NWC_CLIENT.lock() {
