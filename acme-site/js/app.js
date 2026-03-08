@@ -1,21 +1,26 @@
 /**
  * Acme Corp SignedByMe Integration
  * 
- * Handles:
- * 1. Session creation via POST /v1/session
- * 2. QR code generation
- * 3. Session polling until completion
+ * Flow:
+ * 1. Create login session via POST /v1/login/start
+ * 2. Display QR code with deep link
+ * 3. Subscribe to NOSTR relay for kind 28101 proof events
+ * 4. On proof event: pay invoices via Strike, submit to /v1/login/verify
+ * 5. Display id_token on success
  */
 
 // Configuration
 const API_BASE = 'https://api.beta.privacy-lion.com';
-const API_KEY = 'acme-test-key-2026';
-const REDIRECT_URI = 'https://acme.beta.privacy-lion.com/callback';
-const POLL_INTERVAL = 2000; // 2 seconds
+const RELAY_URL = 'wss://relay.privacy-lion.com';
+const CLIENT_ID = 'acme';
+const DOMAIN = 'acme.beta.privacy-lion.com';
+
+// Strike API - signedby-demo key (set by Scott)
+const STRIKE_API_KEY = ''; // TODO: Scott sends this separately
 
 // State
 let currentSession = null;
-let pollTimer = null;
+let relayWs = null;
 let expireTimer = null;
 let expiresAt = 0;
 
@@ -25,14 +30,18 @@ const qrView = document.getElementById('qr-view');
 const successView = document.getElementById('success-view');
 const signedByBtn = document.getElementById('signedby-btn');
 const backBtn = document.getElementById('back-btn');
-// QR code container (qrcodejs creates elements inside)
 const rewardAmount = document.getElementById('reward-amount');
 const statusText = document.getElementById('status-text');
 const spinner = document.getElementById('spinner');
 const expireTimerEl = document.getElementById('expire-timer');
 
 // Success view elements
-const successDid = document.getElementById('success-did');
+const tokenSub = document.getElementById('token-sub');
+const tokenIss = document.getElementById('token-iss');
+const tokenAud = document.getElementById('token-aud');
+const tokenMembership = document.getElementById('token-membership');
+const tokenPayment = document.getElementById('token-payment');
+const membershipField = document.getElementById('membership-field');
 const payoutAmount = document.getElementById('payout-amount');
 const payoutInfo = document.getElementById('payout-info');
 const payoutError = document.getElementById('payout-error');
@@ -50,15 +59,19 @@ async function startSignedByLogin() {
         signedByBtn.disabled = true;
         signedByBtn.textContent = 'Starting...';
         
-        // Create session
-        const response = await fetch(`${API_BASE}/v1/session`, {
+        // Generate nonce
+        const nonce = crypto.randomUUID();
+        
+        // Create session via /v1/login/start
+        const response = await fetch(`${API_BASE}/v1/login/start`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'X-API-Key': API_KEY
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                redirect_uri: REDIRECT_URI
+                client_id: CLIENT_ID,
+                nonce: nonce,
+                domain: DOMAIN
             })
         });
         
@@ -67,18 +80,27 @@ async function startSignedByLogin() {
             throw new Error(error.detail || 'Failed to create session');
         }
         
-        currentSession = await response.json();
-        console.log('Session created:', currentSession);
+        const data = await response.json();
+        console.log('Session created:', data);
+        
+        // Store session state
+        currentSession = {
+            login_id: data.login_id,
+            nonce: data.nonce,
+            amount_sats: data.pay_terms.amount_sats,
+            expires: data.pay_terms.expires
+        };
         
         // Update UI
         rewardAmount.textContent = currentSession.amount_sats;
-        expiresAt = currentSession.expires_at;
+        expiresAt = currentSession.expires;
         
-        // Generate QR code
+        // Generate QR code with deep link
+        const qrData = `signedby.me://login?login_id=${currentSession.login_id}&nonce=${currentSession.nonce}`;
         const qrContainer = document.getElementById('qr-container');
         qrContainer.innerHTML = ''; // Clear previous
         new QRCode(qrContainer, {
-            text: currentSession.qr_data,
+            text: qrData,
             width: 250,
             height: 250,
             colorDark: '#1a56db',
@@ -89,8 +111,8 @@ async function startSignedByLogin() {
         loginView.classList.add('hidden');
         qrView.classList.remove('hidden');
         
-        // Start polling
-        startPolling();
+        // Subscribe to NOSTR relay for proof events
+        subscribeToRelay(currentSession.nonce);
         
         // Start expire timer
         startExpireTimer();
@@ -111,69 +133,209 @@ async function startSignedByLogin() {
 }
 
 /**
+ * Subscribe to NOSTR relay for proof events
+ */
+function subscribeToRelay(nonce) {
+    closeRelay();
+    
+    console.log('Connecting to relay:', RELAY_URL);
+    relayWs = new WebSocket(RELAY_URL);
+    
+    relayWs.onopen = () => {
+        console.log('Relay connected, subscribing to nonce:', nonce);
+        // Subscribe to kind 28101 events tagged with our nonce
+        const subRequest = JSON.stringify([
+            "REQ", 
+            "login-sub", 
+            { 
+                kinds: [28101],
+                "#e": [nonce]
+            }
+        ]);
+        relayWs.send(subRequest);
+        statusText.textContent = 'Waiting for scan...';
+    };
+    
+    relayWs.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+            console.log('Relay message:', msg);
+            
+            if (msg[0] === 'EVENT' && msg[1] === 'login-sub') {
+                const nostrEvent = msg[2];
+                if (nostrEvent.kind === 28101) {
+                    handleProofEvent(nostrEvent);
+                }
+            } else if (msg[0] === 'EOSE') {
+                console.log('End of stored events');
+            }
+        } catch (error) {
+            console.error('Error parsing relay message:', error);
+        }
+    };
+    
+    relayWs.onerror = (error) => {
+        console.error('Relay error:', error);
+        statusText.textContent = 'Connection error. Retrying...';
+        // Retry after 3 seconds
+        setTimeout(() => {
+            if (currentSession) {
+                subscribeToRelay(currentSession.nonce);
+            }
+        }, 3000);
+    };
+    
+    relayWs.onclose = () => {
+        console.log('Relay connection closed');
+    };
+}
+
+/**
+ * Close relay connection
+ */
+function closeRelay() {
+    if (relayWs) {
+        relayWs.close();
+        relayWs = null;
+    }
+}
+
+/**
+ * Handle proof event from relay
+ */
+async function handleProofEvent(event) {
+    console.log('Proof event received:', event);
+    statusText.textContent = 'Proof received! Processing payment...';
+    spinner.style.borderTopColor = '#059669';
+    
+    try {
+        const content = JSON.parse(event.content);
+        
+        // Extract invoices from proof event
+        const userInvoice = content.user_invoice;      // 90% - pay to user
+        const operatorInvoice = content.operator_invoice; // 10% - pay to operator
+        const proof = content.proof;
+        const publicInputs = content.public_inputs;
+        
+        if (!userInvoice || !operatorInvoice) {
+            throw new Error('Missing invoices in proof event');
+        }
+        
+        // Pay both invoices via Strike
+        statusText.textContent = 'Paying invoices...';
+        
+        const [userPreimage, operatorPreimage] = await Promise.all([
+            payInvoiceViaStrike(userInvoice),
+            payInvoiceViaStrike(operatorInvoice)
+        ]);
+        
+        console.log('Payments complete:', { userPreimage, operatorPreimage });
+        statusText.textContent = 'Verifying proof...';
+        
+        // Submit to /v1/login/verify
+        const verifyResponse = await fetch(`${API_BASE}/v1/login/verify`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                login_id: currentSession.login_id,
+                client_id: CLIENT_ID,
+                proof: proof,
+                public_inputs: publicInputs,
+                user_invoice: userInvoice,
+                operator_invoice: operatorInvoice,
+                user_preimage: userPreimage,
+                operator_preimage: operatorPreimage
+            })
+        });
+        
+        if (!verifyResponse.ok) {
+            const error = await verifyResponse.json();
+            throw new Error(error.detail || 'Verification failed');
+        }
+        
+        const result = await verifyResponse.json();
+        console.log('Verification result:', result);
+        
+        // Success! Close relay and show result
+        closeRelay();
+        stopExpireTimer();
+        showSuccess(result);
+        
+    } catch (error) {
+        console.error('Error handling proof event:', error);
+        statusText.textContent = 'Error: ' + error.message;
+        spinner.style.display = 'none';
+    }
+}
+
+/**
+ * Pay a BOLT11 invoice via Strike API
+ * Returns the payment preimage
+ */
+async function payInvoiceViaStrike(bolt11) {
+    if (!STRIKE_API_KEY) {
+        // For testing without Strike key - simulate payment
+        console.warn('No Strike API key - simulating payment');
+        return 'simulated_preimage_' + Date.now();
+    }
+    
+    // Create payment quote
+    const quoteResponse = await fetch('https://api.strike.me/v1/payment-quotes/lightning', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${STRIKE_API_KEY}`
+        },
+        body: JSON.stringify({
+            lnInvoice: bolt11,
+            sourceCurrency: 'BTC'
+        })
+    });
+    
+    if (!quoteResponse.ok) {
+        const error = await quoteResponse.json();
+        throw new Error(`Strike quote failed: ${error.message || quoteResponse.status}`);
+    }
+    
+    const quote = await quoteResponse.json();
+    console.log('Strike quote:', quote);
+    
+    // Execute payment
+    const payResponse = await fetch(`https://api.strike.me/v1/payment-quotes/${quote.paymentQuoteId}/execute`, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${STRIKE_API_KEY}`
+        }
+    });
+    
+    if (!payResponse.ok) {
+        const error = await payResponse.json();
+        throw new Error(`Strike payment failed: ${error.message || payResponse.status}`);
+    }
+    
+    const payment = await payResponse.json();
+    console.log('Strike payment:', payment);
+    
+    // Return preimage (hex)
+    if (!payment.preimage) {
+        throw new Error('No preimage in Strike response');
+    }
+    
+    return payment.preimage;
+}
+
+/**
  * Cancel login and go back
  */
 function cancelLogin() {
-    stopPolling();
+    closeRelay();
     stopExpireTimer();
     currentSession = null;
     
     qrView.classList.add('hidden');
     loginView.classList.remove('hidden');
-}
-
-/**
- * Start polling for session completion
- */
-function startPolling() {
-    stopPolling();
-    pollSession();
-    pollTimer = setInterval(pollSession, POLL_INTERVAL);
-}
-
-/**
- * Stop polling
- */
-function stopPolling() {
-    if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-    }
-}
-
-/**
- * Poll session status
- */
-async function pollSession() {
-    if (!currentSession) return;
-    
-    try {
-        const response = await fetch(
-            `${API_BASE}/v1/session/${currentSession.session_id}`
-        );
-        
-        if (!response.ok) {
-            console.error('Poll error:', response.status);
-            return;
-        }
-        
-        const status = await response.json();
-        console.log('Session status:', status);
-        
-        if (status.status === 'completed') {
-            stopPolling();
-            stopExpireTimer();
-            showSuccess(status);
-        } else if (status.status === 'expired') {
-            stopPolling();
-            stopExpireTimer();
-            statusText.textContent = 'Session expired. Please try again.';
-            spinner.style.display = 'none';
-        }
-        
-    } catch (error) {
-        console.error('Poll error:', error);
-    }
 }
 
 /**
@@ -209,51 +371,70 @@ function updateExpireTimer() {
     
     if (remaining <= 0) {
         stopExpireTimer();
+        closeRelay();
+        statusText.textContent = 'Session expired. Please try again.';
+        spinner.style.display = 'none';
     }
 }
 
 /**
- * Show success view
+ * Show success view with id_token contents
  */
-function showSuccess(status) {
-    // Format DID for display
-    const did = status.did || 'Unknown';
-    const shortDid = did.length > 40 
-        ? did.substring(0, 20) + '...' + did.substring(did.length - 16)
-        : did;
-    successDid.textContent = shortDid;
+function showSuccess(result) {
+    // Decode id_token (JWT) to show claims
+    const idToken = result.id_token;
+    let claims = {};
     
-    // Handle payout result
-    if (status.payout) {
-        if (status.payout.status === 'success') {
-            payoutAmount.textContent = status.payout.amount_sats || currentSession.amount_sats;
-            payoutInfo.classList.remove('hidden');
-            payoutError.classList.add('hidden');
-        } else if (status.payout.status === 'failed') {
-            payoutErrorMsg.textContent = status.payout.error || 'Payment processing error';
-            payoutError.classList.remove('hidden');
-            payoutInfo.classList.add('hidden');
-        } else {
-            // Skipped or other status
-            payoutInfo.classList.add('hidden');
-            payoutError.classList.add('hidden');
+    try {
+        // Decode JWT payload (middle part)
+        const parts = idToken.split('.');
+        if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1]));
+            claims = payload;
         }
-    } else {
-        // No payout configured
-        payoutInfo.classList.add('hidden');
-        payoutError.classList.add('hidden');
+    } catch (e) {
+        console.error('Error decoding JWT:', e);
     }
+    
+    // Display token claims
+    tokenSub.textContent = claims.sub || 'Unknown';
+    tokenIss.textContent = claims.iss || API_BASE;
+    tokenAud.textContent = claims.aud || CLIENT_ID;
+    
+    // Membership claims (if present)
+    if (claims.membership_root) {
+        tokenMembership.textContent = `Root: ${claims.membership_root.substring(0, 16)}...`;
+        membershipField.classList.remove('hidden');
+    } else {
+        membershipField.classList.add('hidden');
+    }
+    
+    // Payment proof
+    if (claims.payment_hash) {
+        tokenPayment.textContent = claims.payment_hash.substring(0, 32) + '...';
+    } else {
+        tokenPayment.textContent = 'Verified ✓';
+    }
+    
+    // Handle payout display
+    const amountPaid = currentSession?.amount_sats || 100;
+    payoutAmount.textContent = amountPaid;
+    payoutInfo.classList.remove('hidden');
+    payoutError.classList.add('hidden');
     
     // Show success view
     qrView.classList.add('hidden');
     successView.classList.remove('hidden');
 }
 
-// Handle page visibility (pause/resume polling)
+// Handle page visibility (pause/resume relay)
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-        stopPolling();
-    } else if (currentSession && qrView.classList.contains('hidden') === false) {
-        startPolling();
+        // Could pause relay here if needed
+    } else if (currentSession && !qrView.classList.contains('hidden')) {
+        // Reconnect if disconnected
+        if (!relayWs || relayWs.readyState !== WebSocket.OPEN) {
+            subscribeToRelay(currentSession.nonce);
+        }
     }
 });

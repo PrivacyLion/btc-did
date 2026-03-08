@@ -75,7 +75,30 @@
         <div id="success-view" class="card hidden">
             <div class="success-icon">✓</div>
             <h2>Welcome to Acme Corp!</h2>
-            <p class="success-did" id="success-did"></p>
+            
+            <div class="token-display" id="token-display">
+                <h3>🔐 ID Token Claims</h3>
+                <div class="token-field">
+                    <label>Subject (npub)</label>
+                    <div class="value" id="token-sub"></div>
+                </div>
+                <div class="token-field">
+                    <label>Issuer</label>
+                    <div class="value truncated" id="token-iss"></div>
+                </div>
+                <div class="token-field">
+                    <label>Client</label>
+                    <div class="value" id="token-aud"></div>
+                </div>
+                <div class="token-field" id="membership-field">
+                    <label>Membership</label>
+                    <div class="value" id="token-membership"></div>
+                </div>
+                <div class="token-field">
+                    <label>Payment Proof</label>
+                    <div class="value truncated" id="token-payment"></div>
+                </div>
+            </div>
             
             <div class="payout-info" id="payout-info">
                 <span class="lightning-icon">⚡</span>

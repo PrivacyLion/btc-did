@@ -341,6 +341,48 @@ body {
     background: var(--acme-blue-dark);
 }
 
+/* Token Display */
+.token-display {
+    background: var(--bg-light);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.token-display h3 {
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.token-field {
+    margin-bottom: 8px;
+}
+
+.token-field label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}
+
+.token-field .value {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.token-field .value.truncated {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Responsive */
 @media (max-width: 480px) {
     .card {
