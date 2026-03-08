@@ -2,7 +2,7 @@
 // Constructs Taproot-based DLC contracts with 90/10 payout splits
 
 use anyhow::{Result, anyhow};
-use bitcoin::secp256k1::{Secp256k1, SecretKey, PublicKey, Keypair, XOnlyPublicKey, Message};
+use bitcoin::secp256k1::{Secp256k1, SecretKey, PublicKey, XOnlyPublicKey, Message};
 use bitcoin::secp256k1::schnorr::Signature as SchnorrSignature;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};

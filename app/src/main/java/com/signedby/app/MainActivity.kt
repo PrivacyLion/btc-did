@@ -249,11 +249,11 @@ class MainActivity : FragmentActivity() {
                 sessionId = payload.optString("session_id", ""),
                 enterpriseName = payload.optString("enterprise_name", "Unknown"),
                 amountSats = payload.optLong("amount_sats", 100).toULong(),
-                nonce = payload.optString("nonce", null),
+                nonce = payload.optString("nonce", "").ifEmpty { null },
                 expiresAt = if (payload.has("expires_at")) payload.optLong("expires_at") else null,
                 // Membership fields (v4)
-                clientId = payload.optString("client_id", null),
-                requiredRootId = payload.optString("required_root_id", null),
+                clientId = payload.optString("client_id", "").ifEmpty { null },
+                requiredRootId = payload.optString("required_root_id", "").ifEmpty { null },
                 purposeId = payload.optInt("purpose_id", 0)
             )
         } catch (e: Exception) {
@@ -2743,7 +2743,7 @@ fun LoginScreen(
                                 sessionId = payload.optString("session_id", ""),
                                 enterpriseName = payload.optString("enterprise_name", "Unknown"),
                                 amountSats = payload.optLong("amount_sats", 100).toULong(),
-                                nonce = payload.optString("nonce", null),
+                                nonce = payload.optString("nonce", "").ifEmpty { null },
                                 expiresAt = if (payload.has("expires_at")) payload.optLong("expires_at") else null
                             ))
                             return@QrScannerDialog

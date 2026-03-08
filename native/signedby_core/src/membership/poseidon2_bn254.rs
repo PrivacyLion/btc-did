@@ -14,8 +14,7 @@
 //! - CLI subcommand for hash computation
 
 use ark_bn254::Fr as BN254Scalar;
-use ark_ff::{BigInteger, Field, PrimeField};
-use std::str::FromStr;
+use ark_ff::{BigInteger, PrimeField};
 
 /// Poseidon2 configuration for membership proofs
 /// Width-16 state, 4 full + 14 partial + 4 full rounds

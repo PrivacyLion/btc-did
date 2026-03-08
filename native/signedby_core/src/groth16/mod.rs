@@ -11,10 +11,8 @@
 
 use ark_bn254::{Bn254, Fr, G1Affine, G2Affine};
 use ark_ff::PrimeField;
-use ark_groth16::{Groth16, Proof, ProvingKey};
-use ark_snark::SNARK;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::rand::thread_rng;
+use ark_groth16::{Proof, ProvingKey};
+use ark_serialize::CanonicalDeserialize;
 use std::path::Path;
 use thiserror::Error;
 
@@ -176,6 +174,7 @@ pub struct ProofResult {
 }
 
 /// Convert ark proof to snarkjs JSON format
+#[allow(dead_code)]
 fn proof_to_snarkjs_json(proof: &Proof<Bn254>) -> Result<String, ProverError> {
     // Format matches snarkjs output
     let json = serde_json::json!({
@@ -191,6 +190,7 @@ fn proof_to_snarkjs_json(proof: &Proof<Bn254>) -> Result<String, ProverError> {
 }
 
 /// Convert G1 point to snarkjs string array
+#[allow(dead_code)]
 fn g1_to_strings(point: &G1Affine) -> Vec<String> {
     vec![
         point.x.to_string(),
@@ -200,6 +200,7 @@ fn g1_to_strings(point: &G1Affine) -> Vec<String> {
 }
 
 /// Convert G2 point to snarkjs string array
+#[allow(dead_code)]
 fn g2_to_strings(point: &G2Affine) -> Vec<Vec<String>> {
     vec![
         vec![point.x.c0.to_string(), point.x.c1.to_string()],
@@ -209,6 +210,7 @@ fn g2_to_strings(point: &G2Affine) -> Vec<Vec<String>> {
 }
 
 /// Convert public inputs to JSON array
+#[allow(dead_code)]
 fn public_inputs_to_json(inputs: &[Fr]) -> Result<String, ProverError> {
     let strings: Vec<String> = inputs.iter()
         .map(|f| format!("{}", f.into_bigint()))

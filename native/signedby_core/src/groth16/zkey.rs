@@ -12,10 +12,9 @@
 //! 
 //! Future: implement full .zkey parser for runtime loading.
 
-use ark_bn254::{Bn254, Fr, G1Affine, G2Affine};
+use ark_bn254::Bn254;
 use ark_groth16::ProvingKey;
 use ark_serialize::CanonicalDeserialize;
-use std::io::Read;
 use std::path::Path;
 use thiserror::Error;
 

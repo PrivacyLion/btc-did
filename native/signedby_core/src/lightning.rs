@@ -4,8 +4,8 @@
 use anyhow::{Result, anyhow};
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
-use bitcoin::secp256k1::{Secp256k1, SecretKey, PublicKey};
+use std::time::{SystemTime, UNIX_EPOCH};
+// secp256k1 imports removed - unused
 
 /// A Lightning payment hash (32 bytes)
 #[derive(Debug, Clone, Serialize, Deserialize)]

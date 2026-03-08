@@ -15,7 +15,7 @@
 
 use anyhow::{Result, anyhow};
 use ark_bn254::Fr;
-use ark_ff::{BigInteger, PrimeField};
+use ark_ff::PrimeField;
 use nostr_sdk::prelude::*;
 
 /// Poseidon2 constants for BN254 (width-3 for nsec derivation)
