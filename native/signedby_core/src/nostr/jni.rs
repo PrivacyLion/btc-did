@@ -37,7 +37,7 @@ static NWC_CLIENT: Lazy<Mutex<Option<super::nwc::NwcClient>>> = Lazy::new(|| Mut
 /// Output: nsec as 32-byte secret key
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_deriveNsecFromLeafSecret(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     leaf_secret_bytes: JByteArray,
 ) -> jbyteArray {
@@ -73,7 +73,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_deriveNsecFromLeafSecr
 /// Derive npub (bech32) from leaf_secret
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_deriveNpubFromLeafSecret(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     leaf_secret_bytes: JByteArray,
 ) -> jstring {
@@ -110,7 +110,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_deriveNpubFromLeafSecr
 /// Output: Schnorr signature (64 bytes hex)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_signNostrEvent(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     leaf_secret_bytes: JByteArray,
     event_content: JString,
@@ -164,7 +164,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_signNostrEvent(
 /// Returns: JSON with { ephemeral_nsec_hex, ephemeral_npub }
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_generateEphemeralNwcKeypair(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     use nostr_sdk::Keys;
@@ -188,7 +188,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generateEphemeralNwcKe
 /// Must be called before connect/publish. Creates the global client instance.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrInitClient(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     leaf_secret_bytes: JByteArray,
 ) -> jboolean {
@@ -286,7 +286,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrDisconnect(
 /// Get the npub of the current client
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrGetNpub(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     let guard = match NOSTR_CLIENT.lock() {
@@ -305,7 +305,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrGetNpub(
 /// Returns: event ID (hex) on success, "error:..." on failure
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPublishProofEvent(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     nonce: JString,
     client_id: JString,
@@ -392,7 +392,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPublishProofEvent
 /// Returns: event ID (hex) on success, "error:..." on failure
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPublishPaymentReceipt(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     nonce: JString,
     payment_hash: JString,
@@ -444,7 +444,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPublishPaymentRec
 /// Returns: event ID (hex) on success, "error:..." on failure
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPublishLoginComplete(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     nonce: JString,
     client_id: JString,
@@ -492,7 +492,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPublishLoginCompl
 /// Connection string format: nostr+walletconnect://pubkey?relay=wss://...&secret=...
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcInit(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     connection_string: JString,
 ) -> jboolean {
@@ -547,7 +547,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcConnect(
 /// Returns: JSON with { user_invoice, operator_invoice } or error
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcGenerateLoginInvoices(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     total_sats: jlong,
     client_id: JString,
@@ -587,7 +587,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcGenerateLoginInvoic
 /// Returns: BOLT11 invoice string or "error:..."
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcMakeInvoice(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     amount_sats: jlong,
     description: JString,
@@ -619,7 +619,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcMakeInvoice(
 /// Returns: balance as string, or "error:..."
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcGetBalance(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     let guard = match NWC_CLIENT.lock() {
@@ -643,7 +643,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcGetBalance(
 /// Returns: preimage hex on success, "error:..." on failure/timeout
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_nwcWaitForPayment(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     payment_hash: JString,
     timeout_secs: jlong,

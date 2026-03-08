@@ -1,7 +1,7 @@
 // lib.rs - SignedByMe Core Library
 // Implements KeyManager, DLC Builder, Lightning payments, and Groth16 membership proofs
 
-use anyhow::anyhow;
+// anyhow removed - unused in JNI functions
 use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jbyteArray, jstring, jlong, jboolean};
 use jni::JNIEnv;
@@ -29,7 +29,7 @@ use lightning::{Preimage, PaymentRequestPackage, verify_payment};
 /// Simple sanity check
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_helloFromRust(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     env.new_string("Hello from Rust core v3 (Groth16) 👋")
@@ -40,7 +40,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_helloFromRust(
 /// SHA-256 helper
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_sha256Hex(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     input: JString,
 ) -> jstring {
@@ -57,7 +57,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_sha256Hex(
 /// Generate 32-byte secp256k1 private key
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_generateSecp256k1PrivateKey(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
 ) -> jbyteArray {
     match ManagedKey::generate() {
@@ -76,7 +76,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generateSecp256k1Priva
 /// Derive compressed public key hex from private key bytes
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_derivePublicKeyHex(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     priv_bytes: JByteArray,
 ) -> jstring {
@@ -94,7 +94,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_derivePublicKeyHex(
 /// Sign message with secp256k1 key (DER sig hex)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_signMessageDerHex(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     priv_bytes: JByteArray,
     msg_jstr: JString,
@@ -127,7 +127,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_signMessageDerHex(
 /// Create a DLC contract
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_createDlcContract(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     outcome: JString,
     payouts_json: JString,
@@ -180,7 +180,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_createDlcContract(
 /// Sign a DLC outcome with real Schnorr signature
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_signDlcOutcome(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     outcome: JString,
 ) -> jstring {
@@ -195,7 +195,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_signDlcOutcome(
 /// Get oracle x-only public key (BIP340 format)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_oraclePubkeyHex(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     env.new_string(dlc_oracle::oracle_pubkey_hex())
@@ -206,7 +206,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_oraclePubkeyHex(
 /// Oracle sign outcome (alias for signDlcOutcome)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleSignOutcome(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     outcome: JString,
 ) -> jstring {
@@ -216,7 +216,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleSignOutcome(
 /// Acknowledge oracle signing policy for a contract
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleAcknowledgePolicy(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     outcome: JString,
     contract_id: JString,
@@ -235,7 +235,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleAcknowledgePolic
 /// Verify an oracle attestation signature
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleVerifyAttestation(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     outcome: JString,
     signature_hex: JString,
@@ -262,7 +262,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleVerifyAttestatio
 /// Generate a Lightning preimage and payment hash
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_generatePreimage(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
 ) -> jstring {
     let preimage = Preimage::generate();
@@ -276,7 +276,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_generatePreimage(
 /// Verify a payment (preimage against payment hash)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_verifyPayment(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     payment_hash: JString,
     preimage_hex: JString,
@@ -296,7 +296,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_verifyPayment(
 /// Extract payment hash from a BOLT11 invoice
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_extractPaymentHashFromBolt11(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     bolt11: JString,
 ) -> jstring {
@@ -324,7 +324,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_extractPaymentHashFrom
 /// Create a Payment Request Package (PRP)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_createPrp(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     amount_sats: jlong,
     description: JString,
@@ -370,7 +370,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_createPrp(
 /// Sign a message with Schnorr (for Taproot/DLC)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_signSchnorr(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     priv_bytes: JByteArray,
     msg_jstr: JString,
@@ -399,7 +399,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_signSchnorr(
 /// Get x-only public key (for Taproot)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_getXOnlyPubkey(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _clazz: JClass,
     priv_bytes: JByteArray,
 ) -> jstring {
