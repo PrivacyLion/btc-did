@@ -1260,7 +1260,7 @@ fun SignedByMeApp(
                         if (proofSuccess) {
                             android.util.Log.i("SignedByMe", "Groth16 proof generated successfully")
                         } else {
-                            android.util.Log.w("SignedByMe", "Groth16 proof: ${groth16Json.optString("error", "stub")}")
+                            android.util.Log.w("SignedByMe", "Groth16 proof: ${groth16Json.optString("error", "unknown")}")
                         }
 
                         // NOTE: Enrollment is handled by Phase 10 (B2C Enrollment API)

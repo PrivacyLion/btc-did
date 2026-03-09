@@ -241,7 +241,7 @@ class DidWalletManager(private val context: Context) {
         return try {
             NativeBridge.generateStwoProof(circuit, inputHashHex, outputHashHex)
         } catch (t: Throwable) {
-            """{"status":"stub","fn":"generate_stwo_proof","error":"${t.message ?: "not implemented"}"}"""
+            """{"status":"error","fn":"generate_stwo_proof","error":"${t.message ?: "not implemented"}"}"""
         }
     }
 
@@ -249,7 +249,7 @@ class DidWalletManager(private val context: Context) {
         return try {
             NativeBridge.createDlcContract(outcome, payoutsJson, oracleJson)
         } catch (t: Throwable) {
-            """{"status":"stub","fn":"create_dlc_contract","error":"${t.message ?: "not implemented"}"}"""
+            """{"status":"error","fn":"create_dlc_contract","error":"${t.message ?: "not implemented"}"}"""
         }
     }
 
@@ -257,7 +257,7 @@ class DidWalletManager(private val context: Context) {
         return try {
             NativeBridge.signDlcOutcome(outcome)
         } catch (t: Throwable) {
-            """{"status":"stub","fn":"sign_dlc_outcome","error":"${t.message ?: "not implemented"}"}"""
+            """{"status":"error","fn":"sign_dlc_outcome","error":"${t.message ?: "not implemented"}"}"""
         }
     }
 
@@ -456,9 +456,9 @@ class DidWalletManager(private val context: Context) {
         
         // Check prover ready
         if (!NativeBridge.isProverReady()) {
-            android.util.Log.e("SignedByMe", "Groth16 prover not ready - returning stub proof")
+            android.util.Log.e("SignedByMe", "Groth16 prover not ready - proof generation failed")
             android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof FAILED (prover not ready) at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
-            return stubGroth16Proof("Prover not initialized")
+            return proofError("Prover not initialized")
         }
 
         // Load leaf secret
@@ -466,7 +466,7 @@ class DidWalletManager(private val context: Context) {
         if (leafSecret == null) {
             android.util.Log.e("SignedByMe", "No leaf secret for Groth16 proof")
             android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof FAILED (no leaf_secret) at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
-            return stubGroth16Proof("No leaf_secret")
+            return proofError("No leaf_secret")
         }
         android.util.Log.i("SignedByMe", "[TIMING] Leaf secret loaded at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
 
@@ -476,7 +476,7 @@ class DidWalletManager(private val context: Context) {
             android.util.Log.e("SignedByMe", "No witness for $clientId/$rootId")
             java.util.Arrays.fill(leafSecret, 0.toByte())
             android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof FAILED (no witness) at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
-            return stubGroth16Proof("No witness for $clientId/$rootId")
+            return proofError("No witness for $clientId/$rootId")
         }
         android.util.Log.i("SignedByMe", "[TIMING] Witness loaded at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
 
@@ -499,7 +499,7 @@ class DidWalletManager(private val context: Context) {
             android.util.Log.e("SignedByMe", "Groth16 proof failed: ${e.message}")
             e.printStackTrace()
             android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof EXCEPTION at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
-            stubGroth16Proof(e.message ?: "Unknown error")
+            proofError(e.message ?: "Unknown error")
         } finally {
             java.util.Arrays.fill(leafSecret, 0.toByte())
         }
@@ -530,7 +530,7 @@ class DidWalletManager(private val context: Context) {
         return if (witness != null) {
             generateGroth16Proof(clientId, rootId)
         } else {
-            stubGroth16Proof("Could not fetch witness")
+            proofError("Could not fetch witness")
         }
     }
 
@@ -642,16 +642,14 @@ class DidWalletManager(private val context: Context) {
     }
 
     /**
-     * Return a stub proof for testing when real proving isn't available.
-     * Clearly marked as invalid for production verification.
+     * Return a proper error response when proof generation fails.
+     * No stubs - callers must handle the error.
      */
-    private fun stubGroth16Proof(reason: String): String {
-        android.util.Log.w("SignedByMe", "Using STUB Groth16 proof: $reason")
+    private fun proofError(reason: String): String {
+        android.util.Log.e("SignedByMe", "Proof generation failed: $reason")
         return org.json.JSONObject().apply {
             put("success", false)
-            put("stub", true)
             put("error", reason)
-            put("message", "Real Groth16 proof generation not available. Need witness calculator for Android.")
         }.toString()
     }
     
@@ -1494,20 +1492,29 @@ class DidWalletManager(private val context: Context) {
      * @param purpose Membership purpose (default: "allowlist")
      * @return EnrollmentData on success, null on failure
      */
+    /**
+     * Direct enrollment (for enterprises with auto_approve policy).
+     * 
+     * NOTE: Does NOT send DID to server - only the leaf_commitment hash.
+     * Server returns enrollment_id which we store locally.
+     * 
+     * @param apiBaseUrl Base URL of the API
+     * @param apiKey Enterprise API key
+     * @param purpose Enrollment purpose (default: allowlist)
+     * @return EnrollmentData on success, null on failure
+     */
     suspend fun enrollMembership(
         apiBaseUrl: String,
         apiKey: String,
-        did: String,
         purpose: String = "allowlist"
     ): EnrollmentData? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         try {
             // Get or generate leaf commitment
             val leafCommitment = getLeafCommitment() ?: return@withContext null
 
-            // Build request
+            // Build request - NO DID sent to server (Bible requirement)
             val requestBody = org.json.JSONObject().apply {
                 put("leaf_commitment", leafCommitment)
-                put("did", did)
                 put("purpose", purpose)
             }
 
@@ -1535,10 +1542,11 @@ class DidWalletManager(private val context: Context) {
             val response = conn.inputStream.bufferedReader().readText()
             val json = org.json.JSONObject(response)
 
+            // Server no longer returns enrollment_token (Phase 8 cleanup)
             val enrollment = EnrollmentData(
                 enrollmentId = json.getString("enrollment_id"),
-                enrollmentToken = json.getString("enrollment_token"),
-                enrollmentTokenExpiresAt = json.getLong("enrollment_token_expires_at"),
+                enrollmentToken = "",  // Not used anymore
+                enrollmentTokenExpiresAt = 0,  // Not used anymore
                 clientId = json.getString("client_id"),
                 purpose = json.getString("purpose"),
                 status = json.getString("status"),
@@ -1548,7 +1556,7 @@ class DidWalletManager(private val context: Context) {
             // Store locally
             storeEnrollment(enrollment)
 
-            android.util.Log.i("SignedByMe", "Membership enrollment successful: ${enrollment.enrollmentId}")
+            android.util.Log.i("SignedByMe", "Enrollment complete: ${enrollment.enrollmentId}")
             enrollment
         } catch (e: Exception) {
             android.util.Log.e("SignedByMe", "Enrollment failed: ${e.message}")

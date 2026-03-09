@@ -275,7 +275,7 @@ class DlcManager {
      * Called after payment is confirmed to complete the DLC.
      * 
      * In production, this would call the SignedByMe oracle API.
-     * For now, we use the local oracle stub.
+     * For now, we use the local oracle (temporary).
      * 
      * @param outcome The outcome to sign (e.g., "auth_verified")
      * @return Oracle attestation with Schnorr signature
