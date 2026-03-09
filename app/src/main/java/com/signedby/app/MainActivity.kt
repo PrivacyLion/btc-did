@@ -949,19 +949,8 @@ fun SignedByMeApp(
                             val sessionAmount = loginSession?.amountSats?.toLong() ?: 100L
                             val enterpriseDomain = loginSession?.enterpriseName ?: "demo.signedby.me"
                             
-                            val stwoproof = try {
-                                didMgr.generateLoginProofV3(
-                                    walletAddress = walletAddress,
-                                    paymentHashHex = lastPaymentHash,
-                                    amountSats = sessionAmount,
-                                    eaDomain = enterpriseDomain,
-                                    nonceHex = sessionNonce,
-                                    expiryMinutes = 5
-                                )
-                            } catch (e: Exception) {
-                                android.util.Log.e("SignedByMe", "Failed to generate v3 login proof: ${e.message}")
-                                null
-                            }
+                            // STWO removed in Phase 6 - using Groth16 for membership proofs now
+                            val stwoproof: String? = null
                             
                             val dlcContract = try {
                                 dlcManager.buildAuthContract(
