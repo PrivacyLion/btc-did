@@ -96,7 +96,7 @@ class NostrManager(private val context: Context) {
             // Get npub from the initialized client
             val npub = NativeBridge.nostrGetNpub()
             if (npub.isEmpty() || npub.startsWith("error:")) {
-                Log.e(TAG, "Failed to get npub: $npub")
+                Log.e(TAG, "Failed to get npub: ${npub.take(20)}")
                 null
             } else {
                 currentNpub = npub

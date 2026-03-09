@@ -501,7 +501,7 @@ private fun sendInvoiceToApiWithDlc(
         
         conn.disconnect()
         
-        android.util.Log.i("SignedByMe", "API response: $responseCode - $responseBody")
+        android.util.Log.i("SignedByMe", "API response: $responseCode")
         
         if (responseCode in 200..299) {
             ApiResult(success = true, responseBody = responseBody)

@@ -633,7 +633,7 @@ class DidWalletManager(private val context: Context) {
         android.util.Log.i("SignedByMe", "[DEBUG] GROTH16 INPUT JSON (circuit-ready format):")
         android.util.Log.i("SignedByMe", json)
         android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
-        android.util.Log.i("SignedByMe", "[DEBUG] leaf_secret[5]: $leafSecretArray")
+        // PII: leaf_secret logging removed
         android.util.Log.i("SignedByMe", "[DEBUG] siblings count: ${witness.siblings.size}")
         android.util.Log.i("SignedByMe", "[DEBUG] path_bits count: ${witness.pathBits.size}")
         android.util.Log.i("SignedByMe", "═══════════════════════════════════════════════════════════════")
@@ -749,7 +749,7 @@ class DidWalletManager(private val context: Context) {
         // Calculate expiry timestamp
         val expiresAt = System.currentTimeMillis() / 1000 + (expiryMinutes * 60)
         
-        android.util.Log.i("DidWalletManager", "generateLoginProofV4 called: client=$clientId, session=$sessionId, wallet=$walletAddress, amount=$amountSats")
+        android.util.Log.i("DidWalletManager", "generateLoginProofV4 called: client=$clientId, session=$sessionId, wallet=<redacted>, amount=$amountSats")
         
         return try {
             val hasReal = NativeBridge.hasRealStwo()
@@ -806,7 +806,7 @@ class DidWalletManager(private val context: Context) {
         // Calculate expiry timestamp
         val expiresAt = System.currentTimeMillis() / 1000 + (expiryMinutes * 60)
         
-        android.util.Log.i("DidWalletManager", "generateLoginProofV3 called: wallet=$walletAddress, paymentHash=$paymentHashHex, amount=$amountSats, domain=$eaDomain")
+        android.util.Log.i("DidWalletManager", "generateLoginProofV3 called: wallet=<redacted>, paymentHash=$paymentHashHex, amount=$amountSats, domain=$eaDomain")
         
         return try {
             val hasReal = NativeBridge.hasRealStwo()
@@ -856,7 +856,7 @@ class DidWalletManager(private val context: Context) {
         val did = getPublicDID() ?: throw IllegalStateException("No DID created")
         val didPubkeyHex = did.removePrefix("did:btcr:")
         
-        android.util.Log.i("DidWalletManager", "generateLoginProof called: wallet=$walletAddress, paymentHash=$paymentHashHex")
+        android.util.Log.i("DidWalletManager", "generateLoginProof called: wallet=<redacted>, paymentHash=$paymentHashHex")
         
         return try {
             val hasReal = NativeBridge.hasRealStwo()
