@@ -198,7 +198,7 @@ signedby/
 | Component | Technology |
 |-----------|------------|
 | Mobile App | Kotlin + Jetpack Compose |
-| Lightning Wallet | NWC (NIP-47) + Strike |
+| Lightning Wallet | NWC (NIP-47) + Lightning |
 | ZK Proofs | Groth16 (circom + rapidsnark) |
 | Native Crypto | Rust + secp256k1 + ark-groth16 |
 | Audit Trail | NOSTR (kinds 28101-28103) |
@@ -212,7 +212,7 @@ signedby/
 - ✅ Groth16 proofs working (2.5s on Pixel 8)
 - ✅ Merkle membership proofs (depth 20, ~1M leaves)
 - ✅ NOSTR audit trail (strfry relay deployed)
-- ✅ NWC wallet integration (Strike-backed)
+- ✅ NWC wallet integration (Lightning/NWC)
 - ✅ Server-side Groth16 verifier (~5ms)
 - ✅ OIDC endpoints (discovery + JWKS)
 - ✅ Stateless login API (`POST /v1/login/verify`)
