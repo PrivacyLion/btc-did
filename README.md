@@ -186,7 +186,7 @@ signedby/
 │   ├── src/main/java/.../        # Android Kotlin code
 │   │   ├── MainActivity.kt       # Main UI + onboarding
 │   │   ├── DidWalletManager.kt   # DID + Groth16 proof management
-│   │   ├── NwcWalletManager.kt   # NWC wallet (Strike-backed)
+│   │   ├── NwcWalletManager.kt   # NWC wallet (Lightning/NWC)
 │   │   ├── NostrManager.kt       # NOSTR client + NWC integration
 │   │   ├── DlcManager.kt         # DLC settlement (preimage-based)
 │   │   └── NativeBridge.kt       # Rust JNI bindings
