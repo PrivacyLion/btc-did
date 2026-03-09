@@ -68,6 +68,7 @@ class NwcWalletManager(private val context: Context) {
     
     /**
      * Store the NWC connection string securely
+     * WARNING: This does Keystore I/O. Use storeNwcConnectionStringAsync() from coroutines.
      * 
      * @param connectionString The nostr+walletconnect:// URI from Strike
      */
@@ -87,6 +88,13 @@ class NwcWalletManager(private val context: Context) {
             .apply()
         
         Log.i(TAG, "NWC connection string stored securely")
+    }
+    
+    /**
+     * Async version of storeNwcConnectionString() - use from coroutines to avoid StrictMode violations
+     */
+    suspend fun storeNwcConnectionStringAsync(connectionString: String) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        storeNwcConnectionString(connectionString)
     }
     
     /**

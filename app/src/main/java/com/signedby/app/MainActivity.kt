@@ -277,10 +277,6 @@ data class LoginSession(
 private const val API_BASE_URL = "https://api.beta.privacy-lion.com"
 private const val STRIKE_API_BASE = "https://api.strike.me"
 
-// Membership enrollment API key (beta - treated as public, scoped via clients.json)
-// Production: will be passed via QR/deep link with short-lived tokens
-private const val MEMBERSHIP_API_KEY = "acme-test-key-2026"
-
 /**
  * Send the Lightning invoice to the API (stateless flow).
  * 
@@ -1231,14 +1227,19 @@ fun SignedByMeApp(
             },
             onStrikeCallbackReceived = { nwcConnectionString ->
                 // Called when deep link callback returns with NWC connection string
-                scope.launch {
+                scope.launch(Dispatchers.IO) {
                     try {
-                        nwcMgr.storeNwcConnectionString(nwcConnectionString)
-                        step2Complete = true
-                        awaitingEmailVerification = false
-                        statusMessage = "Wallet connected!"
+                        nwcMgr.storeNwcConnectionStringAsync(nwcConnectionString)
+                        withContext(Dispatchers.Main) {
+                            step2Complete = true
+                            walletConnected = true
+                            awaitingEmailVerification = false
+                            statusMessage = "Wallet connected!"
+                        }
                     } catch (e: Exception) {
-                        walletOnboardingError = "Failed to save wallet: ${e.message}"
+                        withContext(Dispatchers.Main) {
+                            walletOnboardingError = "Failed to save wallet: ${e.message}"
+                        }
                     }
                 }
             },
@@ -1262,22 +1263,9 @@ fun SignedByMeApp(
                             android.util.Log.w("SignedByMe", "Groth16 proof: ${groth16Json.optString("error", "stub")}")
                         }
 
-                        // Auto-enroll for membership if not already enrolled
-                        if (!didMgr.hasEnrollment()) {
-                            try {
-                                val enrollment = didMgr.enrollMembership(
-                                    apiBaseUrl = API_BASE_URL,
-                                    apiKey = MEMBERSHIP_API_KEY,
-                                    did = did!!,
-                                    purpose = "allowlist"
-                                )
-                                if (enrollment != null) {
-                                    android.util.Log.i("SignedByMe", "Auto-enrolled for membership: ${enrollment.enrollmentId}")
-                                }
-                            } catch (e: Exception) {
-                                android.util.Log.w("SignedByMe", "Membership enrollment error (non-blocking): ${e.message}")
-                            }
-                        }
+                        // NOTE: Enrollment is handled by Phase 10 (B2C Enrollment API)
+                        // The server generates witnesses after enrollment verification.
+                        // No client-side auto-enrollment.
 
                         withContext(Dispatchers.Main) {
                             step3Complete = true
