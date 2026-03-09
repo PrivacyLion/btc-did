@@ -1540,6 +1540,25 @@ fun OnboardingScreen(
                                 color = Color(0xFF3B82F6),
                                 strokeWidth = 2.dp
                             )
+                            
+                            // DEV BYPASS - Remove before production build
+                            if (BuildConfig.DEBUG) {
+                                Spacer(modifier = Modifier.height(24.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        // Simulate successful deep link callback with test NWC string
+                                        // Same format as NostrManager.kt dev string
+                                        val devNwcString = "nostr+walletconnect://0f556eb33d73b6a93b88ecff855dacefed2da1036d0842091e974e27fbca3b20?relay=wss://relay.privacy-lion.com&secret=f954e9f1a590fdfecff0c30d198eaa8e475763561c61cff258bc8d59dcc45d37"
+                                        onStrikeCallbackReceived(devNwcString)
+                                    },
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color(0xFFEF4444)
+                                    ),
+                                    border = BorderStroke(1.dp, Color(0xFFEF4444))
+                                ) {
+                                    Text("Skip (dev)", fontSize = 12.sp)
+                                }
+                            }
                         }
                     } else {
                         // Strike wallet onboarding form
