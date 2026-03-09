@@ -521,10 +521,7 @@ class DidWalletManager(private val context: Context) {
         // If not found, try to fetch from API
         if (witness == null) {
             android.util.Log.i("SignedByMe", "Fetching witness from API for $clientId/$rootId")
-            val did = getPublicDID()
-            if (did != null) {
-                witness = fetchWitness(apiBaseUrl, apiKey, did, "allowlist", rootId)
-            }
+            witness = fetchWitness(apiBaseUrl, apiKey)
         }
 
         return if (witness != null) {
