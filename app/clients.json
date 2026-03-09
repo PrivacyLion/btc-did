@@ -2,7 +2,9 @@
   "test-client": {
     "api_key": "test-secret-key-12345",
     "name": "Test Client",
-    "auto_approve": true,
+    "membership_policy": {
+      "auto_approve": true
+    },
     "purposes": ["age_18_plus", "kyc_basic"]
   }
 }
