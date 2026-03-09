@@ -320,7 +320,7 @@ def get_or_create_tree(client_id: str, purpose: str) -> dict:
     return tree
 
 
-def insert_leaf_incremental(client_id: str, purpose: str, leaf_commitment: str) -> tuple[int, str, list]:
+def insert_leaf_incremental(client_id: str, purpose: str, leaf_commitment: str) -> tuple[int, str, list, str]:
     """
     Insert a leaf into the incremental Merkle tree.
     
@@ -368,7 +368,18 @@ def insert_leaf_incremental(client_id: str, purpose: str, leaf_commitment: str) 
     # Add root to history
     add_root_to_history(tree_id, new_root, leaf_index)
     
-    return leaf_index, new_root, siblings
+    # Create/update merkle_roots entry (needed for witness FK)
+    root_id = f"{tree_id}-{leaf_index}"
+    create_root(
+        root_id=root_id,
+        client_id=client_id,
+        purpose=purpose,
+        root_hash=new_root,
+        leaf_count=leaf_index + 1,
+        tree_depth=TREE_DEPTH,
+    )
+    
+    return leaf_index, new_root, siblings, root_id
 
 
 # =============================================================================
@@ -502,7 +513,7 @@ def enroll_commit(body: EnrollCommitRequest):
     
     # Insert into incremental Merkle tree
     try:
-        leaf_index, new_root, siblings = insert_leaf_incremental(
+        leaf_index, new_root, siblings, root_id = insert_leaf_incremental(
             client_id, purpose, body.leaf_commitment
         )
     except Exception as e:
@@ -536,7 +547,7 @@ def enroll_commit(body: EnrollCommitRequest):
     
     save_witness(
         enrollment_id=enrollment_id,
-        root_id=f"{client_id}-{purpose}",
+        root_id=root_id,
         siblings=siblings,
         path_bits=path_bits,
         leaf_index=leaf_index,
@@ -609,7 +620,7 @@ def direct_enroll(
     
     # Insert into incremental Merkle tree
     try:
-        leaf_index, new_root, siblings = insert_leaf_incremental(
+        leaf_index, new_root, siblings, root_id = insert_leaf_incremental(
             client_id, body.purpose, body.leaf_commitment
         )
     except Exception as e:
@@ -643,7 +654,7 @@ def direct_enroll(
     
     save_witness(
         enrollment_id=enrollment_id,
-        root_id=f"{client_id}-{body.purpose}",
+        root_id=root_id,
         siblings=siblings,
         path_bits=path_bits,
         leaf_index=leaf_index,
