@@ -596,8 +596,15 @@ fun SignedByMeApp(
     }
     
     // Step 2: NWC wallet setup (replaces Breez)
-    var step2Complete by remember { mutableStateOf(nwcMgr.hasWallet()) }
+    var step2Complete by remember { mutableStateOf(false) }
     var step3Complete by remember { mutableStateOf(false) }
+    var walletConnected by remember { mutableStateOf(false) }
+    
+    // Load wallet state asynchronously to avoid StrictMode violation
+    LaunchedEffect(Unit) {
+        step2Complete = nwcMgr.hasWalletAsync()
+        walletConnected = nwcMgr.isConnectedAsync()
+    }
     
     // Strike wallet onboarding state (Step 2)
     var strikeEmail by remember { mutableStateOf("") }
@@ -639,10 +646,7 @@ fun SignedByMeApp(
     var statusMessage by remember { mutableStateOf("") }
     var showIdDialog by remember { mutableStateOf(false) }
     var showWalletInfoDialog by remember { mutableStateOf(false) }
-    var showVccResult by remember { mutableStateOf(false) }
-    var vccResult by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
-    var vccId by remember { mutableStateOf("") }
     
     // BTC price for display
     var btcPriceUsd by remember { mutableStateOf(0.0) }
@@ -818,8 +822,6 @@ fun SignedByMeApp(
         // Show Login Screen
         LoginScreen(
             did = did!!,
-            vccId = vccId,
-            vccResult = vccResult,
             lastInvoice = lastInvoice,
             isCreatingInvoice = isCreatingInvoice,
             isPollingPayment = isPollingPayment,
@@ -1116,19 +1118,6 @@ fun SignedByMeApp(
                 statusMessage = ""
                 loginSession = null
             },
-            onCopyVcc = {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("VCC", vccResult))
-                Toast.makeText(context, "VCC copied!", Toast.LENGTH_SHORT).show()
-            },
-            onShareVcc = {
-                val sendIntent = Intent().apply {
-                    action = Intent.ACTION_SEND
-                    putExtra(Intent.EXTRA_TEXT, vccResult)
-                    type = "text/plain"
-                }
-                context.startActivity(Intent.createChooser(sendIntent, "Share VCC"))
-            },
             onDevExportLeafCommitment = if (BuildConfig.DEBUG) {
                 {
                     val cid = loginSession?.clientId
@@ -1170,8 +1159,6 @@ fun SignedByMeApp(
             statusMessage = statusMessage,
             showIdDialog = showIdDialog,
             showWalletInfoDialog = showWalletInfoDialog,
-            showVccResult = showVccResult,
-            vccResult = vccResult,
             onGenerateDid = {
                 did = didMgr.createDid()
                 step1Complete = true
@@ -1261,64 +1248,21 @@ fun SignedByMeApp(
                 isLoading = true
                 scope.launch(Dispatchers.IO) {
                     try {
-                        var preimage = lastPreimage
-                        if (preimage.isEmpty()) {
-                            val bytes = ByteArray(32)
-                            java.security.SecureRandom().nextBytes(bytes)
-                            preimage = bytes.joinToString("") { "%02x".format(it) }
-                            withContext(Dispatchers.Main) { lastPreimage = preimage }
-                        }
-
-                        val claimJson = didMgr.buildOwnershipClaimJson(
-                            did = did!!,
-                            nonce = lastNonce.ifEmpty { "android-${System.currentTimeMillis()}" },
-                            walletType = "nwc",
-                            withdrawTo = "nwc-wallet",
-                            preimage = preimage
-                        )
-
-                        val sigHex = didMgr.signOwnershipClaim(claimJson)
-
-                        val preBytes = preimage.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-                        val md = java.security.MessageDigest.getInstance("SHA-256")
-                        val preShaHex = md.digest(preBytes).joinToString("") { "%02x".format(it) }
-
-                        val prpJson = didMgr.buildPrpJson(
-                            loginId = lastLoginId.ifEmpty { "android-${System.currentTimeMillis()}" },
-                            did = did!!,
-                            preimageSha256Hex = preShaHex
-                        )
-                        
+                        // Generate Groth16 proof to verify proving system works
                         val groth16Result = didMgr.generateGroth16Proof(
                             clientId = "default",
                             rootId = "default"
                         )
                         val groth16Json = JSONObject(groth16Result)
-                        val proofHash = if (groth16Json.optBoolean("success", false)) {
-                            val md2 = java.security.MessageDigest.getInstance("SHA-256")
-                            md2.digest(groth16Result.toByteArray(Charsets.UTF_8))
-                                .joinToString("") { "%02x".format(it) }
+                        val proofSuccess = groth16Json.optBoolean("success", false)
+                        
+                        if (proofSuccess) {
+                            android.util.Log.i("SignedByMe", "Groth16 proof generated successfully")
                         } else {
-                            android.util.Log.w("SignedByMe", "Groth16 proof stub: ${groth16Json.optString("error", "unknown")}")
-                            "stub_proof_${System.currentTimeMillis()}"
+                            android.util.Log.w("SignedByMe", "Groth16 proof: ${groth16Json.optString("error", "stub")}")
                         }
 
-                        val generatedVccId = "vcc_${System.currentTimeMillis()}_${did!!.takeLast(8)}"
-                        val vcc = JSONObject().apply {
-                            put("schema", "signedby.me/vcc/3")
-                            put("id", generatedVccId)
-                            put("did", did!!)
-                            put("wallet_address", "nwc-wallet")
-                            put("content_hash", "sha256_demo_${System.currentTimeMillis()}")
-                            put("proof_hash", preShaHex)
-                            put("groth16_proof_hash", proofHash)
-                            put("wallet_type", "nwc")
-                            put("timestamp", System.currentTimeMillis())
-                            put("expires_at", System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000)
-                            put("signature", sigHex)
-                        }.toString()
-
-                        // Auto-enroll for membership
+                        // Auto-enroll for membership if not already enrolled
                         if (!didMgr.hasEnrollment()) {
                             try {
                                 val enrollment = didMgr.enrollMembership(
@@ -1336,15 +1280,9 @@ fun SignedByMeApp(
                         }
 
                         withContext(Dispatchers.Main) {
-                            lastClaimJson = claimJson
-                            lastSigHex = sigHex
-                            lastPrpJson = prpJson
-                            vccResult = vcc
-                            vccId = generatedVccId
                             step3Complete = true
-                            showVccResult = true
                             isLoading = false
-                            statusMessage = "Signature generated!"
+                            statusMessage = "Signature ready!"
                         }
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
@@ -1353,19 +1291,6 @@ fun SignedByMeApp(
                         }
                     }
                 }
-            },
-            onCopyVcc = {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("VCC", vccResult))
-                Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
-            },
-            onShareVcc = {
-                val sendIntent = Intent().apply {
-                    action = Intent.ACTION_SEND
-                    putExtra(Intent.EXTRA_TEXT, vccResult)
-                    type = "text/plain"
-                }
-                context.startActivity(Intent.createChooser(sendIntent, "Share VCC"))
             }
         )
     }
@@ -1392,7 +1317,7 @@ fun SignedByMeApp(
     if (showWalletInfoDialog) {
         WalletInfoDialog(
             strikeEmail = nwcMgr.getStrikeEmail() ?: "",
-            isConnected = nwcMgr.isConnected(),
+            isConnected = walletConnected,
             onDismiss = { showWalletInfoDialog = false }
         )
     }
@@ -1416,8 +1341,6 @@ fun OnboardingScreen(
     statusMessage: String,
     showIdDialog: Boolean,
     showWalletInfoDialog: Boolean,
-    showVccResult: Boolean,
-    vccResult: String,
     onGenerateDid: () -> Unit,
     onShowIdDialog: () -> Unit,
     onDismissIdDialog: () -> Unit,
@@ -1431,9 +1354,7 @@ fun OnboardingScreen(
     onStrikeCallbackReceived: (String) -> Unit,
     onShowWalletInfoDialog: () -> Unit,
     onDismissWalletInfoDialog: () -> Unit,
-    onGenerateSignature: () -> Unit,
-    onCopyVcc: () -> Unit,
-    onShareVcc: () -> Unit
+    onGenerateSignature: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -1589,7 +1510,14 @@ fun OnboardingScreen(
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             enabled = !isWalletOnboarding,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.Black,
+                                unfocusedTextColor = Color.Black,
+                                disabledTextColor = Color.Gray,
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -1602,7 +1530,14 @@ fun OnboardingScreen(
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             enabled = !isWalletOnboarding,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.Black,
+                                unfocusedTextColor = Color.Black,
+                                disabledTextColor = Color.Gray,
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -1614,7 +1549,14 @@ fun OnboardingScreen(
                             label = { Text("Country of residence") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            enabled = !isWalletOnboarding
+                            enabled = !isWalletOnboarding,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.Black,
+                                unfocusedTextColor = Color.Black,
+                                disabledTextColor = Color.Gray,
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -1778,8 +1720,6 @@ fun OnboardingScreen(
 @Composable
 fun LoginScreen(
     did: String,
-    vccId: String,
-    vccResult: String,
     lastInvoice: String,
     isCreatingInvoice: Boolean,
     isPollingPayment: Boolean,
@@ -1796,8 +1736,6 @@ fun LoginScreen(
     onCopyInvoice: () -> Unit,
     onShareInvoice: () -> Unit,
     onResetLogin: () -> Unit,
-    onCopyVcc: () -> Unit,
-    onShareVcc: () -> Unit,
     onDevExportLeafCommitment: (() -> Unit)? = null,
     btcPriceUsd: Double,
     strikeEmail: String?
@@ -2113,79 +2051,6 @@ fun LoginScreen(
                                 fontSize = 12.sp,
                                 color = Color.Gray
                             )
-                        }
-                    }
-                }
-            }
-
-            // VCC Section
-            if (vccResult.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(8.dp, RoundedCornerShape(24.dp)),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp)
-                    ) {
-                        Text(
-                            "Your Verified Content Claim (VCC)",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Text(
-                            "Use your VCC to prove your content is yours.",
-                            fontSize = 13.sp,
-                            color = Color.Gray,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        StatusPill("Verified Content Claim", Color(0xFF10B981))
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Text(
-                            text = vccResult.take(60) + "...",
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = Color.Gray,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp))
-                                .padding(12.dp)
-                        )
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = onCopyVcc,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("📋 Copy")
-                            }
-                            
-                            OutlinedButton(
-                                onClick = onShareVcc,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Share")
-                            }
                         }
                     }
                 }

@@ -327,7 +327,7 @@ class DidWalletManager(private val context: Context) {
     }
     
     /**
-     * Get the hash of the stored identity proof (for including in VCC)
+     * Get the hash of the stored identity proof
      */
     fun getIdentityProofHash(): String? {
         val proof = loadIdentityProof() ?: return null

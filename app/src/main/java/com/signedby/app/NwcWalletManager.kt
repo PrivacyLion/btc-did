@@ -36,6 +36,7 @@ class NwcWalletManager(private val context: Context) {
     
     /**
      * Check if wallet is set up (NWC connection string is stored)
+     * WARNING: This does disk I/O. Use hasWalletAsync() from coroutines.
      */
     fun hasWallet(): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -43,11 +44,26 @@ class NwcWalletManager(private val context: Context) {
     }
     
     /**
+     * Async version of hasWallet() - use from coroutines to avoid StrictMode violations
+     */
+    suspend fun hasWalletAsync(): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        hasWallet()
+    }
+    
+    /**
      * Check if wallet is connected and valid
      * For NWC, this is equivalent to hasWallet() - the connection string is the credential
+     * WARNING: This does disk I/O. Use isConnectedAsync() from coroutines.
      */
     fun isConnected(): Boolean {
         return hasWallet() && getNwcConnectionString() != null
+    }
+    
+    /**
+     * Async version of isConnected() - use from coroutines to avoid StrictMode violations
+     */
+    suspend fun isConnectedAsync(): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        isConnected()
     }
     
     /**
