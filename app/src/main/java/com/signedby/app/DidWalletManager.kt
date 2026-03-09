@@ -1039,9 +1039,21 @@ class DidWalletManager(private val context: Context) {
         val filename = "${clientId}_${rootId}.json"
         val dir = context.getDir(witnessDir, Context.MODE_PRIVATE)
         val file = java.io.File(dir, filename)
-        return if (file.exists()) {
-            WitnessData.fromJson(file.readText())
-        } else null
+        if (file.exists()) {
+            return WitnessData.fromJson(file.readText())
+        }
+        
+        // TODO: TEMP - remove when login/start returns real rootId
+        // Fallback: find any witness for this clientId regardless of rootId
+        val fallbackFile = dir.listFiles()?.firstOrNull { f ->
+            f.name.startsWith("${clientId}_") && f.name.endsWith(".json")
+        }
+        if (fallbackFile != null) {
+            android.util.Log.w("SignedByMe", "Witness fallback: using ${fallbackFile.name} instead of $filename")
+            return WitnessData.fromJson(fallbackFile.readText())
+        }
+        
+        return null
     }
     
     /**

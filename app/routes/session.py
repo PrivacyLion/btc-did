@@ -28,6 +28,7 @@ from ..db import (
     update_session as db_update_session,
     delete_expired_sessions,
     audit_log,
+    get_active_root,
 )
 
 logger = logging.getLogger("session")
@@ -128,7 +129,16 @@ async def create_session(
     
     # Get membership requirement (mandatory by default for security)
     require_membership = client_config.get("require_membership", True)
-    default_root_id = client_config.get("default_root_id")
+    
+    # Get current active root for this client (Bible: login/start must return real root ID)
+    current_root_id = None
+    if require_membership:
+        active_root = get_active_root(client_id, "allowlist")
+        if active_root:
+            current_root_id = active_root.get("id")
+            logger.info(f"Using active root: {current_root_id}")
+        else:
+            logger.warning(f"No active root for client {client_id}, membership proofs will fail")
     
     # Create session
     session_id = generate_session_id()
@@ -146,19 +156,19 @@ async def create_session(
         enterprise=employer_name,
         amount_sats=amount_sats,
         expires_at=expires_at,
-        required_root_id=default_root_id,
+        required_root_id=current_root_id,
         required_purpose_id=0,
     )
     
     # Build QR data (deep link format)
     qr_data = f"signedby.me://login?session={session_id}&employer={employer_name}&amount={amount_sats}&nonce={nonce}"
-    if require_membership and default_root_id:
-        qr_data += f"&root={default_root_id}"
+    if require_membership and current_root_id:
+        qr_data += f"&root={current_root_id}"
     
     # HTTPS deep link for mobile-to-mobile
     deep_link = f"https://signedby.me/login?session={session_id}&employer={employer_name}&amount={amount_sats}&nonce={nonce}"
-    if require_membership and default_root_id:
-        deep_link += f"&root={default_root_id}"
+    if require_membership and current_root_id:
+        deep_link += f"&root={current_root_id}"
     
     # Audit log
     audit_log("session_created", session_id=session_id, client_id=client_id)
