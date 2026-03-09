@@ -1156,16 +1156,26 @@ fun SignedByMeApp(
             showIdDialog = showIdDialog,
             showWalletInfoDialog = showWalletInfoDialog,
             onGenerateDid = {
-                did = didMgr.createDid()
-                step1Complete = true
+                scope.launch(Dispatchers.IO) {
+                    val newDid = didMgr.createDid()
+                    withContext(Dispatchers.Main) {
+                        did = newDid
+                        step1Complete = true
+                    }
+                }
             },
             onShowIdDialog = { showIdDialog = true },
             onDismissIdDialog = { showIdDialog = false },
             onRegenerateDid = {
-                did = didMgr.regenerateKeyPair()
-                step1Complete = true
-                step2Complete = false
-                step3Complete = false
+                scope.launch(Dispatchers.IO) {
+                    val newDid = didMgr.regenerateKeyPair()
+                    withContext(Dispatchers.Main) {
+                        did = newDid
+                        step1Complete = true
+                        step2Complete = false
+                        step3Complete = false
+                    }
+                }
             },
             onCopyDid = {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -1289,10 +1299,15 @@ fun SignedByMeApp(
             did = did!!,
             onDismiss = { showIdDialog = false },
             onRegenerate = {
-                did = didMgr.regenerateKeyPair()
-                step1Complete = true
-                step2Complete = false
-                step3Complete = false
+                scope.launch(Dispatchers.IO) {
+                    val newDid = didMgr.regenerateKeyPair()
+                    withContext(Dispatchers.Main) {
+                        did = newDid
+                        step1Complete = true
+                        step2Complete = false
+                        step3Complete = false
+                    }
+                }
             },
             onCopy = {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

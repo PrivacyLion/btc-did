@@ -125,7 +125,7 @@ class NwcWalletManager(private val context: Context) {
             .putString(PREF_STRIKE_EMAIL, email)
             .apply()
         
-        Log.i(TAG, "Strike ToS acceptance recorded for $email")
+        Log.i(TAG, "Strike ToS acceptance recorded")
     }
     
     /**
