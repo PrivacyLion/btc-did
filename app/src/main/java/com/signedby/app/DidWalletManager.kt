@@ -1353,42 +1353,72 @@ class DidWalletManager(private val context: Context) {
     }
 
     /**
-     * Fetch witness from API.
-     * 
-     * Uses enrollment token if valid, otherwise would need DID signature (not implemented for beta).
+     * Complete enrollment flow: enroll + fetch witness.
+     * Called silently after onboarding completes.
      * 
      * @param apiBaseUrl Base URL of the API
      * @param apiKey RP client API key
-     * @param did User's DID
-     * @param purpose Membership purpose
-     * @param rootId Specific root ID (optional, uses current if null)
+     * @return true if enrollment and witness fetch succeeded
+     */
+    suspend fun performEnrollment(
+        apiBaseUrl: String,
+        apiKey: String
+    ): Boolean {
+        // Skip if already enrolled with valid witness
+        if (hasEnrollment()) {
+            val enrollment = loadEnrollment()
+            if (enrollment != null) {
+                val witness = loadWitness(enrollment.clientId, "default")
+                if (witness != null) {
+                    android.util.Log.i("SignedByMe", "Already enrolled with witness, skipping")
+                    return true
+                }
+            }
+        }
+
+        // Step 1: Enroll
+        android.util.Log.i("SignedByMe", "Starting enrollment...")
+        val enrollment = enrollMembership(apiBaseUrl, apiKey)
+        if (enrollment == null) {
+            android.util.Log.e("SignedByMe", "Enrollment step failed")
+            return false
+        }
+
+        // Step 2: Fetch witness
+        android.util.Log.i("SignedByMe", "Fetching witness...")
+        val witness = fetchWitness(apiBaseUrl, apiKey)
+        if (witness == null) {
+            android.util.Log.e("SignedByMe", "Witness fetch failed")
+            return false
+        }
+
+        android.util.Log.i("SignedByMe", "Enrollment complete with witness for ${witness.clientId}/${witness.rootId}")
+        return true
+    }
+
+    /**
+     * Fetch witness from API using enrollment_id.
+     * 
+     * @param apiBaseUrl Base URL of the API
+     * @param apiKey RP client API key
      * @return WitnessData on success, null on failure
      */
     suspend fun fetchWitness(
         apiBaseUrl: String,
-        apiKey: String,
-        did: String,
-        purpose: String = "allowlist",
-        rootId: String? = null
+        apiKey: String
     ): WitnessData? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         try {
             val enrollment = loadEnrollment()
-            if (enrollment == null || !enrollment.isTokenValid()) {
-                android.util.Log.e("SignedByMe", "No valid enrollment token for witness fetch")
+            if (enrollment == null) {
+                android.util.Log.e("SignedByMe", "No enrollment found for witness fetch")
                 return@withContext null
             }
 
-            // Build URL
-            val urlBuilder = StringBuilder("$apiBaseUrl/v1/membership/witness?did=${java.net.URLEncoder.encode(did, "UTF-8")}&purpose=$purpose")
-            if (rootId != null) {
-                urlBuilder.append("&root_id=${java.net.URLEncoder.encode(rootId, "UTF-8")}")
-            }
-
-            val url = java.net.URL(urlBuilder.toString())
+            // Build URL with enrollment_id
+            val url = java.net.URL("$apiBaseUrl/v1/membership/witness?enrollment_id=${java.net.URLEncoder.encode(enrollment.enrollmentId, "UTF-8")}")
             val conn = url.openConnection() as java.net.HttpURLConnection
             conn.requestMethod = "GET"
             conn.setRequestProperty("X-API-Key", apiKey)
-            conn.setRequestProperty("X-Enrollment-Token", enrollment.enrollmentToken)
             conn.connectTimeout = 10000
             conn.readTimeout = 10000
 

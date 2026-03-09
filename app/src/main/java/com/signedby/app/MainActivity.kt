@@ -652,8 +652,26 @@ fun SignedByMeApp(
     var showLoginScreen by remember { mutableStateOf(false) }
     
     // Delay transition to login screen so user sees Step 3 complete
+    // Also trigger background enrollment
     LaunchedEffect(onboardingComplete) {
         if (onboardingComplete && !showLoginScreen) {
+            // Start enrollment in background (doesn't block UI)
+            launch(Dispatchers.IO) {
+                try {
+                    val success = didMgr.performEnrollment(
+                        apiBaseUrl = API_BASE_URL,
+                        apiKey = "test-secret-key-12345"  // From clients.json
+                    )
+                    if (success) {
+                        android.util.Log.i("SignedByMe", "Background enrollment succeeded")
+                    } else {
+                        android.util.Log.w("SignedByMe", "Background enrollment failed - will retry on next launch")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("SignedByMe", "Background enrollment error: ${e.message}")
+                }
+            }
+            
             delay(1500) // 1.5 second delay to see completion
             showLoginScreen = true
         }
