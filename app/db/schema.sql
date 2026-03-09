@@ -162,31 +162,9 @@ CREATE TABLE IF NOT EXISTS enrollment_sessions (
 CREATE INDEX IF NOT EXISTS idx_enroll_sessions_client ON enrollment_sessions(client_id);
 CREATE INDEX IF NOT EXISTS idx_enroll_sessions_expires ON enrollment_sessions(expires_at);
 
--- ============================================================================
--- ENROLLMENT TOKENS
--- Short-lived tokens for enrollment API access
--- ============================================================================
-CREATE TABLE IF NOT EXISTS enrollment_tokens (
-    token TEXT PRIMARY KEY,
-    enrollment_id TEXT NOT NULL,
-    client_id TEXT NOT NULL,
-    expires_at INTEGER NOT NULL,
-    consumed INTEGER DEFAULT 0,
-    created_at INTEGER DEFAULT (strftime('%s', 'now'))
-);
-CREATE INDEX IF NOT EXISTS idx_enroll_tokens_expires ON enrollment_tokens(expires_at);
-
--- ============================================================================
--- DID SIGNATURE CHALLENGES
--- Single-use challenges for DID authentication
--- ============================================================================
-CREATE TABLE IF NOT EXISTS did_challenges (
-    challenge TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    expires_at INTEGER NOT NULL,
-    created_at INTEGER DEFAULT (strftime('%s', 'now'))
-);
-CREATE INDEX IF NOT EXISTS idx_challenges_expires ON did_challenges(expires_at);
+-- NOTE: enrollment_tokens and did_challenges tables REMOVED per Bible Phase 8 cleanup
+-- - enrollment_tokens: Deleted - enrollment uses session-based auth only
+-- - did_challenges: Deleted - server must never store anything labeled "DID" (Bible violation)
 
 -- ============================================================================
 -- AUDIT LOG (optional - for debugging)

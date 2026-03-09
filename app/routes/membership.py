@@ -55,13 +55,7 @@ from ..db import (
     get_root_by_id,
     save_witness,
     get_witness,
-    # Tokens & challenges
-    create_enrollment_token as db_create_token,
-    get_enrollment_token,
-    consume_enrollment_token as db_consume_token,
-    create_challenge as db_create_challenge,
-    get_challenge as db_get_challenge,
-    delete_challenge as db_delete_challenge,
+    # NOTE: enrollment_tokens and did_challenges removed per Bible Phase 8
     # Trees
     create_merkle_tree,
     get_merkle_tree,

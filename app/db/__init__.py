@@ -600,78 +600,10 @@ def cleanup_expired_sessions() -> int:
 
 
 # ============================================================================
-# ENROLLMENT TOKENS
+# NOTE: enrollment_tokens and did_challenges tables REMOVED per Bible Phase 8
+# - enrollment_tokens: Deleted - enrollment uses session-based auth only  
+# - did_challenges: Deleted - server must never store anything labeled "DID"
 # ============================================================================
-
-def create_enrollment_token(
-    token: str,
-    enrollment_id: str,
-    client_id: str,
-    did: str,  # Kept for backward compat but not stored long-term
-    expires_at: int,
-) -> None:
-    """Create enrollment token for witness retrieval."""
-    conn = get_connection()
-    conn.execute("""
-        INSERT INTO enrollment_tokens (token, enrollment_id, client_id, expires_at)
-        VALUES (?, ?, ?, ?)
-    """, (token, enrollment_id, client_id, expires_at))
-    conn.commit()
-
-
-def get_enrollment_token(token: str) -> Optional[Dict[str, Any]]:
-    """Get enrollment token if valid (not expired, not consumed)."""
-    import time
-    conn = get_connection()
-    row = conn.execute("""
-        SELECT * FROM enrollment_tokens
-        WHERE token = ? AND expires_at > ? AND consumed = 0
-    """, (token, int(time.time()))).fetchone()
-    return dict(row) if row else None
-
-
-def consume_enrollment_token(token: str) -> bool:
-    """Mark token as consumed."""
-    conn = get_connection()
-    cursor = conn.execute(
-        "UPDATE enrollment_tokens SET consumed = 1 WHERE token = ?",
-        (token,)
-    )
-    conn.commit()
-    return cursor.rowcount > 0
-
-
-# ============================================================================
-# DID CHALLENGES
-# ============================================================================
-
-def create_challenge(challenge: str, client_id: str, did: str, expires_at: int) -> None:
-    """Create a DID signature challenge."""
-    conn = get_connection()
-    conn.execute("""
-        INSERT INTO did_challenges (challenge, client_id, expires_at)
-        VALUES (?, ?, ?)
-    """, (challenge, client_id, expires_at))
-    conn.commit()
-
-
-def get_challenge(challenge: str, client_id: str, did: str) -> Optional[Dict[str, Any]]:
-    """Get challenge if valid (not expired)."""
-    import time
-    conn = get_connection()
-    row = conn.execute("""
-        SELECT * FROM did_challenges
-        WHERE challenge = ? AND client_id = ? AND expires_at > ?
-    """, (challenge, client_id, int(time.time()))).fetchone()
-    return dict(row) if row else None
-
-
-def delete_challenge(challenge: str) -> bool:
-    """Delete challenge after use (single-use)."""
-    conn = get_connection()
-    cursor = conn.execute("DELETE FROM did_challenges WHERE challenge = ?", (challenge,))
-    conn.commit()
-    return cursor.rowcount > 0
 
 
 # ============================================================================
