@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
     applied_at TEXT DEFAULT (datetime('now'))
 );
-INSERT OR IGNORE INTO schema_version (version) VALUES (2);
+INSERT OR IGNORE INTO schema_version (version) VALUES (3);
 
 -- ============================================================================
 -- ENROLLMENTS
@@ -133,6 +133,60 @@ CREATE TABLE IF NOT EXISTS login_verifications (
 CREATE INDEX IF NOT EXISTS idx_verifications_client ON login_verifications(client_id);
 CREATE INDEX IF NOT EXISTS idx_verifications_npub ON login_verifications(npub);
 CREATE INDEX IF NOT EXISTS idx_verifications_time ON login_verifications(verified_at);
+
+-- ============================================================================
+-- ENROLLMENT SESSIONS (3-step verification flow)
+-- Phase 10: Enrollment sessions for third-party verification (Persona, Jumio)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS enrollment_sessions (
+    id TEXT PRIMARY KEY,                    -- enrollment_session_id
+    client_id TEXT NOT NULL,
+    verification_type TEXT NOT NULL,        -- e.g., "age_18_plus", "kyc_basic"
+    verification_provider TEXT,             -- e.g., "persona", "jumio"
+    callback_url TEXT,                      -- Enterprise webhook for completion
+    
+    -- Verification status
+    verification_passed INTEGER DEFAULT 0,  -- 0=pending, 1=passed
+    provider_signature TEXT,                -- Cryptographic attestation from verifier
+    
+    -- Commitment (set by enroll/commit)
+    leaf_commitment TEXT,                   -- Set when user commits
+    used INTEGER DEFAULT 0,                 -- 1=commitment submitted, session consumed
+    
+    -- Timestamps
+    created_at INTEGER DEFAULT (strftime('%s', 'now')),
+    verified_at INTEGER,                    -- When verification passed
+    committed_at INTEGER,                   -- When commitment was submitted
+    expires_at INTEGER NOT NULL             -- Session expiry
+);
+CREATE INDEX IF NOT EXISTS idx_enroll_sessions_client ON enrollment_sessions(client_id);
+CREATE INDEX IF NOT EXISTS idx_enroll_sessions_expires ON enrollment_sessions(expires_at);
+
+-- ============================================================================
+-- ENROLLMENT TOKENS
+-- Short-lived tokens for enrollment API access
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS enrollment_tokens (
+    token TEXT PRIMARY KEY,
+    enrollment_id TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    consumed INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT (strftime('%s', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_enroll_tokens_expires ON enrollment_tokens(expires_at);
+
+-- ============================================================================
+-- DID SIGNATURE CHALLENGES
+-- Single-use challenges for DID authentication
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS did_challenges (
+    challenge TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER DEFAULT (strftime('%s', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_challenges_expires ON did_challenges(expires_at);
 
 -- ============================================================================
 -- AUDIT LOG (optional - for debugging)

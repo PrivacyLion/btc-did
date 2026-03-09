@@ -490,6 +490,191 @@ def audit_log(
 
 
 # ============================================================================
+# ENROLLMENT SESSIONS (3-step verification flow)
+# ============================================================================
+
+def create_enrollment_session(
+    session_id: str,
+    client_id: str,
+    verification_type: str,
+    verification_provider: Optional[str] = None,
+    callback_url: Optional[str] = None,
+    expires_at: Optional[int] = None,
+) -> None:
+    """Create an enrollment session for 3-step verification flow."""
+    import time
+    if expires_at is None:
+        expires_at = int(time.time()) + 3600  # 1 hour default
+    
+    conn = get_connection()
+    conn.execute("""
+        INSERT INTO enrollment_sessions
+        (id, client_id, verification_type, verification_provider, callback_url, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (session_id, client_id, verification_type, verification_provider, callback_url, expires_at))
+    conn.commit()
+
+
+def get_enrollment_session(session_id: str) -> Optional[Dict[str, Any]]:
+    """Get enrollment session by ID."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM enrollment_sessions WHERE id = ?",
+        (session_id,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def mark_session_verified(session_id: str, provider_signature: Optional[str] = None) -> bool:
+    """Mark enrollment session as verification passed."""
+    import time
+    conn = get_connection()
+    cursor = conn.execute("""
+        UPDATE enrollment_sessions
+        SET verification_passed = 1, verified_at = ?, provider_signature = ?
+        WHERE id = ? AND verification_passed = 0 AND used = 0
+    """, (int(time.time()), provider_signature, session_id))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def commit_enrollment_session(session_id: str, leaf_commitment: str) -> Optional[Dict[str, Any]]:
+    """
+    Commit a leaf_commitment to an enrollment session.
+    
+    Returns the session data if successful, None if failed.
+    After commit, the session is marked as used.
+    
+    Per Bible Section 13.6: After commitment, enrollment_session_id correlation
+    is destroyed - only leaf_commitment, client_id, enrolled_at are retained.
+    """
+    import time
+    conn = get_connection()
+    
+    # First, get the session and validate
+    session = get_enrollment_session(session_id)
+    if not session:
+        return None
+    
+    # Check conditions
+    now = int(time.time())
+    if session["expires_at"] < now:
+        return None  # Expired
+    if session["used"]:
+        return None  # Already used
+    if not session["verification_passed"]:
+        return None  # Not verified
+    
+    # Update session with commitment and mark as used
+    conn.execute("""
+        UPDATE enrollment_sessions
+        SET leaf_commitment = ?, used = 1, committed_at = ?
+        WHERE id = ?
+    """, (leaf_commitment, now, session_id))
+    conn.commit()
+    
+    # Return the session data (caller will use client_id for enrollment)
+    session["leaf_commitment"] = leaf_commitment
+    session["committed_at"] = now
+    return session
+
+
+def delete_enrollment_session(session_id: str) -> bool:
+    """Delete enrollment session (for cleanup or after commit)."""
+    conn = get_connection()
+    cursor = conn.execute("DELETE FROM enrollment_sessions WHERE id = ?", (session_id,))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def cleanup_expired_sessions() -> int:
+    """Delete expired enrollment sessions. Returns count deleted."""
+    import time
+    conn = get_connection()
+    cursor = conn.execute(
+        "DELETE FROM enrollment_sessions WHERE expires_at < ?",
+        (int(time.time()),)
+    )
+    conn.commit()
+    return cursor.rowcount
+
+
+# ============================================================================
+# ENROLLMENT TOKENS
+# ============================================================================
+
+def create_enrollment_token(
+    token: str,
+    enrollment_id: str,
+    client_id: str,
+    did: str,  # Kept for backward compat but not stored long-term
+    expires_at: int,
+) -> None:
+    """Create enrollment token for witness retrieval."""
+    conn = get_connection()
+    conn.execute("""
+        INSERT INTO enrollment_tokens (token, enrollment_id, client_id, expires_at)
+        VALUES (?, ?, ?, ?)
+    """, (token, enrollment_id, client_id, expires_at))
+    conn.commit()
+
+
+def get_enrollment_token(token: str) -> Optional[Dict[str, Any]]:
+    """Get enrollment token if valid (not expired, not consumed)."""
+    import time
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT * FROM enrollment_tokens
+        WHERE token = ? AND expires_at > ? AND consumed = 0
+    """, (token, int(time.time()))).fetchone()
+    return dict(row) if row else None
+
+
+def consume_enrollment_token(token: str) -> bool:
+    """Mark token as consumed."""
+    conn = get_connection()
+    cursor = conn.execute(
+        "UPDATE enrollment_tokens SET consumed = 1 WHERE token = ?",
+        (token,)
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+# ============================================================================
+# DID CHALLENGES
+# ============================================================================
+
+def create_challenge(challenge: str, client_id: str, did: str, expires_at: int) -> None:
+    """Create a DID signature challenge."""
+    conn = get_connection()
+    conn.execute("""
+        INSERT INTO did_challenges (challenge, client_id, expires_at)
+        VALUES (?, ?, ?)
+    """, (challenge, client_id, expires_at))
+    conn.commit()
+
+
+def get_challenge(challenge: str, client_id: str, did: str) -> Optional[Dict[str, Any]]:
+    """Get challenge if valid (not expired)."""
+    import time
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT * FROM did_challenges
+        WHERE challenge = ? AND client_id = ? AND expires_at > ?
+    """, (challenge, client_id, int(time.time()))).fetchone()
+    return dict(row) if row else None
+
+
+def delete_challenge(challenge: str) -> bool:
+    """Delete challenge after use (single-use)."""
+    conn = get_connection()
+    cursor = conn.execute("DELETE FROM did_challenges WHERE challenge = ?", (challenge,))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+# ============================================================================
 # STATS
 # ============================================================================
 
@@ -500,4 +685,7 @@ def get_stats() -> Dict[str, int]:
         "enrollments": conn.execute("SELECT COUNT(*) FROM enrollments").fetchone()[0],
         "roots": conn.execute("SELECT COUNT(*) FROM merkle_roots WHERE active = 1").fetchone()[0],
         "verifications": conn.execute("SELECT COUNT(*) FROM login_verifications").fetchone()[0],
+        "active_sessions": conn.execute(
+            "SELECT COUNT(*) FROM enrollment_sessions WHERE used = 0 AND expires_at > strftime('%s', 'now')"
+        ).fetchone()[0],
     }

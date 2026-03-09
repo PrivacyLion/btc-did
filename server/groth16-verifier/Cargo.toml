@@ -3,6 +3,10 @@ name = "groth16-verifier"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "groth16_verifier"
+path = "src/lib.rs"
+
 [dependencies]
 ark-bn254 = "0.4"
 ark-groth16 = "0.4"
@@ -11,6 +15,7 @@ ark-serialize = "0.4"
 ark-std = "0.4"
 ark-ff = "0.4"
 ark-ec = "0.4"
+light-poseidon = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 hex = "0.4"
@@ -22,3 +27,7 @@ tokio = { version = "1", features = ["full"] }
 [[bin]]
 name = "verify"
 path = "src/main.rs"
+
+[[bin]]
+name = "poseidon_hash"
+path = "src/bin/poseidon_hash.rs"
