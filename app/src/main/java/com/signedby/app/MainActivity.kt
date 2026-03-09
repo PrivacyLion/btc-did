@@ -1268,7 +1268,7 @@ fun SignedByMeApp(
                     try {
                         // Generate Groth16 proof to verify proving system works
                         val groth16Result = didMgr.generateGroth16Proof(
-                            clientId = "default",
+                            clientId = "test-client",
                             rootId = "default"
                         )
                         val groth16Json = JSONObject(groth16Result)
