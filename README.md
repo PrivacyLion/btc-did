@@ -221,4 +221,14 @@ signedby/
 
 ## License
 
-Proprietary — © 2026 Privacy Lion LLC
+SignedByMe is **source-available** under the **SignedByMe Source-Available License v1.0 (SSAL-1.0)**.
+
+- Until **February 17, 2030**: You may use, modify, test, fork, and contribute to the code freely for personal projects, internal tools, research, evaluation, and integration into unrelated products. **You may not** distribute or operate this code (or derivatives) as part of a **Competing Application** (services offering similar key-based auth flows, paid/gated authorization, or OIDC-style token issuance — full definition in [`LICENSE`](./LICENSE)).
+
+- From **February 18, 2030**: All restrictions automatically end; the codebase becomes available under **Apache License 2.0**.
+
+If you're unsure whether your use case is permitted, please reach out before shipping anything.
+
+Full license: [`LICENSE`](./LICENSE)  
+Apache 2.0 text (future): [`LICENSE-APACHE`](./LICENSE-APACHE)  
+Trademarks: [`TRADEMARK.md`](./TRADEMARK.md)
