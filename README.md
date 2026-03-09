@@ -1,5 +1,38 @@
 # SignedByMe
 
+SignedByMe is a self-signing digital signature.
+
+The name says it: Signed. By. Me. Not signed by Google. Not signed by Okta. Not signed by your employer. Signed by YOU — on your device, with your key, under your control.
+
+**How it's self-signing:**
+When a user authenticates with SignedByMe, they generate a Groth16 zero-knowledge proof on their own phone. This proof is signed with their DID (Decentralized Identifier) — a cryptographic key pair created on-device during onboarding, stored in hardware-backed secure storage (Android Keystore / iOS Secure Enclave), and never extractable.
+
+The DID key never leaves the phone. It is never sent to a server. No certificate authority issued it. No enterprise controls it. No government can revoke it. The user created it. The user signs with it. The user owns it.
+
+That is a self-signing digital signature — the user's own cryptographic assertion that they are who they claim to be, backed by mathematical proof, not by a third party's permission.
+
+**What makes this signature different from every other digital signature on earth:**
+When you sign with SignedByMe, the signature proves you are an authorized member of a group WITHOUT revealing which member you are. The enterprise gets a boolean — "this person is authorized" — without learning which person.
+
+This is mathematically impossible with traditional digital signatures (RSA, ECDSA, EdDSA). It is only possible with zero-knowledge proofs. SignedByMe is the first system to package this into a standard authentication flow that any enterprise can integrate in an afternoon.
+
+**The full picture:**
+SignedByMe is a privacy-first, decentralized authentication system built on three pillars:
+
+1. **Self-signing identity (DID).** At the foundation of every SignedByMe interaction is the user's DID — a self-sovereign identity created on-device in Step 1 of onboarding. The DID key never leaves the phone. Every proof, every membership commitment, every payment binding chains from this DID. The user owns their identity. The enterprise verifies it. No one issues it, controls it, or can revoke it.
+
+2. **Zero-knowledge membership proof.** Users prove they belong to an enterprise-managed group (age-verified customers, approved partners, premium subscribers) without revealing who they are. Built on Groth16 zero-knowledge proofs over BN254 with Poseidon2 hashing, the circuit produces a deterministic npub (the user's per-service cryptographic identifier) that is consistent per enterprise but unlinkable across services. No other identity provider can do this.
+
+3. **Bitcoin-backed economic proof.** Every authentication is backed by a real Bitcoin Lightning Network payment. The enterprise pays the user to log in. This makes auth economically unforgeable — bots can't spam logins that cost real money, and the payment preimage is a cryptographic receipt that settles to the Bitcoin blockchain. The proof is bound to the user's npub inside the ZK circuit, and the NOSTR event containing the proof is signed by the user's nsec — making it tamper-proof.
+
+The result: An OIDC identity token backed by a self-signing digital signature, Bitcoin payment proof, and zero-knowledge membership — proving the user is approved without revealing who they are in the set. The enterprise integrates with 4 API calls (same as Okta). The user scans a QR code and gets paid. No passwords. No PII. No tracking.
+
+**Short: Self-signed identity + paid login + private allowlists.**
+
+The coordination backbone is NOSTR — decentralized relay-mediated transport that produces an independently verifiable, tamper-evident audit trail. The enterprise façade is standard OIDC. The consumer pitch: "You own your identity. You get paid to log in. No one tracks you." The enterprise pitch: "Your users are cryptographically verified. No PII. No breach risk. No passwords."
+
+---
+
 **Get Paid to Log In** — Bitcoin-based identity verification where users earn sats for authentication.
 
 ## How It Works
@@ -47,15 +80,15 @@
 sequenceDiagram
     participant User
     participant App
-    participant Strike
+    participant LW as Lightning Wallet
     
     User->>App: Install & Open
     App->>App: Generate DID (hardware-backed)
     App->>App: Derive leaf_secret for Groth16
     User->>App: Enter email, DOB, country
-    User->>App: Accept Strike ToS
-    App->>Strike: Provision embedded wallet (NWC)
-    Strike->>User: Verification email
+    User->>App: Accept wallet ToS
+    App->>LW: Provision embedded wallet (NWC)
+    LW->>User: Verification email
     User->>App: Tap email link (deep link callback)
     App->>App: Store NWC connection string
     App->>App: Generate test Groth16 proof
