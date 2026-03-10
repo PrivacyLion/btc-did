@@ -721,13 +721,20 @@ fun SignedByMeApp(
     LaunchedEffect(isPollingPayment, lastPaymentHash) {
         if (isPollingPayment && lastPaymentHash.isNotEmpty()) {
             while (isPollingPayment && !paymentReceived) {
-                // Check Breez wallet for payment
-                val received = breezMgr.isPaymentReceived(lastPaymentHash)
+                // Poll NWC for payment (3 second timeout per poll)
+                val preimage = if (nostrMgr.isNwcConnected()) {
+                    nostrMgr.waitForPayment(lastPaymentHash, timeoutSecs = 3)
+                } else {
+                    null
+                }
+                val received = preimage != null
                 if (received) {
+                    val receivedPreimage = preimage ?: ""
                     paymentReceived = true
                     isPollingPayment = false
                     isLoginActive = false
                     
+                    // Complete DLC flow
                     try {
                         val attestation = dlcManager.requestOracleSignature(DlcManager.OUTCOME_AUTH_VERIFIED)
                         android.util.Log.i("SignedByMe", "Oracle attestation received: ${attestation.signatureHex.take(16)}...")
@@ -736,12 +743,14 @@ fun SignedByMeApp(
                             lastSettlementReceipt = dlcManager.buildSettlementReceipt(
                                 contract = lastDlcContract!!,
                                 paymentHash = lastPaymentHash,
-                                preimageHex = null,
+                                preimageHex = receivedPreimage.ifEmpty { null },
                                 attestation = attestation
                             )
                             
                             val (userAmt, opAmt) = dlcManager.calculatePayouts(lastDlcContract!!.amountSats)
                             statusMessage = "✅ Login verified! You received $userAmt sats (90%)"
+                            
+                            android.util.Log.i("SignedByMe", "Settlement receipt: ${lastSettlementReceipt?.auditHash}")
                             
                             scope.launch(Dispatchers.IO) {
                                 notifyApiOfSettlement(
@@ -750,9 +759,35 @@ fun SignedByMeApp(
                                     attestation = attestation,
                                     receipt = lastSettlementReceipt
                                 )
+                                
+                                if (nostrMgr.isConnected()) {
+                                    nostrMgr.publishPaymentReceipt(
+                                        nonce = loginSession?.nonce ?: lastLoginId,
+                                        paymentHash = lastPaymentHash,
+                                        preimageHex = receivedPreimage,
+                                        amountSats = userAmt
+                                    )
+                                    
+                                    nostrMgr.publishLoginComplete(
+                                        nonce = loginSession?.nonce ?: lastLoginId,
+                                        clientId = loginSession?.clientId ?: "demo"
+                                    )
+                                    
+                                    nostrMgr.disconnect()
+                                }
                             }
                         } else {
                             statusMessage = "✅ Payment received! Log In verified."
+                            
+                            scope.launch(Dispatchers.IO) {
+                                if (nostrMgr.isConnected()) {
+                                    nostrMgr.publishLoginComplete(
+                                        nonce = loginSession?.nonce ?: lastLoginId,
+                                        clientId = loginSession?.clientId ?: "demo"
+                                    )
+                                    nostrMgr.disconnect()
+                                }
+                            }
                         }
                     } catch (e: Exception) {
                         android.util.Log.e("SignedByMe", "DLC completion error: ${e.message}")
@@ -760,8 +795,6 @@ fun SignedByMeApp(
                     }
                     
                     showInvoiceDialog = false
-                } else {
-                    delay(3000) // Poll every 3 seconds
                 }
             }
         }
@@ -897,27 +930,71 @@ fun SignedByMeApp(
                     isCreatingInvoice = true
                     statusMessage = ""
                     
+                    // Initialize NOSTR + NWC
+                    val leafSecret = didMgr.loadLeafSecret()
+                    if (leafSecret != null) {
+                        nostrMgr.initializeIdentity(leafSecret)
+                        java.util.Arrays.fill(leafSecret, 0.toByte())
+                        
+                        nostrMgr.generateEphemeralNwcKeypair()
+                        
+                        nostrMgr.connectToRelays(
+                            scope = scope,
+                            onConnected = {
+                                android.util.Log.i("SignedByMe", "NOSTR relays connected")
+                            },
+                            onFailed = {
+                                android.util.Log.w("SignedByMe", "NOSTR relay connection failed")
+                            }
+                        )
+                        
+                        if (nostrMgr.initNwc()) {
+                            nostrMgr.connectNwc(
+                                scope = scope,
+                                onConnected = {
+                                    android.util.Log.i("SignedByMe", "NWC connected")
+                                },
+                                onFailed = {
+                                    android.util.Log.w("SignedByMe", "NWC connection failed")
+                                }
+                            )
+                        }
+                    } else {
+                        android.util.Log.w("SignedByMe", "No leaf_secret - NOSTR/NWC not initialized")
+                    }
+                    
                     val sessionId = loginSession?.sessionId ?: "demo_${System.currentTimeMillis()}"
                     lastLoginId = sessionId
                     
                     val amountSats = loginSession?.amountSats ?: 100UL
                     val clientId = loginSession?.clientId ?: "demo"
                     
-                    // Generate invoice via Breez wallet
-                    val invoiceResult = breezMgr.createInvoice(
-                        amountSats = amountSats,
-                        description = "SignedByMe Login - ${loginSession?.enterpriseName ?: "Demo"}"
-                    )
+                    // Generate invoices via NWC
+                    var userInvoice: String? = null
+                    var operatorInvoice: String? = null
                     
-                    if (invoiceResult.isFailure) {
-                        statusMessage = "Error: Could not generate invoice. ${invoiceResult.exceptionOrNull()?.message}"
+                    if (nostrMgr.isNwcConnected()) {
+                        val invoices = nostrMgr.generateLoginInvoices(
+                            totalSats = amountSats.toLong(),
+                            clientId = clientId
+                        )
+                        if (invoices != null) {
+                            userInvoice = invoices.first
+                            operatorInvoice = invoices.second
+                            android.util.Log.i("SignedByMe", "NWC invoices generated")
+                        }
+                    }
+                    
+                    if (userInvoice == null) {
+                        statusMessage = "Error: Could not generate invoice. Check wallet connection."
                         isCreatingInvoice = false
                         return@launch
                     }
                     
-                    val invoice = invoiceResult.getOrNull()!!
+                    val invoice = userInvoice
                     lastInvoice = invoice
-                    lastPaymentHash = breezMgr.extractPaymentHashSync(invoice)
+                    lastOperatorInvoice = operatorInvoice ?: ""
+                    lastPaymentHash = NativeBridge.extractPaymentHashFromBolt11(invoice)
                     
                     isLoginActive = true
                     isPollingPayment = true
@@ -925,7 +1002,7 @@ fun SignedByMeApp(
                     // Send to API
                     launch(Dispatchers.IO) {
                         try {
-                            val walletAddress = "breez-wallet"
+                            val walletAddress = "nwc-wallet"
                                 
                             val sessionNonce = loginSession?.nonce?.takeIf { it.length == 32 }
                                 ?: run {
@@ -1009,6 +1086,24 @@ fun SignedByMeApp(
                                         statusMessage = "Error: Not enrolled with this employer."
                                     }
                                     return@launch
+                                }
+                            }
+                            
+                            // Publish proof_event to NOSTR
+                            if (nostrMgr.isConnected()) {
+                                val proofHex = membershipBundle?.proofBase64 ?: ""
+                                val merkleRoot = ""
+                                val npub = nostrMgr.getNpub() ?: ""
+                                
+                                scope.launch(Dispatchers.IO) {
+                                    nostrMgr.publishProofEvent(
+                                        nonce = sessionNonce,
+                                        clientId = clientId,
+                                        proofHex = proofHex,
+                                        merkleRoot = merkleRoot,
+                                        userInvoice = invoice,
+                                        operatorInvoice = lastOperatorInvoice
+                                    )
                                 }
                             }
                             
