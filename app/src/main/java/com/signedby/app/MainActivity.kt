@@ -2081,8 +2081,8 @@ fun WalletScreen(
 @Composable
 fun PaymentRow(payment: Payment, btcPriceUsd: Double) {
     val isReceive = payment.paymentType == PaymentType.RECEIVE
-    val amountSats = payment.amountSats.toLong()
-    val timestamp = payment.createdAt
+    val amountSats = (payment.amountMsat / 1000u).toLong()
+    val timestamp = payment.timestamp
     
     Card(
         modifier = Modifier.fillMaxWidth(),
