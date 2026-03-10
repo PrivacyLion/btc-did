@@ -1904,6 +1904,10 @@ fun LoginScreen(
     var isSending by remember { mutableStateOf(false) }
     var sendError by remember { mutableStateOf("") }
     
+    // Seed words state
+    var showSeedWordsDialog by remember { mutableStateOf(false) }
+    var seedWords by remember { mutableStateOf<List<String>>(emptyList()) }
+    
     // Load payments on start
     LaunchedEffect(Unit) {
         payments = breezMgr.getRecentPayments(20u)
@@ -2273,6 +2277,24 @@ fun LoginScreen(
                             Text("Send")
                         }
                     }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // View Seed Words
+                    TextButton(
+                        onClick = {
+                            val mnemonic = breezMgr.getMnemonic()
+                            if (mnemonic != null) {
+                                seedWords = mnemonic.split(" ")
+                                showSeedWordsDialog = true
+                            } else {
+                                Toast.makeText(context, "Could not retrieve seed words", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("🔑 View Seed Words", fontSize = 13.sp, color = Color(0xFF3B82F6))
+                    }
                 }
             }
             
@@ -2322,12 +2344,13 @@ fun LoginScreen(
         )
     }
     
-    // Receive Dialog
+    // Receive Dialog (LoginScreen)
     if (showReceiveDialog) {
         Dialog(onDismissRequest = { showReceiveDialog = false }) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
@@ -2387,12 +2410,17 @@ fun LoginScreen(
                             "${receiveInvoice.take(20)}...${receiveInvoice.takeLast(10)}",
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = Color.Gray
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
                         )
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
+                        ) {
                             OutlinedButton(onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 clipboard.setPrimaryClip(ClipData.newPlainText("Invoice", receiveInvoice))
@@ -2422,6 +2450,22 @@ fun LoginScreen(
                 }
             }
         }
+    }
+    
+    // Seed Words Dialog
+    if (showSeedWordsDialog) {
+        SeedWordsDialog(
+            seedWords = seedWords,
+            onCopy = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Seed Words", seedWords.joinToString(" ")))
+                Toast.makeText(context, "Seed words copied!", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { 
+                showSeedWordsDialog = false
+                seedWords = emptyList()
+            }
+        )
     }
     
     // Send Dialog
@@ -3181,6 +3225,131 @@ fun InvoiceDialog(
                     textAlign = TextAlign.Center
                 )
             }
+        }
+    }
+}
+
+// ===== Seed Words Dialog =====
+@Composable
+fun SeedWordsDialog(
+    seedWords: List<String>,
+    onCopy: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Your Recovery Words",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Text("✕", fontSize = 18.sp, color = Color.Gray)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Warning
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text("⚠️", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Write these down and keep safe! Anyone with these words can access your wallet.",
+                            fontSize = 13.sp,
+                            color = Color(0xFF92400E)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                // Seed words grid
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    for (i in seedWords.indices step 2) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            SeedWordChip(
+                                number = i + 1,
+                                word = seedWords[i],
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (i + 1 < seedWords.size) {
+                                SeedWordChip(
+                                    number = i + 2,
+                                    word = seedWords[i + 1],
+                                    modifier = Modifier.weight(1f)
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                Button(
+                    onClick = onCopy,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
+                ) {
+                    Text("📋 Copy All")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SeedWordChip(
+    number: Int,
+    word: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F6)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "$number.",
+                fontSize = 12.sp,
+                color = Color.Gray,
+                modifier = Modifier.width(24.dp)
+            )
+            Text(
+                word,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
