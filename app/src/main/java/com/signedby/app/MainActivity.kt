@@ -188,6 +188,28 @@ class MainActivity : FragmentActivity() {
         // Note: For full implementation, use a ViewModel or state holder
     }
     
+    override fun onResume() {
+        super.onResume()
+        // Layer 1: Check if we need to re-authenticate after inactivity
+        if (isOnboardingComplete(this) && shouldRequireReauth(this)) {
+            android.util.Log.i("SignedByMe", "Layer 1: 2-minute inactivity timeout - requiring re-auth")
+            // Restart SplashActivity which will handle authentication
+            val intent = Intent(this, SplashActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            startActivity(intent)
+            finish()
+            return
+        }
+        // Update last activity timestamp
+        updateLastActivity(this)
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Update last activity when app goes to background
+        updateLastActivity(this)
+    }
+    
     private fun parseLoginIntent(intent: Intent?): LoginSession? {
         val uri = intent?.data ?: return null
         
@@ -630,6 +652,8 @@ fun SignedByMeApp(
     // Check if onboarding is complete (with delayed transition)
     val onboardingComplete = step1Complete && step2Complete && step3Complete
     var showLoginScreen by remember { mutableStateOf(false) }
+    var showSecuritySetup by remember { mutableStateOf(false) }
+    var securitySetupDone by remember { mutableStateOf(isOnboardingComplete(context)) }
     
     // Delay transition to login screen so user sees Step 3 complete
     LaunchedEffect(onboardingComplete) {
@@ -652,8 +676,28 @@ fun SignedByMeApp(
             }
             
             delay(1500)
-            showLoginScreen = true
+            
+            // Show security setup if not done yet
+            if (!securitySetupDone) {
+                showSecuritySetup = true
+            } else {
+                showLoginScreen = true
+            }
         }
+    }
+    
+    // Security Setup Dialog (Layer 1)
+    if (showSecuritySetup) {
+        SecuritySetupDialog(
+            onComplete = { selectedMode ->
+                saveLockMode(context, selectedMode)
+                markOnboardingComplete(context)
+                securitySetupDone = true
+                showSecuritySetup = false
+                showLoginScreen = true
+                android.util.Log.i("SignedByMe", "Security setup complete: $selectedMode")
+            }
+        )
     }
 
     // Poll for payment when invoice is active
@@ -2573,207 +2617,7 @@ fun LoginScreen(
     }
 }
 
-// ===== QR Scanner Dialog =====
-@Composable
-fun QrScannerDialog(
-    onQrScanned: (String) -> Unit,
-    onDismiss: () -> Unit,
-    title: String = "Scan Log In QR Code",
-    subtitle: String = "Point your camera at the QR Code on your computer screen"
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    var hasCameraPermission by remember {
-        mutableStateOf(
-            androidx.core.content.ContextCompat.checkSelfPermission(
-                context, android.Manifest.permission.CAMERA
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        )
-    }
-    
-    var cameraProviderRef by remember { mutableStateOf<androidx.camera.lifecycle.ProcessCameraProvider?>(null) }
-    val analysisExecutor = remember { java.util.concurrent.Executors.newSingleThreadExecutor() }
-    // Initialize barcode scanner synchronously to avoid race condition
-    val barcodeScanner = remember { 
-        android.util.Log.i("SignedByMe", "QR Scanner: initializing MLKit BarcodeScanner")
-        com.google.mlkit.vision.barcode.BarcodeScanning.getClient() 
-    }
-    var isDisposed by remember { mutableStateOf(false) }
-    
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasCameraPermission = granted
-    }
-    
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
-            permissionLauncher.launch(android.Manifest.permission.CAMERA)
-        }
-    }
-    
-    DisposableEffect(Unit) {
-        onDispose {
-            isDisposed = true
-            cameraProviderRef?.unbindAll()
-            analysisExecutor.shutdown()
-            barcodeScanner.close()
-        }
-    }
-    
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(0.8f),
-            shape = RoundedCornerShape(24.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Text(
-                    subtitle,
-                    fontSize = 13.sp,
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                if (hasCameraPermission) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.Black)
-                    ) {
-                        AndroidView(
-                            factory = { ctx ->
-                                val previewView = androidx.camera.view.PreviewView(ctx)
-                                val cameraProviderFuture = androidx.camera.lifecycle.ProcessCameraProvider.getInstance(ctx)
-                                
-                                cameraProviderFuture.addListener({
-                                    val cameraProvider = cameraProviderFuture.get()
-                                    
-                                    val preview = androidx.camera.core.Preview.Builder().build().also {
-                                        it.setSurfaceProvider(previewView.surfaceProvider)
-                                    }
-                                    
-                                    val imageAnalysis = androidx.camera.core.ImageAnalysis.Builder()
-                                        .setBackpressureStrategy(androidx.camera.core.ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                        .build()
-                                        .also { analysis ->
-                                            analysis.setAnalyzer(analysisExecutor) { imageProxy ->
-                                                @androidx.camera.core.ExperimentalGetImage
-                                                val mediaImage = imageProxy.image
-                                                if (mediaImage != null) {
-                                                    val inputImage = com.google.mlkit.vision.common.InputImage.fromMediaImage(
-                                                        mediaImage, imageProxy.imageInfo.rotationDegrees
-                                                    )
-                                                    
-                                                    barcodeScanner.process(inputImage)
-                                                        .addOnSuccessListener { barcodes ->
-                                                            if (isDisposed) return@addOnSuccessListener
-                                                            if (barcodes.isNotEmpty()) {
-                                                                android.util.Log.i("SignedByMe", "QR Scanner: detected ${barcodes.size} barcode(s)")
-                                                            }
-                                                            for (barcode in barcodes) {
-                                                                barcode.rawValue?.let { value ->
-                                                                    android.util.Log.i("SignedByMe", "QR Scanner: raw value = ${value.take(80)}...")
-                                                                    if (value.contains("session=") || value.contains("token=")) {
-                                                                        android.util.Log.i("SignedByMe", "QR Scanner: MATCH - calling onQrScanned")
-                                                                        onQrScanned(value)
-                                                                    } else {
-                                                                        android.util.Log.w("SignedByMe", "QR Scanner: no session=/token= in value, ignoring")
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                        .addOnFailureListener { e ->
-                                                            android.util.Log.e("SignedByMe", "QR Scanner: MLKit error: ${e.message}")
-                                                        }
-                                                        .addOnCompleteListener {
-                                                            imageProxy.close()
-                                                        }
-                                                } else {
-                                                    imageProxy.close()
-                                                }
-                                            }
-                                        }
-                                    
-                                    if (isDisposed) return@addListener
-                                    
-                                    try {
-                                        cameraProvider.unbindAll()
-                                        cameraProviderRef = cameraProvider
-                                        cameraProvider.bindToLifecycle(
-                                            lifecycleOwner,
-                                            androidx.camera.core.CameraSelector.DEFAULT_BACK_CAMERA,
-                                            preview,
-                                            imageAnalysis
-                                        )
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
-                                    }
-                                }, androidx.core.content.ContextCompat.getMainExecutor(ctx))
-                                
-                                previewView
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        
-                        // Scanning frame overlay
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(40.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(200.dp)
-                                    .border(3.dp, Color.White, RoundedCornerShape(12.dp))
-                            )
-                        }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Camera permission required",
-                            color = Color.Gray
-                        )
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Cancel")
-                }
-            }
-        }
-    }
-}
+// QR Scanner moved to QRScannerDialog.kt with Layer 2 biometric
 
 // ===== Components =====
 
@@ -3328,6 +3172,233 @@ fun SeedWordChip(
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
             )
+        }
+    }
+}
+
+// ===== Security Setup Dialog (Layer 1 Configuration) =====
+
+/**
+ * Dialog shown after onboarding to configure app lock (Layer 1).
+ * 
+ * Options:
+ * - Biometric (default): Fingerprint or Face ID
+ * - Passcode: 6-digit PIN (for devices without biometric)
+ * - Both: Maximum security
+ */
+@Composable
+fun SecuritySetupDialog(
+    onComplete: (LockMode) -> Unit
+) {
+    val context = LocalContext.current
+    var selectedMode by remember { mutableStateOf(LockMode.BIOMETRIC) }
+    
+    // Check biometric availability
+    val biometricManager = remember { BiometricManager.from(context) }
+    val canUseBiometric = remember {
+        biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == 
+            BiometricManager.BIOMETRIC_SUCCESS
+    }
+    val canUseDeviceCredential = remember {
+        biometricManager.canAuthenticate(BiometricManager.Authenticators.DEVICE_CREDENTIAL) ==
+            BiometricManager.BIOMETRIC_SUCCESS
+    }
+    
+    // Default to passcode if no biometric available
+    LaunchedEffect(canUseBiometric) {
+        if (!canUseBiometric && canUseDeviceCredential) {
+            selectedMode = LockMode.PASSCODE
+        }
+    }
+    
+    Dialog(onDismissRequest = { /* Cannot dismiss - must choose */ }) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Shield icon
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(Color(0xFF10B981), Color(0xFF34D399))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("🛡️", fontSize = 28.sp)
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    "Secure Your Wallet",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Text(
+                    "Choose how to protect your SignedByMe identity.\nThis will be required every time you open the app.",
+                    fontSize = 14.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Option: Biometric
+                if (canUseBiometric) {
+                    SecurityOptionCard(
+                        icon = "👆",
+                        title = "Biometric",
+                        description = "Use fingerprint or face recognition",
+                        isSelected = selectedMode == LockMode.BIOMETRIC,
+                        onClick = { selectedMode = LockMode.BIOMETRIC }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                
+                // Option: Passcode
+                if (canUseDeviceCredential) {
+                    SecurityOptionCard(
+                        icon = "🔢",
+                        title = "Device PIN/Password",
+                        description = "Use your device lock screen",
+                        isSelected = selectedMode == LockMode.PASSCODE,
+                        onClick = { selectedMode = LockMode.PASSCODE }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                
+                // Option: Both (maximum security)
+                if (canUseBiometric && canUseDeviceCredential) {
+                    SecurityOptionCard(
+                        icon = "🔐",
+                        title = "Biometric + PIN",
+                        description = "Maximum security (recommended)",
+                        isSelected = selectedMode == LockMode.BOTH,
+                        onClick = { selectedMode = LockMode.BOTH },
+                        isRecommended = true
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Warning if no security available
+                if (!canUseBiometric && !canUseDeviceCredential) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("⚠️", fontSize = 20.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "No lock screen set up. Please set up a PIN or biometric in your device settings.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF92400E)
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Button(
+                    onClick = { onComplete(selectedMode) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = canUseBiometric || canUseDeviceCredential,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF3B82F6)
+                    )
+                ) {
+                    Text("Continue", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SecurityOptionCard(
+    icon: String,
+    title: String,
+    description: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    isRecommended: Boolean = false
+) {
+    val borderColor = if (isSelected) Color(0xFF3B82F6) else Color(0xFFE5E7EB)
+    val backgroundColor = if (isSelected) Color(0xFFEFF6FF) else Color.White
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        border = BorderStroke(2.dp, borderColor),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(icon, fontSize = 28.sp)
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        title,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (isRecommended) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF10B981)),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                "BEST",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+                Text(
+                    description,
+                    fontSize = 13.sp,
+                    color = Color.Gray
+                )
+            }
+            
+            if (isSelected) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = "Selected",
+                    tint = Color(0xFF3B82F6)
+                )
+            }
         }
     }
 }

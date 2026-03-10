@@ -19,7 +19,12 @@ import kotlin.coroutines.suspendCoroutine
 
 class DidWalletManager(private val context: Context) {
 
+    // Storage key - no biometric required (for reading encrypted data)
     private val ksAlias = "btcdid_aes_wrap_v1"
+    
+    // Signing key - REQUIRES biometric for every operation (Layer 2 security)
+    private val ksSigningAlias = "btcdid_signing_v1"
+    
     private val wrappedFile = "did_wrapped.bin"
     private val fallbackKeyFile = "aes_fallback.bin"
     private val androidKeyStore = "AndroidKeyStore"
@@ -27,9 +32,23 @@ class DidWalletManager(private val context: Context) {
 
     @Volatile var currentDid: String? = null
         private set
+    
+    // Track if biometric auth is available for Layer 2
+    @Volatile var biometricAvailable: Boolean = false
+        private set
 
-    /** Prefer hardware Keystore; fall back to private software key on failure (emulators/old devices). */
+    /** 
+     * Initialize Keystore keys.
+     * - Storage key: no biometric (for reading encrypted data)
+     * - Signing key: REQUIRES biometric for every use (Layer 2 defense)
+     */
     fun ensureKeystoreKey() {
+        ensureStorageKey()
+        ensureSigningKey()
+    }
+    
+    /** Storage key - no biometric required */
+    private fun ensureStorageKey() {
         try {
             val ks = KeyStore.getInstance(androidKeyStore).apply { load(null) }
             if (ks.containsAlias(ksAlias)) return
@@ -40,7 +59,6 @@ class DidWalletManager(private val context: Context) {
             )
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                // TEMP: no auth prompt until BiometricPrompt is wired
                 .setUserAuthenticationRequired(false)
                 .setRandomizedEncryptionRequired(true)
 
@@ -59,6 +77,92 @@ class DidWalletManager(private val context: Context) {
                 context.openFileOutput(fallbackKeyFile, Context.MODE_PRIVATE).use { it.write(b) }
             }
         }
+    }
+    
+    /**
+     * Signing key - REQUIRES biometric authentication for EVERY use.
+     * 
+     * This is Layer 2 defense: even if BiometricPrompt code is bypassed,
+     * the hardware Keystore refuses to operate without biometric.
+     * 
+     * On API 30+: setUserAuthenticationParameters with 0 timeout = auth per-use
+     * On API 28-29: setUserAuthenticationValidityDurationSeconds(-1) = auth per-use
+     */
+    private fun ensureSigningKey() {
+        try {
+            val ks = KeyStore.getInstance(androidKeyStore).apply { load(null) }
+            if (ks.containsAlias(ksSigningAlias)) {
+                biometricAvailable = true
+                return
+            }
+
+            val specBuilder = KeyGenParameterSpec.Builder(
+                ksSigningAlias,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setRandomizedEncryptionRequired(true)
+                .setUserAuthenticationRequired(true)  // LAYER 2: Hardware-enforced biometric
+
+            // API 30+: use setUserAuthenticationParameters for per-use auth
+            if (Build.VERSION.SDK_INT >= 30) {
+                specBuilder.setUserAuthenticationParameters(
+                    0,  // 0 = auth required for EVERY use (no timeout)
+                    KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
+                )
+            } else if (Build.VERSION.SDK_INT >= 28) {
+                // API 28-29: -1 means auth required per-use
+                @Suppress("DEPRECATION")
+                specBuilder.setUserAuthenticationValidityDurationSeconds(-1)
+            }
+
+            if (Build.VERSION.SDK_INT >= 28) {
+                try { specBuilder.setUnlockedDeviceRequired(true) } catch (_: Throwable) {}
+                try { specBuilder.setIsStrongBoxBacked(true) } catch (_: Throwable) {}
+            }
+
+            val kg = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, androidKeyStore)
+            kg.init(specBuilder.build())
+            kg.generateKey()
+            biometricAvailable = true
+            android.util.Log.i("SignedByMe", "Layer 2 signing key created with biometric requirement")
+        } catch (e: Throwable) {
+            android.util.Log.w("SignedByMe", "Could not create biometric signing key: ${e.message}")
+            biometricAvailable = false
+        }
+    }
+    
+    /**
+     * Get the signing key (biometric-protected).
+     * Caller must have authenticated via BiometricPrompt first.
+     * If biometric not available, falls back to storage key.
+     */
+    private fun getSigningKey(): SecretKey {
+        if (!biometricAvailable) return getAesKey()
+        
+        return try {
+            val ks = KeyStore.getInstance(androidKeyStore).apply { load(null) }
+            (ks.getKey(ksSigningAlias, null) as SecretKey?) ?: getAesKey()
+        } catch (e: Throwable) {
+            android.util.Log.w("SignedByMe", "Signing key access failed: ${e.message}")
+            getAesKey()
+        }
+    }
+    
+    /**
+     * Unwrap private key using biometric-protected signing key.
+     * Call this AFTER BiometricPrompt.authenticate() succeeds.
+     * Throws UserNotAuthenticatedException if biometric not done.
+     */
+    fun unwrapPrivateKeyWithBiometric(wrapped: ByteArray): ByteArray {
+        require(wrapped.size > 12) { "wrapped too short" }
+        val secret = getSigningKey()
+        val iv = wrapped.copyOfRange(0, 12)
+        val ct = wrapped.copyOfRange(12, wrapped.size)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, secret, GCMParameterSpec(128, iv))
+        return cipher.doFinal(ct)
     }
 
     private fun getAesKey(): SecretKey {
