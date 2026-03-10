@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,6 +63,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.common.api.ApiException
+import breez_sdk_spark.Payment
+import breez_sdk_spark.PaymentType
+import breez_sdk_spark.PaymentStatus
+import breez_sdk_spark.PaymentDetails
 
 /**
  * Extract Groth16 assets from APK assets to filesystem.
@@ -158,7 +166,13 @@ class MainActivity : FragmentActivity() {
             android.util.Log.i("SignedByMe", "Groth16 prover ready: $initialized")
         }
         
-        // Initialize NWC wallet manager (replaces Breez)
+        // Initialize Breez wallet manager (replaces Strike)
+        val breezMgr = BreezWalletManager(applicationContext)
+        
+        // Initialize Google Drive backup manager
+        val backupMgr = GoogleDriveBackupManager(applicationContext)
+        
+        // Initialize NWC wallet manager (for enterprise payment flow - untouched)
         val nwcMgr = NwcWalletManager(applicationContext)
         
         // Initialize NOSTR manager (Phase 9)
@@ -169,7 +183,7 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             SignedByMeTheme {
-                SignedByMeApp(didMgr, nwcMgr, nostrMgr, initialLoginSession)
+                SignedByMeApp(didMgr, breezMgr, backupMgr, nwcMgr, nostrMgr, initialLoginSession)
             }
         }
     }
@@ -275,30 +289,22 @@ data class LoginSession(
 
 // API Configuration
 private const val API_BASE_URL = "https://api.beta.privacy-lion.com"
-private const val STRIKE_API_BASE = "https://api.strike.me"
 
 /**
  * Send the Lightning invoice to the API (stateless flow).
- * 
- * API will verify the session_token signature, verify STWO proof,
- * then call the enterprise's callback URL with the invoice.
- * Enterprise pays, user gets sats.
- * 
- * Returns true if successful, false otherwise.
  */
 private fun sendInvoiceToApi(
-    sessionToken: String?,  // JWT from QR code (new stateless flow)
-    sessionId: String,      // Legacy fallback
+    sessionToken: String?,
+    sessionId: String,
     invoice: String,
     did: String,
     enterpriseName: String,
-    amountSats: Long? = null,  // v3: amount binding
+    amountSats: Long? = null,
     stwoproof: String? = null,
     bindingSignature: String? = null,
     nonce: String? = null
 ): Boolean {
     return try {
-        // Use new stateless endpoint if we have a session token
         val endpoint = if (sessionToken != null) "/v1/login/submit" else "/v1/login/invoice"
         val url = java.net.URL("$API_BASE_URL$endpoint")
         
@@ -312,22 +318,17 @@ private fun sendInvoiceToApi(
         
         val payload = JSONObject().apply {
             if (sessionToken != null) {
-                // New stateless API
                 put("session_token", sessionToken)
             } else {
-                // Legacy API fallback
                 put("session_id", sessionId)
                 put("enterprise", enterpriseName)
             }
             put("invoice", invoice)
             put("did", did)
             
-            // v3: Include amount for binding verification
             if (amountSats != null) {
                 put("amount_sats", amountSats)
             }
-            
-            // Include STWO proof if available
             if (stwoproof != null) {
                 put("stwo_proof", stwoproof)
             }
@@ -344,7 +345,6 @@ private fun sendInvoiceToApi(
         val responseCode = conn.responseCode
         conn.disconnect()
         
-        // Success if 2xx response
         responseCode in 200..299
     } catch (e: Exception) {
         android.util.Log.e("SignedByMe", "Failed to send invoice to API: ${e.message}")
@@ -354,7 +354,6 @@ private fun sendInvoiceToApi(
 
 /**
  * Notify API that payment was settled and DLC completed.
- * Returns the session token for the enterprise.
  */
 private fun notifyApiOfSettlement(
     sessionId: String,
@@ -420,7 +419,7 @@ data class MembershipBundle(
 )
 
 /**
- * Result of API call - success flag + optional error message
+ * Result of API call
  */
 data class ApiResult(val success: Boolean, val errorMessage: String? = null, val responseBody: String? = null)
 
@@ -461,22 +460,15 @@ private fun sendInvoiceToApiWithDlc(
             put("amount_sats", amountSats)
             put("nonce", nonce)
             
-            // Wallet address for binding hash (critical for membership proof)
             if (walletAddress != null) {
                 put("wallet_address", walletAddress)
             }
-            
-            // STWO proof
             if (stwoproof != null) {
                 put("stwo_proof", stwoproof)
             }
-            
-            // DLC contract metadata for 90/10 split
             if (dlcContractJson != null) {
                 put("dlc_contract", JSONObject(dlcContractJson))
             }
-            
-            // Membership proof bundle (v4)
             if (membership != null) {
                 put("membership", JSONObject().apply {
                     put("root_id", membership.rootId)
@@ -506,7 +498,6 @@ private fun sendInvoiceToApiWithDlc(
         if (responseCode in 200..299) {
             ApiResult(success = true, responseBody = responseBody)
         } else {
-            // Parse error detail from JSON response
             val errorDetail = try {
                 JSONObject(responseBody).optString("detail", "Request failed ($responseCode)")
             } catch (e: Exception) {
@@ -563,6 +554,8 @@ fun formatSats(sats: Long): String {
 @Composable
 fun SignedByMeApp(
     didMgr: DidWalletManager, 
+    breezMgr: BreezWalletManager,
+    backupMgr: GoogleDriveBackupManager,
     nwcMgr: NwcWalletManager,
     nostrMgr: NostrManager,
     initialLoginSession: LoginSession? = null
@@ -591,25 +584,73 @@ fun SignedByMeApp(
         }
     }
     
-    // Step 2: NWC wallet setup (replaces Breez)
+    // Step 2: Breez wallet setup + backup
     var step2Complete by remember { mutableStateOf(false) }
     var step3Complete by remember { mutableStateOf(false) }
-    var walletConnected by remember { mutableStateOf(false) }
     
-    // Load wallet state asynchronously to avoid StrictMode violation
+    // Breez wallet state
+    val breezWalletState by breezMgr.walletState.collectAsState()
+    var isWalletInitializing by remember { mutableStateOf(false) }
+    var walletInitError by remember { mutableStateOf("") }
+    
+    // Backup state (mandatory before step2 can complete)
+    var backupComplete by remember { mutableStateOf(false) }
+    var showBackupScreen by remember { mutableStateOf(false) }
+    var backupPin by remember { mutableStateOf("") }
+    var backupPinConfirm by remember { mutableStateOf("") }
+    var backupError by remember { mutableStateOf("") }
+    var isBackingUp by remember { mutableStateOf(false) }
+    var pendingGoogleSignIn by remember { mutableStateOf(false) }
+    
+    // Check if wallet + backup already done
     LaunchedEffect(Unit) {
-        step2Complete = nwcMgr.hasWalletAsync()
-        walletConnected = nwcMgr.isConnectedAsync()
+        val hasWallet = breezMgr.hasWallet()
+        val hasBackup = withContext(Dispatchers.IO) {
+            backupMgr.isSignedIn() && backupMgr.hasBackup()
+        }
+        if (hasWallet && hasBackup) {
+            step2Complete = true
+            backupComplete = true
+        }
     }
     
-    // Strike wallet onboarding state (Step 2)
-    var strikeEmail by remember { mutableStateOf("") }
-    var strikeDob by remember { mutableStateOf("") }
-    var strikeCountry by remember { mutableStateOf("") }
-    var strikeTosAccepted by remember { mutableStateOf(false) }
-    var isWalletOnboarding by remember { mutableStateOf(false) }
-    var walletOnboardingError by remember { mutableStateOf("") }
-    var awaitingEmailVerification by remember { mutableStateOf(false) }
+    // Google Sign-In launcher
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        scope.launch {
+            try {
+                val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                val account = task.getResult(ApiException::class.java)
+                if (account != null) {
+                    val success = backupMgr.handleSignInResult(account)
+                    if (success && pendingGoogleSignIn) {
+                        pendingGoogleSignIn = false
+                        // Now backup the mnemonic
+                        val mnemonic = breezMgr.getMnemonic()
+                        if (mnemonic != null) {
+                            isBackingUp = true
+                            val backupResult = backupMgr.backupMnemonic(mnemonic, backupPin)
+                            isBackingUp = false
+                            if (backupResult.isSuccess) {
+                                backupComplete = true
+                                step2Complete = true
+                                showBackupScreen = false
+                            } else {
+                                backupError = backupResult.exceptionOrNull()?.message ?: "Backup failed"
+                            }
+                        } else {
+                            backupError = "Could not retrieve wallet seed"
+                        }
+                    }
+                }
+            } catch (e: ApiException) {
+                android.util.Log.e("SignedByMe", "Google sign-in failed: ${e.statusCode}")
+                backupError = "Google sign-in failed. Please try again."
+                pendingGoogleSignIn = false
+            }
+        }
+    }
     
     // Login session state (from deep link, QR scan, or demo)
     var loginSession by remember { mutableStateOf(initialLoginSession) }
@@ -641,7 +682,7 @@ fun SignedByMeApp(
     // UI state
     var statusMessage by remember { mutableStateOf("") }
     var showIdDialog by remember { mutableStateOf(false) }
-    var showWalletInfoDialog by remember { mutableStateOf(false) }
+    var showWalletScreen by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     
     // BTC price for display
@@ -652,15 +693,14 @@ fun SignedByMeApp(
     var showLoginScreen by remember { mutableStateOf(false) }
     
     // Delay transition to login screen so user sees Step 3 complete
-    // Also trigger background enrollment
     LaunchedEffect(onboardingComplete) {
         if (onboardingComplete && !showLoginScreen) {
-            // Start enrollment in background (doesn't block UI)
+            // Start enrollment in background
             launch(Dispatchers.IO) {
                 try {
                     val success = didMgr.performEnrollment(
                         apiBaseUrl = API_BASE_URL,
-                        apiKey = "test-secret-key-12345"  // From clients.json
+                        apiKey = "test-secret-key-12345"
                     )
                     if (success) {
                         android.util.Log.i("SignedByMe", "Background enrollment succeeded")
@@ -672,7 +712,7 @@ fun SignedByMeApp(
                 }
             }
             
-            delay(1500) // 1.5 second delay to see completion
+            delay(1500)
             showLoginScreen = true
         }
     }
@@ -681,20 +721,13 @@ fun SignedByMeApp(
     LaunchedEffect(isPollingPayment, lastPaymentHash) {
         if (isPollingPayment && lastPaymentHash.isNotEmpty()) {
             while (isPollingPayment && !paymentReceived) {
-                // Poll NWC for payment (3 second timeout per poll)
-                val preimage = if (nostrMgr.isNwcConnected()) {
-                    nostrMgr.waitForPayment(lastPaymentHash, timeoutSecs = 3)
-                } else {
-                    null
-                }
-                val received = preimage != null
+                // Check Breez wallet for payment
+                val received = breezMgr.isPaymentReceived(lastPaymentHash)
                 if (received) {
-                    val receivedPreimage = preimage ?: ""
                     paymentReceived = true
                     isPollingPayment = false
                     isLoginActive = false
                     
-                    // Complete DLC flow
                     try {
                         val attestation = dlcManager.requestOracleSignature(DlcManager.OUTCOME_AUTH_VERIFIED)
                         android.util.Log.i("SignedByMe", "Oracle attestation received: ${attestation.signatureHex.take(16)}...")
@@ -703,14 +736,12 @@ fun SignedByMeApp(
                             lastSettlementReceipt = dlcManager.buildSettlementReceipt(
                                 contract = lastDlcContract!!,
                                 paymentHash = lastPaymentHash,
-                                preimageHex = receivedPreimage.ifEmpty { null },
+                                preimageHex = null,
                                 attestation = attestation
                             )
                             
                             val (userAmt, opAmt) = dlcManager.calculatePayouts(lastDlcContract!!.amountSats)
                             statusMessage = "✅ Login verified! You received $userAmt sats (90%)"
-                            
-                            android.util.Log.i("SignedByMe", "Settlement receipt: ${lastSettlementReceipt?.auditHash}")
                             
                             scope.launch(Dispatchers.IO) {
                                 notifyApiOfSettlement(
@@ -719,35 +750,9 @@ fun SignedByMeApp(
                                     attestation = attestation,
                                     receipt = lastSettlementReceipt
                                 )
-                                
-                                if (nostrMgr.isConnected()) {
-                                    nostrMgr.publishPaymentReceipt(
-                                        nonce = loginSession?.nonce ?: lastLoginId,
-                                        paymentHash = lastPaymentHash,
-                                        preimageHex = receivedPreimage,
-                                        amountSats = userAmt
-                                    )
-                                    
-                                    nostrMgr.publishLoginComplete(
-                                        nonce = loginSession?.nonce ?: lastLoginId,
-                                        clientId = loginSession?.clientId ?: "demo"
-                                    )
-                                    
-                                    nostrMgr.disconnect()
-                                }
                             }
                         } else {
                             statusMessage = "✅ Payment received! Log In verified."
-                            
-                            scope.launch(Dispatchers.IO) {
-                                if (nostrMgr.isConnected()) {
-                                    nostrMgr.publishLoginComplete(
-                                        nonce = loginSession?.nonce ?: lastLoginId,
-                                        clientId = loginSession?.clientId ?: "demo"
-                                    )
-                                    nostrMgr.disconnect()
-                                }
-                            }
                         }
                     } catch (e: Exception) {
                         android.util.Log.e("SignedByMe", "DLC completion error: ${e.message}")
@@ -755,12 +760,14 @@ fun SignedByMeApp(
                     }
                     
                     showInvoiceDialog = false
+                } else {
+                    delay(3000) // Poll every 3 seconds
                 }
             }
         }
     }
     
-    // Fetch BTC price from CoinGecko on start and periodically
+    // Fetch BTC price
     LaunchedEffect(Unit) {
         while (true) {
             try {
@@ -771,12 +778,11 @@ fun SignedByMeApp(
             } catch (e: Exception) {
                 android.util.Log.e("SignedByMe", "Failed to fetch BTC price: ${e.message}")
             }
-            delay(60000) // Refresh every minute
+            delay(60000)
         }
     }
 
     // ===== Screen Routing =====
-    // Gate on DID loading state
     if (did == null && didErr == null) {
         // Loading state
         Box(
@@ -832,6 +838,13 @@ fun SignedByMeApp(
                 }
             }
         }
+    } else if (showWalletScreen) {
+        // Wallet Screen (Send/Receive/Transactions)
+        WalletScreen(
+            breezMgr = breezMgr,
+            btcPriceUsd = btcPriceUsd,
+            onBack = { showWalletScreen = false }
+        )
     } else if (showLoginScreen) {
         // Show Login Screen
         LoginScreen(
@@ -884,71 +897,27 @@ fun SignedByMeApp(
                     isCreatingInvoice = true
                     statusMessage = ""
                     
-                    // Initialize NOSTR + NWC
-                    val leafSecret = didMgr.loadLeafSecret()
-                    if (leafSecret != null) {
-                        nostrMgr.initializeIdentity(leafSecret)
-                        java.util.Arrays.fill(leafSecret, 0.toByte())
-                        
-                        nostrMgr.generateEphemeralNwcKeypair()
-                        
-                        nostrMgr.connectToRelays(
-                            scope = scope,
-                            onConnected = {
-                                android.util.Log.i("SignedByMe", "NOSTR relays connected")
-                            },
-                            onFailed = {
-                                android.util.Log.w("SignedByMe", "NOSTR relay connection failed")
-                            }
-                        )
-                        
-                        if (nostrMgr.initNwc()) {
-                            nostrMgr.connectNwc(
-                                scope = scope,
-                                onConnected = {
-                                    android.util.Log.i("SignedByMe", "NWC connected")
-                                },
-                                onFailed = {
-                                    android.util.Log.w("SignedByMe", "NWC connection failed")
-                                }
-                            )
-                        }
-                    } else {
-                        android.util.Log.w("SignedByMe", "No leaf_secret - NOSTR/NWC not initialized")
-                    }
-                    
                     val sessionId = loginSession?.sessionId ?: "demo_${System.currentTimeMillis()}"
                     lastLoginId = sessionId
                     
                     val amountSats = loginSession?.amountSats ?: 100UL
                     val clientId = loginSession?.clientId ?: "demo"
                     
-                    // Generate invoices via NWC
-                    var userInvoice: String? = null
-                    var operatorInvoice: String? = null
+                    // Generate invoice via Breez wallet
+                    val invoiceResult = breezMgr.createInvoice(
+                        amountSats = amountSats,
+                        description = "SignedByMe Login - ${loginSession?.enterpriseName ?: "Demo"}"
+                    )
                     
-                    if (nostrMgr.isNwcConnected()) {
-                        val invoices = nostrMgr.generateLoginInvoices(
-                            totalSats = amountSats.toLong(),
-                            clientId = clientId
-                        )
-                        if (invoices != null) {
-                            userInvoice = invoices.first
-                            operatorInvoice = invoices.second
-                            android.util.Log.i("SignedByMe", "NWC invoices generated")
-                        }
-                    }
-                    
-                    if (userInvoice == null) {
-                        statusMessage = "Error: Could not generate invoice. Check wallet connection."
+                    if (invoiceResult.isFailure) {
+                        statusMessage = "Error: Could not generate invoice. ${invoiceResult.exceptionOrNull()?.message}"
                         isCreatingInvoice = false
                         return@launch
                     }
                     
-                    val invoice = userInvoice
+                    val invoice = invoiceResult.getOrNull()!!
                     lastInvoice = invoice
-                    lastOperatorInvoice = operatorInvoice ?: ""
-                    lastPaymentHash = NativeBridge.extractPaymentHashFromBolt11(invoice)
+                    lastPaymentHash = breezMgr.extractPaymentHashSync(invoice)
                     
                     isLoginActive = true
                     isPollingPayment = true
@@ -956,7 +925,7 @@ fun SignedByMeApp(
                     // Send to API
                     launch(Dispatchers.IO) {
                         try {
-                            val walletAddress = "nwc-wallet"
+                            val walletAddress = "breez-wallet"
                                 
                             val sessionNonce = loginSession?.nonce?.takeIf { it.length == 32 }
                                 ?: run {
@@ -967,7 +936,6 @@ fun SignedByMeApp(
                             val sessionAmount = loginSession?.amountSats?.toLong() ?: 100L
                             val enterpriseDomain = loginSession?.enterpriseName ?: "demo.signedby.me"
                             
-                            // STWO removed in Phase 6 - using Groth16 for membership proofs now
                             val stwoproof: String? = null
                             
                             val dlcContract = try {
@@ -1041,24 +1009,6 @@ fun SignedByMeApp(
                                         statusMessage = "Error: Not enrolled with this employer."
                                     }
                                     return@launch
-                                }
-                            }
-                            
-                            // Publish proof_event to NOSTR
-                            if (nostrMgr.isConnected()) {
-                                val proofHex = membershipBundle?.proofBase64 ?: ""
-                                val merkleRoot = ""
-                                val npub = nostrMgr.getNpub() ?: ""
-                                
-                                scope.launch(Dispatchers.IO) {
-                                    nostrMgr.publishProofEvent(
-                                        nonce = sessionNonce,
-                                        clientId = clientId,
-                                        proofHex = proofHex,
-                                        merkleRoot = merkleRoot,
-                                        userInvoice = invoice,
-                                        operatorInvoice = lastOperatorInvoice
-                                    )
                                 }
                             }
                             
@@ -1142,7 +1092,8 @@ fun SignedByMeApp(
                 }
             } else null,
             btcPriceUsd = btcPriceUsd,
-            strikeEmail = nwcMgr.getStrikeEmail()
+            breezWalletState = breezWalletState,
+            onShowWallet = { showWalletScreen = true }
         )
     } else {
         // Show Onboarding Screen
@@ -1151,17 +1102,18 @@ fun SignedByMeApp(
             step1Complete = step1Complete,
             step2Complete = step2Complete,
             step3Complete = step3Complete,
-            isWalletOnboarding = isWalletOnboarding,
-            walletOnboardingError = walletOnboardingError,
-            awaitingEmailVerification = awaitingEmailVerification,
-            strikeEmail = strikeEmail,
-            strikeDob = strikeDob,
-            strikeCountry = strikeCountry,
-            strikeTosAccepted = strikeTosAccepted,
+            isWalletInitializing = isWalletInitializing,
+            walletInitError = walletInitError,
+            breezWalletState = breezWalletState,
+            showBackupScreen = showBackupScreen,
+            backupPin = backupPin,
+            backupPinConfirm = backupPinConfirm,
+            backupError = backupError,
+            isBackingUp = isBackingUp,
+            backupComplete = backupComplete,
             isLoading = isLoading,
             statusMessage = statusMessage,
             showIdDialog = showIdDialog,
-            showWalletInfoDialog = showWalletInfoDialog,
             onGenerateDid = {
                 scope.launch(Dispatchers.IO) {
                     val newDid = didMgr.createDid()
@@ -1189,84 +1141,66 @@ fun SignedByMeApp(
                 clipboard.setPrimaryClip(ClipData.newPlainText("DID", did!!))
                 Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
             },
-            // Step 2: Strike wallet onboarding
-            onStrikeEmailChange = { strikeEmail = it },
-            onStrikeDobChange = { strikeDob = it },
-            onStrikeCountryChange = { strikeCountry = it },
-            onStrikeTosChange = { strikeTosAccepted = it },
-            onSubmitStrikeOnboarding = {
-                // Validate inputs
-                if (strikeEmail.isEmpty() || !strikeEmail.contains("@")) {
-                    walletOnboardingError = "Please enter a valid email address"
-                    return@OnboardingScreen
-                }
-                if (strikeDob.isEmpty()) {
-                    walletOnboardingError = "Please enter your date of birth"
-                    return@OnboardingScreen
-                }
-                if (strikeCountry.isEmpty()) {
-                    walletOnboardingError = "Please select your country"
-                    return@OnboardingScreen
-                }
-                if (!strikeTosAccepted) {
-                    walletOnboardingError = "Please accept Strike's Terms of Service"
-                    return@OnboardingScreen
-                }
-                
-                walletOnboardingError = ""
-                isWalletOnboarding = true
-                
-                // Record ToS acceptance
-                nwcMgr.recordTosAcceptance(strikeEmail)
-                
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        // TODO: Call Strike partner API to provision embedded wallet
-                        // For now, simulate the flow
-                        // Strike will send verification email to user
-                        // App handles deep link callback when user taps email link
-                        
-                        // Simulate API call delay
-                        delay(2000)
-                        
-                        withContext(Dispatchers.Main) {
-                            awaitingEmailVerification = true
-                            isWalletOnboarding = false
-                            statusMessage = "Check your email to verify your Strike wallet"
-                        }
-                    } catch (e: Exception) {
-                        withContext(Dispatchers.Main) {
-                            walletOnboardingError = "Error: ${e.message}"
-                            isWalletOnboarding = false
-                        }
+            // Step 2: Breez wallet setup
+            onInitializeWallet = {
+                isWalletInitializing = true
+                walletInitError = ""
+                scope.launch {
+                    val result = breezMgr.initializeWallet()
+                    isWalletInitializing = false
+                    if (result.isSuccess) {
+                        // Wallet initialized, now show backup screen
+                        showBackupScreen = true
+                    } else {
+                        walletInitError = result.exceptionOrNull()?.message ?: "Failed to initialize wallet"
                     }
                 }
             },
-            onStrikeCallbackReceived = { nwcConnectionString ->
-                // Called when deep link callback returns with NWC connection string
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        nwcMgr.storeNwcConnectionStringAsync(nwcConnectionString)
-                        withContext(Dispatchers.Main) {
-                            step2Complete = true
-                            walletConnected = true
-                            awaitingEmailVerification = false
-                            statusMessage = "Wallet connected!"
-                        }
-                    } catch (e: Exception) {
-                        withContext(Dispatchers.Main) {
-                            walletOnboardingError = "Failed to save wallet: ${e.message}"
+            onBackupPinChange = { backupPin = it },
+            onBackupPinConfirmChange = { backupPinConfirm = it },
+            onStartBackup = {
+                backupError = ""
+                
+                // Validate PIN
+                if (backupPin.length < 6) {
+                    backupError = "PIN must be at least 6 digits"
+                    return@OnboardingScreen
+                }
+                if (backupPin != backupPinConfirm) {
+                    backupError = "PINs do not match"
+                    return@OnboardingScreen
+                }
+                
+                // If already signed in, backup directly
+                if (backupMgr.isSignedIn()) {
+                    isBackingUp = true
+                    scope.launch {
+                        val mnemonic = breezMgr.getMnemonic()
+                        if (mnemonic != null) {
+                            val backupResult = backupMgr.backupMnemonic(mnemonic, backupPin)
+                            isBackingUp = false
+                            if (backupResult.isSuccess) {
+                                backupComplete = true
+                                step2Complete = true
+                                showBackupScreen = false
+                            } else {
+                                backupError = backupResult.exceptionOrNull()?.message ?: "Backup failed"
+                            }
+                        } else {
+                            isBackingUp = false
+                            backupError = "Could not retrieve wallet seed"
                         }
                     }
+                } else {
+                    // Need Google Sign-In first
+                    pendingGoogleSignIn = true
+                    googleSignInLauncher.launch(backupMgr.getSignInIntent())
                 }
             },
-            onShowWalletInfoDialog = { showWalletInfoDialog = true },
-            onDismissWalletInfoDialog = { showWalletInfoDialog = false },
             onGenerateSignature = {
                 isLoading = true
                 scope.launch(Dispatchers.IO) {
                     try {
-                        // Generate Groth16 proof to verify proving system works
                         val groth16Result = didMgr.generateGroth16Proof(
                             clientId = "test-client",
                             rootId = "default"
@@ -1279,10 +1213,6 @@ fun SignedByMeApp(
                         } else {
                             android.util.Log.w("SignedByMe", "Groth16 proof: ${groth16Json.optString("error", "unknown")}")
                         }
-
-                        // NOTE: Enrollment is handled by Phase 10 (B2C Enrollment API)
-                        // The server generates witnesses after enrollment verification.
-                        // No client-side auto-enrollment.
 
                         withContext(Dispatchers.Main) {
                             step3Complete = true
@@ -1323,14 +1253,6 @@ fun SignedByMeApp(
             }
         )
     }
-
-    if (showWalletInfoDialog) {
-        WalletInfoDialog(
-            strikeEmail = nwcMgr.getStrikeEmail() ?: "",
-            isConnected = walletConnected,
-            onDismiss = { showWalletInfoDialog = false }
-        )
-    }
 }
 
 // ===== Onboarding Screen =====
@@ -1340,30 +1262,27 @@ fun OnboardingScreen(
     step1Complete: Boolean,
     step2Complete: Boolean,
     step3Complete: Boolean,
-    isWalletOnboarding: Boolean,
-    walletOnboardingError: String,
-    awaitingEmailVerification: Boolean,
-    strikeEmail: String,
-    strikeDob: String,
-    strikeCountry: String,
-    strikeTosAccepted: Boolean,
+    isWalletInitializing: Boolean,
+    walletInitError: String,
+    breezWalletState: BreezWalletManager.WalletState,
+    showBackupScreen: Boolean,
+    backupPin: String,
+    backupPinConfirm: String,
+    backupError: String,
+    isBackingUp: Boolean,
+    backupComplete: Boolean,
     isLoading: Boolean,
     statusMessage: String,
     showIdDialog: Boolean,
-    showWalletInfoDialog: Boolean,
     onGenerateDid: () -> Unit,
     onShowIdDialog: () -> Unit,
     onDismissIdDialog: () -> Unit,
     onRegenerateDid: () -> Unit,
     onCopyDid: () -> Unit,
-    onStrikeEmailChange: (String) -> Unit,
-    onStrikeDobChange: (String) -> Unit,
-    onStrikeCountryChange: (String) -> Unit,
-    onStrikeTosChange: (Boolean) -> Unit,
-    onSubmitStrikeOnboarding: () -> Unit,
-    onStrikeCallbackReceived: (String) -> Unit,
-    onShowWalletInfoDialog: () -> Unit,
-    onDismissWalletInfoDialog: () -> Unit,
+    onInitializeWallet: () -> Unit,
+    onBackupPinChange: (String) -> Unit,
+    onBackupPinConfirmChange: (String) -> Unit,
+    onStartBackup: () -> Unit,
     onGenerateSignature: () -> Unit
 ) {
     Box(
@@ -1437,7 +1356,7 @@ fun OnboardingScreen(
                 }
             }
 
-            // Step 2: Connect (Strike Wallet)
+            // Step 2: Connect (Breez Wallet + Backup)
             StepCard(
                 stepNumber = 2,
                 title = "Connect",
@@ -1445,56 +1364,119 @@ fun OnboardingScreen(
                 isEnabled = step1Complete
             ) {
                 if (!step2Complete) {
-                    if (awaitingEmailVerification) {
-                        // Waiting for email verification
+                    if (showBackupScreen) {
+                        // Backup screen (mandatory before proceeding)
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("📧", fontSize = 48.sp)
+                            Text("☁️", fontSize = 48.sp)
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                "Check your email",
+                                "Back Up Your Wallet",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "We sent a verification link to $strikeEmail. Tap the link to connect your wallet.",
+                                "Your wallet is ready! Back it up to Google Drive to ensure you can recover it if you lose this device.",
                                 fontSize = 14.sp,
                                 color = Color.Gray,
                                 textAlign = TextAlign.Center
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = Color(0xFF3B82F6),
-                                strokeWidth = 2.dp
+                            
+                            Spacer(modifier = Modifier.height(20.dp))
+                            
+                            // PIN entry
+                            OutlinedTextField(
+                                value = backupPin,
+                                onValueChange = { if (it.all { c -> c.isDigit() } && it.length <= 8) onBackupPinChange(it) },
+                                label = { Text("Create 6+ digit PIN") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                enabled = !isBackingUp,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                visualTransformation = PasswordVisualTransformation(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color.White,
+                                    unfocusedContainerColor = Color.White
+                                )
                             )
                             
-                            // DEV BYPASS - Remove before production build
-                            if (BuildConfig.DEBUG) {
-                                Spacer(modifier = Modifier.height(24.dp))
-                                OutlinedButton(
-                                    onClick = {
-                                        // Simulate successful deep link callback with test NWC string
-                                        // Same format as NostrManager.kt dev string
-                                        val devNwcString = "nostr+walletconnect://0f556eb33d73b6a93b88ecff855dacefed2da1036d0842091e974e27fbca3b20?relay=wss://relay.privacy-lion.com&secret=f954e9f1a590fdfecff0c30d198eaa8e475763561c61cff258bc8d59dcc45d37"
-                                        onStrikeCallbackReceived(devNwcString)
-                                    },
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = Color(0xFFEF4444)
-                                    ),
-                                    border = BorderStroke(1.dp, Color(0xFFEF4444))
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            OutlinedTextField(
+                                value = backupPinConfirm,
+                                onValueChange = { if (it.all { c -> c.isDigit() } && it.length <= 8) onBackupPinConfirmChange(it) },
+                                label = { Text("Confirm PIN") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                enabled = !isBackingUp,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                visualTransformation = PasswordVisualTransformation(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color.White,
+                                    unfocusedContainerColor = Color.White
+                                )
+                            )
+                            
+                            if (backupError.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    backupError,
+                                    color = Color(0xFFEF4444),
+                                    fontSize = 12.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(20.dp))
+                            
+                            if (isBackingUp) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Text("Skip (dev)", fontSize = 12.sp)
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(40.dp),
+                                        color = Color(0xFF3B82F6)
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text("Encrypting and uploading...", fontSize = 14.sp, color = Color.Gray)
+                                }
+                            } else {
+                                GradientButton(
+                                    text = "Back Up Now",
+                                    colors = listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)),
+                                    onClick = onStartBackup
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Security note
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Text("🔐", fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        "Your seed is encrypted with your PIN before upload. Even Google cannot read it.",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF92400E)
+                                    )
                                 }
                             }
                         }
                     } else {
-                        // Strike wallet onboarding form
+                        // Wallet initialization screen
                         Text(
-                            "Set up your Lightning wallet with Strike",
+                            "Set up your Lightning wallet",
                             color = Color.Gray,
                             fontSize = 14.sp,
                             textAlign = TextAlign.Center,
@@ -1512,102 +1494,18 @@ fun OnboardingScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Email field
-                        OutlinedTextField(
-                            value = strikeEmail,
-                            onValueChange = onStrikeEmailChange,
-                            label = { Text("Email address") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            enabled = !isWalletOnboarding,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.Black,
-                                unfocusedTextColor = Color.Black,
-                                disabledTextColor = Color.Gray,
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = Color.White
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Date of birth field
-                        OutlinedTextField(
-                            value = strikeDob,
-                            onValueChange = onStrikeDobChange,
-                            label = { Text("Date of birth (MM/DD/YYYY)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            enabled = !isWalletOnboarding,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.Black,
-                                unfocusedTextColor = Color.Black,
-                                disabledTextColor = Color.Gray,
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = Color.White
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Country dropdown (simplified as text field for now)
-                        OutlinedTextField(
-                            value = strikeCountry,
-                            onValueChange = onStrikeCountryChange,
-                            label = { Text("Country of residence") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            enabled = !isWalletOnboarding,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.Black,
-                                unfocusedTextColor = Color.Black,
-                                disabledTextColor = Color.Gray,
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = Color.White
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // ToS checkbox
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(enabled = !isWalletOnboarding) { 
-                                    onStrikeTosChange(!strikeTosAccepted) 
-                                },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = strikeTosAccepted,
-                                onCheckedChange = { onStrikeTosChange(it) },
-                                enabled = !isWalletOnboarding
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                        if (walletInitError.isNotEmpty()) {
                             Text(
-                                "I agree to Strike's Terms of Service",
-                                fontSize = 14.sp,
-                                color = if (strikeTosAccepted) Color.Black else Color.Gray
-                            )
-                        }
-
-                        // Error message
-                        if (walletOnboardingError.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                walletOnboardingError,
+                                walletInitError,
                                 color = Color(0xFFEF4444),
                                 fontSize = 12.sp,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
+                            Spacer(modifier = Modifier.height(12.dp))
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (isWalletOnboarding) {
+                        if (isWalletInitializing) {
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalAlignment = Alignment.CenterHorizontally
@@ -1617,42 +1515,41 @@ fun OnboardingScreen(
                                     color = Color(0xFF3B82F6)
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Text("Setting up wallet...", fontSize = 14.sp, color = Color.Gray)
+                                Text("Initializing wallet...", fontSize = 14.sp, color = Color.Gray)
                             }
                         } else {
                             GradientButton(
                                 text = "Set Up Wallet",
                                 colors = listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)),
-                                onClick = onSubmitStrikeOnboarding
+                                onClick = onInitializeWallet
                             )
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Recovery info
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7)),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(12.dp),
                                 verticalAlignment = Alignment.Top
                             ) {
-                                Text("🔒", fontSize = 14.sp)
+                                Text("⚡", fontSize = 14.sp)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    "Your wallet is recovered via your Strike email. No seed words needed.",
+                                    "Breez Spark wallet — fast, nodeless Lightning. Payments arrive in your wallet.",
                                     fontSize = 12.sp,
-                                    color = Color(0xFF92400E)
+                                    color = Color(0xFF166534)
                                 )
                             }
                         }
                     }
                 } else {
                     CompletedStepContent(
-                        message = "Wallet connected ✓",
-                        onInfoClick = onShowWalletInfoDialog
+                        message = "Wallet ready + backed up ✓",
+                        onInfoClick = null
                     )
                 }
             }
@@ -1726,7 +1623,433 @@ fun OnboardingScreen(
     }
 }
 
-// ===== Login Screen (Simplified - No Wallet UI) =====
+// ===== Wallet Screen (Send/Receive/Transactions) =====
+@Composable
+fun WalletScreen(
+    breezMgr: BreezWalletManager,
+    btcPriceUsd: Double,
+    onBack: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    
+    val walletState by breezMgr.walletState.collectAsState()
+    var payments by remember { mutableStateOf<List<Payment>>(emptyList()) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    
+    // Receive state
+    var showReceiveDialog by remember { mutableStateOf(false) }
+    var receiveAmountInput by remember { mutableStateOf("") }
+    var receiveInvoice by remember { mutableStateOf("") }
+    var isGeneratingInvoice by remember { mutableStateOf(false) }
+    
+    // Send state
+    var showSendDialog by remember { mutableStateOf(false) }
+    var sendInvoiceInput by remember { mutableStateOf("") }
+    var isSending by remember { mutableStateOf(false) }
+    var sendError by remember { mutableStateOf("") }
+    
+    // Load payments
+    LaunchedEffect(Unit) {
+        payments = breezMgr.getRecentPayments(50u)
+    }
+    
+    fun refreshWallet() {
+        isRefreshing = true
+        scope.launch {
+            breezMgr.refreshBalance()
+            payments = breezMgr.getRecentPayments(50u)
+            isRefreshing = false
+        }
+    }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFFF7FAFF),
+                        Color(0xFFF0F5FE),
+                        Color(0xFFE6F0FC)
+                    )
+                )
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Text("←", fontSize = 24.sp)
+                }
+                Text(
+                    "Wallet",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { refreshWallet() }) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Balance Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(8.dp, RoundedCornerShape(24.dp)),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("⚡", fontSize = 40.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    val balanceSats = when (val state = walletState) {
+                        is BreezWalletManager.WalletState.Connected -> state.balanceSats.toLong()
+                        else -> 0L
+                    }
+                    
+                    Text(
+                        text = "${formatSats(balanceSats)} sats",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    if (btcPriceUsd > 0) {
+                        Text(
+                            text = satsToUsd(balanceSats, btcPriceUsd),
+                            fontSize = 16.sp,
+                            color = Color.Gray
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // Send/Receive buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Button(
+                            onClick = { showReceiveDialog = true },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                        ) {
+                            Text("Receive")
+                        }
+                        Button(
+                            onClick = { showSendDialog = true },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
+                        ) {
+                            Text("Send")
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Transaction History
+            Text(
+                "Recent Transactions",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            if (payments.isEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.8f))
+                ) {
+                    Text(
+                        "No transactions yet",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        textAlign = TextAlign.Center,
+                        color = Color.Gray
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(payments) { payment ->
+                        PaymentRow(payment = payment, btcPriceUsd = btcPriceUsd)
+                    }
+                }
+            }
+        }
+    }
+    
+    // Receive Dialog
+    if (showReceiveDialog) {
+        Dialog(onDismissRequest = { showReceiveDialog = false }) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Receive", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    if (receiveInvoice.isEmpty()) {
+                        OutlinedTextField(
+                            value = receiveAmountInput,
+                            onValueChange = { if (it.all { c -> c.isDigit() }) receiveAmountInput = it },
+                            label = { Text("Amount (sats)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        if (isGeneratingInvoice) {
+                            CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                        } else {
+                            Button(
+                                onClick = {
+                                    val amount = receiveAmountInput.toULongOrNull() ?: 0UL
+                                    if (amount > 0UL) {
+                                        isGeneratingInvoice = true
+                                        scope.launch {
+                                            val result = breezMgr.createInvoice(amount, "SignedByMe Receive")
+                                            isGeneratingInvoice = false
+                                            if (result.isSuccess) {
+                                                receiveInvoice = result.getOrNull()!!
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Generate Invoice")
+                            }
+                        }
+                    } else {
+                        val qrBitmap = remember(receiveInvoice) { generateQRCode(receiveInvoice, 300) }
+                        if (qrBitmap != null) {
+                            Image(
+                                bitmap = qrBitmap.asImageBitmap(),
+                                contentDescription = "Invoice QR",
+                                modifier = Modifier.size(200.dp)
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Text(
+                            "${receiveInvoice.take(20)}...${receiveInvoice.takeLast(10)}",
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color.Gray
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Invoice", receiveInvoice))
+                                Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
+                            }) {
+                                Text("Copy")
+                            }
+                            Button(onClick = {
+                                receiveInvoice = ""
+                                receiveAmountInput = ""
+                                showReceiveDialog = false
+                            }) {
+                                Text("Done")
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    TextButton(onClick = { 
+                        receiveInvoice = ""
+                        receiveAmountInput = ""
+                        showReceiveDialog = false 
+                    }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+    
+    // Send Dialog
+    if (showSendDialog) {
+        Dialog(onDismissRequest = { showSendDialog = false }) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Send", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    OutlinedTextField(
+                        value = sendInvoiceInput,
+                        onValueChange = { sendInvoiceInput = it },
+                        label = { Text("Paste Lightning invoice") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        enabled = !isSending
+                    )
+                    
+                    if (sendError.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(sendError, color = Color(0xFFEF4444), fontSize = 12.sp)
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    if (isSending) {
+                        CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    } else {
+                        Button(
+                            onClick = {
+                                if (sendInvoiceInput.isNotEmpty()) {
+                                    isSending = true
+                                    sendError = ""
+                                    scope.launch {
+                                        val result = breezMgr.sendPayment(sendInvoiceInput)
+                                        isSending = false
+                                        if (result.isSuccess) {
+                                            sendInvoiceInput = ""
+                                            showSendDialog = false
+                                            refreshWallet()
+                                            Toast.makeText(context, "Payment sent!", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            sendError = result.exceptionOrNull()?.message ?: "Payment failed"
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Send Payment")
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    TextButton(onClick = { 
+                        sendInvoiceInput = ""
+                        sendError = ""
+                        showSendDialog = false 
+                    }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PaymentRow(payment: Payment, btcPriceUsd: Double) {
+    val isReceive = payment.paymentType == PaymentType.RECEIVE
+    val amountSats = payment.amountSats.toLong()
+    val timestamp = payment.createdAt
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.9f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isReceive) Color(0xFF10B981).copy(alpha = 0.1f)
+                        else Color(0xFF3B82F6).copy(alpha = 0.1f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    if (isReceive) "↓" else "↑",
+                    fontSize = 20.sp,
+                    color = if (isReceive) Color(0xFF10B981) else Color(0xFF3B82F6)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    if (isReceive) "Received" else "Sent",
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    SimpleDateFormat("MMM d, h:mm a", Locale.US).format(Date(timestamp * 1000)),
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
+            
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    "${if (isReceive) "+" else "-"}${formatSats(amountSats)} sats",
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isReceive) Color(0xFF10B981) else Color.Black
+                )
+                if (btcPriceUsd > 0) {
+                    Text(
+                        satsToUsd(amountSats, btcPriceUsd),
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ===== Login Screen =====
 @Composable
 fun LoginScreen(
     did: String,
@@ -1748,7 +2071,8 @@ fun LoginScreen(
     onResetLogin: () -> Unit,
     onDevExportLeafCommitment: (() -> Unit)? = null,
     btcPriceUsd: Double,
-    strikeEmail: String?
+    breezWalletState: BreezWalletManager.WalletState,
+    onShowWallet: () -> Unit
 ) {
     var showQrScanner by remember { mutableStateOf(false) }
     
@@ -1930,7 +2254,6 @@ fun LoginScreen(
                                 }
                             }
                             
-                            // Debug buttons
                             if (BuildConfig.DEBUG) {
                                 Spacer(modifier = Modifier.height(16.dp))
                                 OutlinedButton(
@@ -2034,35 +2357,42 @@ fun LoginScreen(
             }
 
             // Wallet info card
-            if (strikeEmail != null) {
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.8f))
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onShowWallet() },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.8f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("⚡", fontSize = 24.sp)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                "Strike Wallet",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                strikeEmail,
-                                fontSize = 12.sp,
-                                color = Color.Gray
-                            )
+                    Text("⚡", fontSize = 24.sp)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Lightning Wallet",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        val balanceText = when (val state = breezWalletState) {
+                            is BreezWalletManager.WalletState.Connected -> "${formatSats(state.balanceSats.toLong())} sats"
+                            is BreezWalletManager.WalletState.Connecting -> "Connecting..."
+                            is BreezWalletManager.WalletState.Error -> "Error"
+                            else -> "Disconnected"
                         }
+                        Text(
+                            balanceText,
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
                     }
+                    Text("→", fontSize = 20.sp, color = Color.Gray)
                 }
             }
 
@@ -2271,7 +2601,7 @@ fun QrScannerDialog(
                                                             if (isDisposed) return@addOnSuccessListener
                                                             for (barcode in barcodes) {
                                                                 barcode.rawValue?.let { value ->
-                                                                    if (value.contains("session=") && value.contains("enterprise=")) {
+                                                                    if (value.contains("session=") || value.contains("token=")) {
                                                                         onQrScanned(value)
                                                                     }
                                                                 }
@@ -2602,120 +2932,6 @@ fun DIDInfoDialog(
                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Regenerate")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun WalletInfoDialog(
-    strikeEmail: String,
-    isConnected: Boolean,
-    onDismiss: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            shape = RoundedCornerShape(24.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("⚡", fontSize = 48.sp)
-                
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    "Strike Wallet",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Email
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF3B82F6).copy(alpha = 0.1f)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            "Connected Email",
-                            fontSize = 14.sp,
-                            color = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            strikeEmail.ifEmpty { "Not connected" },
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF3B82F6)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Status
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444)
-                            )
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        if (isConnected) "Connected" else "Disconnected",
-                        fontSize = 14.sp,
-                        color = Color.Gray
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
-                ) {
-                    Text("Done")
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Recovery note
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Text("🔒", fontSize = 14.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "Recover your wallet anytime via your Strike email. No seed words needed.",
-                            fontSize = 12.sp,
-                            color = Color(0xFF92400E)
-                        )
                     }
                 }
             }
