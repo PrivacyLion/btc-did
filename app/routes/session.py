@@ -161,12 +161,12 @@ async def create_session(
     )
     
     # Build QR data (deep link format)
-    qr_data = f"signedby.me://login?session={session_id}&employer={employer_name}&amount={amount_sats}&nonce={nonce}"
+    qr_data = f"signedby.me://login?session={session_id}&employer={employer_name}&amount={amount_sats}&nonce={nonce}&client_id={client_id}"
     if require_membership and current_root_id:
         qr_data += f"&root={current_root_id}"
     
     # HTTPS deep link for mobile-to-mobile
-    deep_link = f"https://signedby.me/login?session={session_id}&employer={employer_name}&amount={amount_sats}&nonce={nonce}"
+    deep_link = f"https://signedby.me/login?session={session_id}&employer={employer_name}&amount={amount_sats}&nonce={nonce}&client_id={client_id}"
     if require_membership and current_root_id:
         deep_link += f"&root={current_root_id}"
     

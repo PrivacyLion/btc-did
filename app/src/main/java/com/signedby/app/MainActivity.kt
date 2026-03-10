@@ -639,7 +639,7 @@ fun SignedByMeApp(
                 try {
                     val success = didMgr.performEnrollment(
                         apiBaseUrl = API_BASE_URL,
-                        apiKey = "test-secret-key-12345"
+                        apiKey = "acme-test-key-2026"
                     )
                     if (success) {
                         android.util.Log.i("SignedByMe", "Background enrollment succeeded")
@@ -2532,7 +2532,10 @@ fun LoginScreen(
                                 enterpriseName = payload.optString("enterprise_name", "Unknown"),
                                 amountSats = payload.optLong("amount_sats", 100).toULong(),
                                 nonce = payload.optString("nonce", "").ifEmpty { null },
-                                expiresAt = if (payload.has("expires_at")) payload.optLong("expires_at") else null
+                                expiresAt = if (payload.has("expires_at")) payload.optLong("expires_at") else null,
+                                clientId = payload.optString("client_id", "").ifEmpty { null },
+                                requiredRootId = payload.optString("required_root_id", "").ifEmpty { null },
+                                purposeId = payload.optInt("purpose_id", 0)
                             ))
                             return@QrScannerDialog
                         }
@@ -2546,6 +2549,8 @@ fun LoginScreen(
                     val nonce = uri.getQueryParameter("nonce")
                     val expiresStr = uri.getQueryParameter("expires")
                     val expiresAt = expiresStr?.toLongOrNull()
+                    val clientId = uri.getQueryParameter("client_id") ?: uri.getQueryParameter("client")
+                    val requiredRootId = uri.getQueryParameter("root_id") ?: uri.getQueryParameter("root")
                     
                     if (sessionId != null && enterprise != null) {
                         onLoginSessionReceived(LoginSession(
@@ -2554,7 +2559,9 @@ fun LoginScreen(
                             enterpriseName = enterprise,
                             amountSats = amount,
                             nonce = nonce,
-                            expiresAt = expiresAt
+                            expiresAt = expiresAt,
+                            clientId = clientId,
+                            requiredRootId = requiredRootId
                         ))
                     }
                 } catch (e: Exception) {
