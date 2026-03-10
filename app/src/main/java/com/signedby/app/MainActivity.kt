@@ -2081,8 +2081,8 @@ fun WalletScreen(
 @Composable
 fun PaymentRow(payment: Payment, btcPriceUsd: Double) {
     val isReceive = payment.paymentType == PaymentType.RECEIVE
-    val amountSats = (payment.amountMsat / 1000u).toLong()
-    val timestamp = payment.timestamp
+    val amountSats = payment.amount.toLong()
+    val timestamp = payment.timestamp.toLong() * 1000L
     
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -2120,7 +2120,7 @@ fun PaymentRow(payment: Payment, btcPriceUsd: Double) {
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    SimpleDateFormat("MMM d, h:mm a", Locale.US).format(Date(timestamp * 1000)),
+                    SimpleDateFormat("MMM d, h:mm a", Locale.US).format(Date(timestamp)),
                     fontSize = 12.sp,
                     color = Color.Gray
                 )
