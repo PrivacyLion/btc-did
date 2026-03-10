@@ -2593,14 +2593,12 @@ fun QrScannerDialog(
     
     var cameraProviderRef by remember { mutableStateOf<androidx.camera.lifecycle.ProcessCameraProvider?>(null) }
     val analysisExecutor = remember { java.util.concurrent.Executors.newSingleThreadExecutor() }
-    var barcodeScanner by remember { mutableStateOf<com.google.mlkit.vision.barcode.BarcodeScanner?>(null) }
-    var isDisposed by remember { mutableStateOf(false) }
-    
-    LaunchedEffect(Unit) {
-        barcodeScanner = withContext(Dispatchers.IO) {
-            com.google.mlkit.vision.barcode.BarcodeScanning.getClient()
-        }
+    // Initialize barcode scanner synchronously to avoid race condition
+    val barcodeScanner = remember { 
+        android.util.Log.i("SignedByMe", "QR Scanner: initializing MLKit BarcodeScanner")
+        com.google.mlkit.vision.barcode.BarcodeScanning.getClient() 
     }
+    var isDisposed by remember { mutableStateOf(false) }
     
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -2619,7 +2617,7 @@ fun QrScannerDialog(
             isDisposed = true
             cameraProviderRef?.unbindAll()
             analysisExecutor.shutdown()
-            barcodeScanner?.close()
+            barcodeScanner.close()
         }
     }
     
@@ -2680,22 +2678,31 @@ fun QrScannerDialog(
                                             analysis.setAnalyzer(analysisExecutor) { imageProxy ->
                                                 @androidx.camera.core.ExperimentalGetImage
                                                 val mediaImage = imageProxy.image
-                                                val scanner = barcodeScanner
-                                                if (mediaImage != null && scanner != null) {
+                                                if (mediaImage != null) {
                                                     val inputImage = com.google.mlkit.vision.common.InputImage.fromMediaImage(
                                                         mediaImage, imageProxy.imageInfo.rotationDegrees
                                                     )
                                                     
-                                                    scanner.process(inputImage)
+                                                    barcodeScanner.process(inputImage)
                                                         .addOnSuccessListener { barcodes ->
                                                             if (isDisposed) return@addOnSuccessListener
+                                                            if (barcodes.isNotEmpty()) {
+                                                                android.util.Log.i("SignedByMe", "QR Scanner: detected ${barcodes.size} barcode(s)")
+                                                            }
                                                             for (barcode in barcodes) {
                                                                 barcode.rawValue?.let { value ->
+                                                                    android.util.Log.i("SignedByMe", "QR Scanner: raw value = ${value.take(80)}...")
                                                                     if (value.contains("session=") || value.contains("token=")) {
+                                                                        android.util.Log.i("SignedByMe", "QR Scanner: MATCH - calling onQrScanned")
                                                                         onQrScanned(value)
+                                                                    } else {
+                                                                        android.util.Log.w("SignedByMe", "QR Scanner: no session=/token= in value, ignoring")
                                                                     }
                                                                 }
                                                             }
+                                                        }
+                                                        .addOnFailureListener { e ->
+                                                            android.util.Log.e("SignedByMe", "QR Scanner: MLKit error: ${e.message}")
                                                         }
                                                         .addOnCompleteListener {
                                                             imageProxy.close()
