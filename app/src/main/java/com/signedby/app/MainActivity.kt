@@ -1406,13 +1406,12 @@ fun OnboardingScreen(
                             verticalAlignment = Alignment.Top
                         ) {
                             Text("⚡", fontSize = 14.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    "Breez Spark wallet — fast, nodeless Lightning. Payments arrive in your wallet.",
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF166534)
-                                )
-                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Breez Spark wallet — fast, nodeless Lightning. Payments arrive in your wallet.",
+                                fontSize = 12.sp,
+                                color = Color(0xFF166534)
+                            )
                         }
                     }
                 } else {
