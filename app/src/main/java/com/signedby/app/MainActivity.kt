@@ -622,8 +622,6 @@ fun SignedByMeApp(
 
     // UI state
     var statusMessage by remember { mutableStateOf("") }
-    var showIdDialog by remember { mutableStateOf(false) }
-    var showWalletScreen by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     
     // BTC price for display
@@ -812,13 +810,6 @@ fun SignedByMeApp(
                 }
             }
         }
-    } else if (showWalletScreen) {
-        // Wallet Screen (Send/Receive/Transactions)
-        WalletScreen(
-            breezMgr = breezMgr,
-            btcPriceUsd = btcPriceUsd,
-            onBack = { showWalletScreen = false }
-        )
     } else if (showLoginScreen) {
         // Show Login Screen
         LoginScreen(
@@ -1128,8 +1119,7 @@ fun SignedByMeApp(
                 }
             } else null,
             btcPriceUsd = btcPriceUsd,
-            breezWalletState = breezWalletState,
-            onShowWallet = { showWalletScreen = true }
+            breezMgr = breezMgr
         )
     } else {
         // Show Onboarding Screen
@@ -1143,7 +1133,6 @@ fun SignedByMeApp(
             breezWalletState = breezWalletState,
             isLoading = isLoading,
             statusMessage = statusMessage,
-            showIdDialog = showIdDialog,
             onGenerateDid = {
                 scope.launch(Dispatchers.IO) {
                     val newDid = didMgr.createDid()
@@ -1152,24 +1141,6 @@ fun SignedByMeApp(
                         step1Complete = true
                     }
                 }
-            },
-            onShowIdDialog = { showIdDialog = true },
-            onDismissIdDialog = { showIdDialog = false },
-            onRegenerateDid = {
-                scope.launch(Dispatchers.IO) {
-                    val newDid = didMgr.regenerateKeyPair()
-                    withContext(Dispatchers.Main) {
-                        did = newDid
-                        step1Complete = true
-                        step2Complete = false
-                        step3Complete = false
-                    }
-                }
-            },
-            onCopyDid = {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("DID", did!!))
-                Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
             },
             // Step 2: Breez wallet setup - auto-complete on success
             onInitializeWallet = {
@@ -1217,30 +1188,6 @@ fun SignedByMeApp(
             }
         )
     }
-
-    // Dialogs
-    if (showIdDialog) {
-        DIDInfoDialog(
-            did = did!!,
-            onDismiss = { showIdDialog = false },
-            onRegenerate = {
-                scope.launch(Dispatchers.IO) {
-                    val newDid = didMgr.regenerateKeyPair()
-                    withContext(Dispatchers.Main) {
-                        did = newDid
-                        step1Complete = true
-                        step2Complete = false
-                        step3Complete = false
-                    }
-                }
-            },
-            onCopy = {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("DID", did!!))
-                Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
-            }
-        )
-    }
 }
 
 // ===== Onboarding Screen =====
@@ -1255,12 +1202,7 @@ fun OnboardingScreen(
     breezWalletState: BreezWalletManager.WalletState,
     isLoading: Boolean,
     statusMessage: String,
-    showIdDialog: Boolean,
     onGenerateDid: () -> Unit,
-    onShowIdDialog: () -> Unit,
-    onDismissIdDialog: () -> Unit,
-    onRegenerateDid: () -> Unit,
-    onCopyDid: () -> Unit,
     onInitializeWallet: () -> Unit,
     onGenerateSignature: () -> Unit
 ) {
@@ -1330,7 +1272,7 @@ fun OnboardingScreen(
                 } else {
                     CompletedStepContent(
                         message = "Signature created ✓",
-                        onInfoClick = onShowIdDialog
+                        onInfoClick = null
                     )
                 }
             }
@@ -1939,10 +1881,42 @@ fun LoginScreen(
     onResetLogin: () -> Unit,
     onDevExportLeafCommitment: (() -> Unit)? = null,
     btcPriceUsd: Double,
-    breezWalletState: BreezWalletManager.WalletState,
-    onShowWallet: () -> Unit
+    breezMgr: BreezWalletManager
 ) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var showQrScanner by remember { mutableStateOf(false) }
+    
+    // Wallet state
+    val walletState by breezMgr.walletState.collectAsState()
+    var payments by remember { mutableStateOf<List<Payment>>(emptyList()) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    
+    // Receive state
+    var showReceiveDialog by remember { mutableStateOf(false) }
+    var receiveAmountInput by remember { mutableStateOf("") }
+    var receiveInvoice by remember { mutableStateOf("") }
+    var isGeneratingInvoice by remember { mutableStateOf(false) }
+    
+    // Send state
+    var showSendDialog by remember { mutableStateOf(false) }
+    var sendInvoiceInput by remember { mutableStateOf("") }
+    var isSending by remember { mutableStateOf(false) }
+    var sendError by remember { mutableStateOf("") }
+    
+    // Load payments on start
+    LaunchedEffect(Unit) {
+        payments = breezMgr.getRecentPayments(20u)
+    }
+    
+    fun refreshWallet() {
+        isRefreshing = true
+        scope.launch {
+            breezMgr.refreshBalance()
+            payments = breezMgr.getRecentPayments(20u)
+            isRefreshing = false
+        }
+    }
     
     Box(
         modifier = Modifier
@@ -2224,43 +2198,100 @@ fun LoginScreen(
                 }
             }
 
-            // Wallet info card
-            Spacer(modifier = Modifier.height(16.dp))
+            // ===== Inline Wallet Section =====
+            Spacer(modifier = Modifier.height(24.dp))
             
+            // Balance Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onShowWallet() },
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.8f))
+                    .shadow(8.dp, RoundedCornerShape(24.dp)),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("⚡", fontSize = 24.sp)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Lightning Wallet",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        val balanceText = when (val state = breezWalletState) {
-                            is BreezWalletManager.WalletState.Connected -> "${formatSats(state.balanceSats.toLong())} sats"
-                            is BreezWalletManager.WalletState.Connecting -> "Connecting..."
-                            is BreezWalletManager.WalletState.Error -> "Error"
-                            else -> "Disconnected"
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("⚡ Wallet", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        IconButton(onClick = { refreshWallet() }) {
+                            if (isRefreshing) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                            }
                         }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    val balanceSats = when (val state = walletState) {
+                        is BreezWalletManager.WalletState.Connected -> state.balanceSats.toLong()
+                        else -> 0L
+                    }
+                    
+                    Text(
+                        text = "${formatSats(balanceSats)} sats",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    if (btcPriceUsd > 0) {
                         Text(
-                            balanceText,
-                            fontSize = 12.sp,
+                            text = satsToUsd(balanceSats, btcPriceUsd),
+                            fontSize = 14.sp,
                             color = Color.Gray
                         )
                     }
-                    Text("→", fontSize = 20.sp, color = Color.Gray)
+                    
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    // Send/Receive buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { showReceiveDialog = true },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                        ) {
+                            Text("Receive")
+                        }
+                        Button(
+                            onClick = { showSendDialog = true },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
+                        ) {
+                            Text("Send")
+                        }
+                    }
+                }
+            }
+            
+            // Transaction History
+            if (payments.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    "Recent Transactions",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                payments.take(5).forEach { payment ->
+                    PaymentRow(payment = payment, btcPriceUsd = btcPriceUsd)
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
 
@@ -2289,6 +2320,182 @@ fun LoginScreen(
             onCopy = onCopyInvoice,
             onShare = onShareInvoice
         )
+    }
+    
+    // Receive Dialog
+    if (showReceiveDialog) {
+        Dialog(onDismissRequest = { showReceiveDialog = false }) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Receive", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    if (receiveInvoice.isEmpty()) {
+                        OutlinedTextField(
+                            value = receiveAmountInput,
+                            onValueChange = { if (it.all { c -> c.isDigit() }) receiveAmountInput = it },
+                            label = { Text("Amount (sats)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        if (isGeneratingInvoice) {
+                            CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                        } else {
+                            Button(
+                                onClick = {
+                                    val amount = receiveAmountInput.toULongOrNull() ?: 0UL
+                                    if (amount > 0UL) {
+                                        isGeneratingInvoice = true
+                                        scope.launch {
+                                            val result = breezMgr.createInvoice(amount, "SignedByMe Receive")
+                                            isGeneratingInvoice = false
+                                            if (result.isSuccess) {
+                                                receiveInvoice = result.getOrNull()!!
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Generate Invoice")
+                            }
+                        }
+                    } else {
+                        val qrBitmap = remember(receiveInvoice) { generateQRCode(receiveInvoice, 300) }
+                        if (qrBitmap != null) {
+                            Image(
+                                bitmap = qrBitmap.asImageBitmap(),
+                                contentDescription = "Invoice QR",
+                                modifier = Modifier.size(200.dp)
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Text(
+                            "${receiveInvoice.take(20)}...${receiveInvoice.takeLast(10)}",
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color.Gray
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Invoice", receiveInvoice))
+                                Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
+                            }) {
+                                Text("Copy")
+                            }
+                            Button(onClick = {
+                                receiveInvoice = ""
+                                receiveAmountInput = ""
+                                showReceiveDialog = false
+                            }) {
+                                Text("Done")
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    TextButton(onClick = { 
+                        receiveInvoice = ""
+                        receiveAmountInput = ""
+                        showReceiveDialog = false 
+                    }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+    
+    // Send Dialog
+    if (showSendDialog) {
+        Dialog(onDismissRequest = { showSendDialog = false }) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Send", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    OutlinedTextField(
+                        value = sendInvoiceInput,
+                        onValueChange = { sendInvoiceInput = it },
+                        label = { Text("Paste Lightning invoice") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        enabled = !isSending
+                    )
+                    
+                    if (sendError.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(sendError, color = Color(0xFFEF4444), fontSize = 12.sp)
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    if (isSending) {
+                        CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    } else {
+                        Button(
+                            onClick = {
+                                if (sendInvoiceInput.isNotEmpty()) {
+                                    isSending = true
+                                    sendError = ""
+                                    scope.launch {
+                                        val result = breezMgr.sendPayment(sendInvoiceInput)
+                                        isSending = false
+                                        if (result.isSuccess) {
+                                            sendInvoiceInput = ""
+                                            showSendDialog = false
+                                            refreshWallet()
+                                            Toast.makeText(context, "Payment sent!", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            sendError = result.exceptionOrNull()?.message ?: "Payment failed"
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Send Payment")
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    TextButton(onClick = { 
+                        sendInvoiceInput = ""
+                        sendError = ""
+                        showSendDialog = false 
+                    }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
     }
     
     // QR Scanner Dialog
