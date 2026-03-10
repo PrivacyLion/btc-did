@@ -43,7 +43,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,9 +62,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.activity.result.contract.ActivityResultContracts
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.common.api.ApiException
 import breez_sdk_spark.Payment
 import breez_sdk_spark.PaymentType
 import breez_sdk_spark.PaymentStatus
@@ -169,9 +165,6 @@ class MainActivity : FragmentActivity() {
         // Initialize Breez wallet manager (replaces Strike)
         val breezMgr = BreezWalletManager(applicationContext)
         
-        // Initialize Google Drive backup manager
-        val backupMgr = GoogleDriveBackupManager(applicationContext)
-        
         // Initialize NWC wallet manager (for enterprise payment flow - untouched)
         val nwcMgr = NwcWalletManager(applicationContext)
         
@@ -183,7 +176,7 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             SignedByMeTheme {
-                SignedByMeApp(didMgr, breezMgr, backupMgr, nwcMgr, nostrMgr, initialLoginSession)
+                SignedByMeApp(didMgr, breezMgr, nwcMgr, nostrMgr, initialLoginSession)
             }
         }
     }
@@ -555,7 +548,6 @@ fun formatSats(sats: Long): String {
 fun SignedByMeApp(
     didMgr: DidWalletManager, 
     breezMgr: BreezWalletManager,
-    backupMgr: GoogleDriveBackupManager,
     nwcMgr: NwcWalletManager,
     nostrMgr: NostrManager,
     initialLoginSession: LoginSession? = null
@@ -584,7 +576,7 @@ fun SignedByMeApp(
         }
     }
     
-    // Step 2: Breez wallet setup + backup
+    // Step 2: Breez wallet setup
     var step2Complete by remember { mutableStateOf(false) }
     var step3Complete by remember { mutableStateOf(false) }
     
@@ -593,62 +585,11 @@ fun SignedByMeApp(
     var isWalletInitializing by remember { mutableStateOf(false) }
     var walletInitError by remember { mutableStateOf("") }
     
-    // Backup state (mandatory before step2 can complete)
-    var backupComplete by remember { mutableStateOf(false) }
-    var showBackupScreen by remember { mutableStateOf(false) }
-    var backupPin by remember { mutableStateOf("") }
-    var backupPinConfirm by remember { mutableStateOf("") }
-    var backupError by remember { mutableStateOf("") }
-    var isBackingUp by remember { mutableStateOf(false) }
-    var pendingGoogleSignIn by remember { mutableStateOf(false) }
-    
-    // Check if wallet + backup already done
+    // Check if wallet already exists
     LaunchedEffect(Unit) {
         val hasWallet = breezMgr.hasWallet()
-        val hasBackup = withContext(Dispatchers.IO) {
-            backupMgr.isSignedIn() && backupMgr.hasBackup()
-        }
-        if (hasWallet && hasBackup) {
+        if (hasWallet) {
             step2Complete = true
-            backupComplete = true
-        }
-    }
-    
-    // Google Sign-In launcher
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        scope.launch {
-            try {
-                val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                val account = task.getResult(ApiException::class.java)
-                if (account != null) {
-                    val success = backupMgr.handleSignInResult(account)
-                    if (success && pendingGoogleSignIn) {
-                        pendingGoogleSignIn = false
-                        // Now backup the mnemonic
-                        val mnemonic = breezMgr.getMnemonic()
-                        if (mnemonic != null) {
-                            isBackingUp = true
-                            val backupResult = backupMgr.backupMnemonic(mnemonic, backupPin)
-                            isBackingUp = false
-                            if (backupResult.isSuccess) {
-                                backupComplete = true
-                                step2Complete = true
-                                showBackupScreen = false
-                            } else {
-                                backupError = backupResult.exceptionOrNull()?.message ?: "Backup failed"
-                            }
-                        } else {
-                            backupError = "Could not retrieve wallet seed"
-                        }
-                    }
-                }
-            } catch (e: ApiException) {
-                android.util.Log.e("SignedByMe", "Google sign-in failed: ${e.statusCode}")
-                backupError = "Google sign-in failed. Please try again."
-                pendingGoogleSignIn = false
-            }
         }
     }
     
@@ -1200,12 +1141,6 @@ fun SignedByMeApp(
             isWalletInitializing = isWalletInitializing,
             walletInitError = walletInitError,
             breezWalletState = breezWalletState,
-            showBackupScreen = showBackupScreen,
-            backupPin = backupPin,
-            backupPinConfirm = backupPinConfirm,
-            backupError = backupError,
-            isBackingUp = isBackingUp,
-            backupComplete = backupComplete,
             isLoading = isLoading,
             statusMessage = statusMessage,
             showIdDialog = showIdDialog,
@@ -1236,7 +1171,7 @@ fun SignedByMeApp(
                 clipboard.setPrimaryClip(ClipData.newPlainText("DID", did!!))
                 Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
             },
-            // Step 2: Breez wallet setup
+            // Step 2: Breez wallet setup - auto-complete on success
             onInitializeWallet = {
                 isWalletInitializing = true
                 walletInitError = ""
@@ -1244,52 +1179,10 @@ fun SignedByMeApp(
                     val result = breezMgr.initializeWallet()
                     isWalletInitializing = false
                     if (result.isSuccess) {
-                        // Wallet initialized, now show backup screen
-                        showBackupScreen = true
+                        step2Complete = true
                     } else {
                         walletInitError = result.exceptionOrNull()?.message ?: "Failed to initialize wallet"
                     }
-                }
-            },
-            onBackupPinChange = { backupPin = it },
-            onBackupPinConfirmChange = { backupPinConfirm = it },
-            onStartBackup = {
-                backupError = ""
-                
-                // Validate PIN
-                if (backupPin.length < 6) {
-                    backupError = "PIN must be at least 6 digits"
-                    return@OnboardingScreen
-                }
-                if (backupPin != backupPinConfirm) {
-                    backupError = "PINs do not match"
-                    return@OnboardingScreen
-                }
-                
-                // If already signed in, backup directly
-                if (backupMgr.isSignedIn()) {
-                    isBackingUp = true
-                    scope.launch {
-                        val mnemonic = breezMgr.getMnemonic()
-                        if (mnemonic != null) {
-                            val backupResult = backupMgr.backupMnemonic(mnemonic, backupPin)
-                            isBackingUp = false
-                            if (backupResult.isSuccess) {
-                                backupComplete = true
-                                step2Complete = true
-                                showBackupScreen = false
-                            } else {
-                                backupError = backupResult.exceptionOrNull()?.message ?: "Backup failed"
-                            }
-                        } else {
-                            isBackingUp = false
-                            backupError = "Could not retrieve wallet seed"
-                        }
-                    }
-                } else {
-                    // Need Google Sign-In first
-                    pendingGoogleSignIn = true
-                    googleSignInLauncher.launch(backupMgr.getSignInIntent())
                 }
             },
             onGenerateSignature = {
@@ -1360,12 +1253,6 @@ fun OnboardingScreen(
     isWalletInitializing: Boolean,
     walletInitError: String,
     breezWalletState: BreezWalletManager.WalletState,
-    showBackupScreen: Boolean,
-    backupPin: String,
-    backupPinConfirm: String,
-    backupError: String,
-    isBackingUp: Boolean,
-    backupComplete: Boolean,
     isLoading: Boolean,
     statusMessage: String,
     showIdDialog: Boolean,
@@ -1375,9 +1262,6 @@ fun OnboardingScreen(
     onRegenerateDid: () -> Unit,
     onCopyDid: () -> Unit,
     onInitializeWallet: () -> Unit,
-    onBackupPinChange: (String) -> Unit,
-    onBackupPinConfirmChange: (String) -> Unit,
-    onStartBackup: () -> Unit,
     onGenerateSignature: () -> Unit
 ) {
     Box(
@@ -1451,7 +1335,7 @@ fun OnboardingScreen(
                 }
             }
 
-            // Step 2: Connect (Breez Wallet + Backup)
+            // Step 2: Connect (Breez Wallet)
             StepCard(
                 stepNumber = 2,
                 title = "Connect",
@@ -1459,179 +1343,69 @@ fun OnboardingScreen(
                 isEnabled = step1Complete
             ) {
                 if (!step2Complete) {
-                    if (showBackupScreen) {
-                        // Backup screen (mandatory before proceeding)
+                    // Wallet initialization screen
+                    Text(
+                        "Set up your Lightning wallet",
+                        color = Color.Gray,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "⚡", fontSize = 48.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (walletInitError.isNotEmpty()) {
+                        Text(
+                            walletInitError,
+                            color = Color(0xFFEF4444),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    if (isWalletInitializing) {
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("☁️", fontSize = 48.sp)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                "Back Up Your Wallet",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(40.dp),
+                                color = Color(0xFF3B82F6)
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "Your wallet is ready! Back it up to Google Drive to ensure you can recover it if you lose this device.",
-                                fontSize = 14.sp,
-                                color = Color.Gray,
-                                textAlign = TextAlign.Center
-                            )
-                            
-                            Spacer(modifier = Modifier.height(20.dp))
-                            
-                            // PIN entry
-                            OutlinedTextField(
-                                value = backupPin,
-                                onValueChange = { if (it.all { c -> c.isDigit() } && it.length <= 8) onBackupPinChange(it) },
-                                label = { Text("Create 6+ digit PIN") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                enabled = !isBackingUp,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                visualTransformation = PasswordVisualTransformation(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color.White,
-                                    unfocusedContainerColor = Color.White
-                                )
-                            )
-                            
                             Spacer(modifier = Modifier.height(12.dp))
-                            
-                            OutlinedTextField(
-                                value = backupPinConfirm,
-                                onValueChange = { if (it.all { c -> c.isDigit() } && it.length <= 8) onBackupPinConfirmChange(it) },
-                                label = { Text("Confirm PIN") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                enabled = !isBackingUp,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                visualTransformation = PasswordVisualTransformation(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color.White,
-                                    unfocusedContainerColor = Color.White
-                                )
-                            )
-                            
-                            if (backupError.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    backupError,
-                                    color = Color(0xFFEF4444),
-                                    fontSize = 12.sp,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(20.dp))
-                            
-                            if (isBackingUp) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(40.dp),
-                                        color = Color(0xFF3B82F6)
-                                    )
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Text("Encrypting and uploading...", fontSize = 14.sp, color = Color.Gray)
-                                }
-                            } else {
-                                GradientButton(
-                                    text = "Back Up Now",
-                                    colors = listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)),
-                                    onClick = onStartBackup
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(16.dp))
-                            
-                            // Security note
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.Top
-                                ) {
-                                    Text("🔐", fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        "Your seed is encrypted with your PIN before upload. Even Google cannot read it.",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF92400E)
-                                    )
-                                }
-                            }
+                            Text("Initializing wallet...", fontSize = 14.sp, color = Color.Gray)
                         }
                     } else {
-                        // Wallet initialization screen
-                        Text(
-                            "Set up your Lightning wallet",
-                            color = Color.Gray,
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
+                        GradientButton(
+                            text = "Set Up Wallet",
+                            colors = listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)),
+                            onClick = onInitializeWallet
                         )
+                    }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            Text(text = "⚡", fontSize = 48.sp)
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (walletInitError.isNotEmpty()) {
-                            Text(
-                                walletInitError,
-                                color = Color(0xFFEF4444),
-                                fontSize = 12.sp,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        if (isWalletInitializing) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(40.dp),
-                                    color = Color(0xFF3B82F6)
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text("Initializing wallet...", fontSize = 14.sp, color = Color.Gray)
-                            }
-                        } else {
-                            GradientButton(
-                                text = "Set Up Wallet",
-                                colors = listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)),
-                                onClick = onInitializeWallet
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7)),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Text("⚡", fontSize = 14.sp)
+                            Text("⚡", fontSize = 14.sp)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     "Breez Spark wallet — fast, nodeless Lightning. Payments arrive in your wallet.",
@@ -1643,7 +1417,7 @@ fun OnboardingScreen(
                     }
                 } else {
                     CompletedStepContent(
-                        message = "Wallet ready + backed up ✓",
+                        message = "Wallet ready ✓",
                         onInfoClick = null
                     )
                 }
