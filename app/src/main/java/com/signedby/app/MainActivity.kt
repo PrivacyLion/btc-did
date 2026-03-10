@@ -826,37 +826,6 @@ fun SignedByMeApp(
                 loginSession = session
                 android.util.Log.i("SignedByMe", "Session received: id=${session.sessionId}, client=${session.clientId}, root=${session.requiredRootId}")
             },
-            onCreateDemoSession = {
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        val url = java.net.URL("$API_BASE_URL/v1/login/start")
-                        val conn = url.openConnection() as java.net.HttpURLConnection
-                        conn.requestMethod = "POST"
-                        conn.setRequestProperty("Content-Type", "application/json")
-                        conn.setRequestProperty("X-API-Key", "acme-test-key-2026")
-                        conn.doOutput = true
-                        conn.outputStream.write("""{"client_id":"acme","enterprise":"Acme Corp","amount_sats":100}""".toByteArray())
-                        val response = conn.inputStream.bufferedReader().readText()
-                        val json = org.json.JSONObject(response)
-                        withContext(Dispatchers.Main) {
-                            loginSession = LoginSession(
-                                sessionToken = null,
-                                sessionId = json.getString("session_id"),
-                                enterpriseName = json.optString("enterprise", "Acme Corp"),
-                                amountSats = json.getLong("amount_sats").toULong(),
-                                nonce = json.optString("nonce", ""),
-                                clientId = if (json.has("client_id") && !json.isNull("client_id")) json.getString("client_id") else null,
-                                requiredRootId = if (json.has("required_root_id") && !json.isNull("required_root_id")) json.getString("required_root_id") else null,
-                                purposeId = json.optInt("purpose_id", 0),
-                                expiresAt = if (json.has("expires_at")) json.getLong("expires_at") else null
-                            )
-                        }
-                        android.util.Log.i("SignedByMe", "Demo session created: ${json.getString("session_id")}")
-                    } catch (e: Exception) {
-                        android.util.Log.e("SignedByMe", "Failed to create demo session: ${e.message}")
-                    }
-                }
-            },
             onStartLogin = {
                 scope.launch {
                     isCreatingInvoice = true
@@ -1403,7 +1372,10 @@ fun OnboardingScreen(
                         )
                     }
                 } else {
-                    StatusPill("Signature Verified ✓", Color(0xFF10B981))
+                    CompletedStepContent(
+                        message = "Signature Verified ✓",
+                        onInfoClick = null
+                    )
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
@@ -1872,7 +1844,6 @@ fun LoginScreen(
     statusMessage: String,
     loginSession: LoginSession?,
     onLoginSessionReceived: (LoginSession) -> Unit,
-    onCreateDemoSession: () -> Unit,
     onStartLogin: () -> Unit,
     onShowInvoiceDialog: () -> Unit,
     onDismissInvoiceDialog: () -> Unit,
@@ -2190,12 +2161,6 @@ fun LoginScreen(
                                     colors = listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)),
                                     onClick = { showQrScanner = true }
                                 )
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                OutlinedButton(onClick = onCreateDemoSession) {
-                                    Text("Demo: Acme Corp Log In (100 sats)", fontSize = 12.sp)
-                                }
                             }
                         }
                     }
@@ -2349,8 +2314,7 @@ fun LoginScreen(
         Dialog(onDismissRequest = { showReceiveDialog = false }) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
@@ -2410,7 +2374,7 @@ fun LoginScreen(
                             "${receiveInvoice.take(20)}...${receiveInvoice.takeLast(10)}",
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = Color.Gray,
+                            color = Color.Black,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )
