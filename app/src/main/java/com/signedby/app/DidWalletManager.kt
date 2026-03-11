@@ -565,12 +565,13 @@ class DidWalletManager(private val context: Context) {
             return proofError("Prover not initialized")
         }
 
-        // Load leaf secret
+        // GUARD: Proof MUST NOT fire unless leaf_secret exists
         val leafSecret = loadLeafSecret()
         if (leafSecret == null) {
-            android.util.Log.e("SignedByMe", "No leaf secret for Groth16 proof")
+            android.util.Log.e("SignedByMe", "GUARD BLOCKED: generateGroth16Proof called without leaf_secret!")
+            android.util.Log.e("SignedByMe", "This indicates a race condition - enrollment must complete before proof generation")
             android.util.Log.i("SignedByMe", "[TIMING] generateGroth16Proof FAILED (no leaf_secret) at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
-            return proofError("No leaf_secret")
+            return proofError("No leaf_secret - enrollment not complete")
         }
         android.util.Log.i("SignedByMe", "[TIMING] Leaf secret loaded at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - startMs}ms)")
 

@@ -602,10 +602,13 @@ fun SignedByMeApp(
     var showSecuritySetup by remember { mutableStateOf(false) }
     var securitySetupDone by remember { mutableStateOf(isOnboardingComplete(context)) }
     
+    // Track background enrollment status - MUST be true before allowing QR scan
+    var backgroundEnrollmentSucceeded by remember { mutableStateOf(false) }
+    
     // Delay transition to login screen so user sees Step 3 complete
     LaunchedEffect(onboardingComplete) {
         if (onboardingComplete && !showLoginScreen) {
-            // Start enrollment in background
+            // Start enrollment in background - MUST complete before proof generation
             launch(Dispatchers.IO) {
                 try {
                     val success = didMgr.performEnrollment(
@@ -613,7 +616,8 @@ fun SignedByMeApp(
                         apiKey = "acme-test-key-2026"
                     )
                     if (success) {
-                        android.util.Log.i("SignedByMe", "Background enrollment succeeded")
+                        android.util.Log.i("SignedByMe", "Background enrollment succeeded - proof generation now allowed")
+                        backgroundEnrollmentSucceeded = true
                     } else {
                         android.util.Log.w("SignedByMe", "Background enrollment failed - will retry on next launch")
                     }
@@ -629,6 +633,22 @@ fun SignedByMeApp(
                 showSecuritySetup = true
             } else {
                 showLoginScreen = true
+            }
+        }
+    }
+    
+    // Check if enrollment already completed on previous launch
+    LaunchedEffect(showLoginScreen) {
+        if (showLoginScreen && !backgroundEnrollmentSucceeded) {
+            // Check if we have leaf_secret from a previous enrollment
+            val hasSecret = withContext(Dispatchers.IO) { didMgr.hasLeafSecret() }
+            val hasWitness = withContext(Dispatchers.IO) { 
+                val enrollment = didMgr.loadEnrollment()
+                enrollment != null && didMgr.loadWitness(enrollment.clientId, "default") != null
+            }
+            if (hasSecret && hasWitness) {
+                android.util.Log.i("SignedByMe", "Previous enrollment detected - proof generation allowed")
+                backgroundEnrollmentSucceeded = true
             }
         }
     }
@@ -813,6 +833,7 @@ fun SignedByMeApp(
             invoiceAmountSats = loginSession?.amountSats ?: 100UL,
             statusMessage = statusMessage,
             loginSession = loginSession,
+            isEnrollmentReady = backgroundEnrollmentSucceeded,
             onLoginSessionReceived = { session ->
                 loginSession = session
                 android.util.Log.i("SignedByMe", "QR scanned: client=${session.clientId}, nonce=${session.nonce}, amount=${session.amountSats}")
@@ -896,6 +917,18 @@ fun SignedByMeApp(
                     // Step 2 + 3: Generate Groth16 proof and publish to NOSTR
                     launch(Dispatchers.IO) {
                         try {
+                            // GUARD: Proof must NOT fire unless leaf_secret exists
+                            if (!didMgr.hasLeafSecret()) {
+                                android.util.Log.e("SignedByMe", "GUARD BLOCKED: Proof generation attempted without leaf_secret!")
+                                withContext(Dispatchers.Main) {
+                                    statusMessage = "Error: Setup incomplete. Please wait and try again."
+                                    isCreatingInvoice = false
+                                    isLoginActive = false
+                                    isPollingPayment = false
+                                }
+                                return@launch
+                            }
+                            
                             // Generate Groth16 membership proof
                             android.util.Log.i("SignedByMe", "Generating Groth16 proof for client=$clientId")
                             val proofResult = didMgr.generateGroth16Proof(clientId, "default")
@@ -1752,6 +1785,7 @@ fun LoginScreen(
     invoiceAmountSats: ULong,
     statusMessage: String,
     loginSession: LoginSession?,
+    isEnrollmentReady: Boolean,  // Guard: must be true before QR scan allowed
     onLoginSessionReceived: (LoginSession) -> Unit,
     onStartLogin: () -> Unit,
     onShowInvoiceDialog: () -> Unit,
@@ -2043,33 +2077,65 @@ fun LoginScreen(
                                     )
                                 }
                             } else {
-                                // No session yet - show scan QR option
-                                Text("📷", fontSize = 48.sp)
+                                // No session yet - show scan QR option (or "Setting up..." if enrollment not ready)
+                                if (!isEnrollmentReady) {
+                                    // Guard: Enrollment still in progress - block QR scan
+                                    Text("⏳", fontSize = 48.sp)
 
-                                Spacer(modifier = Modifier.height(12.dp))
+                                    Spacer(modifier = Modifier.height(12.dp))
 
-                                Text(
-                                    "Scan Log In QR Code",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                    Text(
+                                        "Setting up...",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFF59E0B)
+                                    )
 
-                                Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(8.dp))
 
-                                Text(
-                                    "Scan the QR Code on your computer to Log In",
-                                    fontSize = 14.sp,
-                                    color = Color.Gray,
-                                    textAlign = TextAlign.Center
-                                )
+                                    Text(
+                                        "Please wait while we finish setting up your signature",
+                                        fontSize = 14.sp,
+                                        color = Color.Gray,
+                                        textAlign = TextAlign.Center
+                                    )
 
-                                Spacer(modifier = Modifier.height(20.dp))
+                                    Spacer(modifier = Modifier.height(20.dp))
 
-                                GradientButton(
-                                    text = "Scan QR Code",
-                                    colors = listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)),
-                                    onClick = { showQrScanner = true }
-                                )
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(32.dp),
+                                        color = Color(0xFFF59E0B),
+                                        strokeWidth = 3.dp
+                                    )
+                                } else {
+                                    // Enrollment ready - show scan QR option
+                                    Text("📷", fontSize = 48.sp)
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    Text(
+                                        "Scan Log In QR Code",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Text(
+                                        "Scan the QR Code on your computer to Log In",
+                                        fontSize = 14.sp,
+                                        color = Color.Gray,
+                                        textAlign = TextAlign.Center
+                                    )
+
+                                    Spacer(modifier = Modifier.height(20.dp))
+
+                                    GradientButton(
+                                        text = "Scan QR Code",
+                                        colors = listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)),
+                                        onClick = { showQrScanner = true }
+                                    )
+                                }
                             }
                         }
                     }
