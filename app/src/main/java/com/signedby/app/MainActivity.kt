@@ -1877,7 +1877,7 @@ fun LoginScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = loginSession.enterpriseName,
+                                text = loginSession.clientId,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF10B981)
@@ -1922,7 +1922,7 @@ fun LoginScreen(
 
                             Text(
                                 if (loginSession != null) 
-                                    "You're now logged in to ${loginSession.enterpriseName}"
+                                    "You're now logged in to ${loginSession.clientId}"
                                 else 
                                     "Your identity has been verified.",
                                 fontSize = 14.sp,
@@ -1953,7 +1953,7 @@ fun LoginScreen(
 
                             if (loginSession != null) {
                                 Text(
-                                    "Waiting for ${loginSession.enterpriseName} to confirm",
+                                    "Waiting for ${loginSession.clientId} to confirm",
                                     fontSize = 14.sp,
                                     color = Color.Gray,
                                     textAlign = TextAlign.Center
