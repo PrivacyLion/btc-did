@@ -2552,7 +2552,7 @@ fun LoginScreen(
     
     // QR Scanner Dialog
     if (showQrScanner) {
-        QrScannerDialog(
+        QRScannerDialog(
             onQrScanned = { qrContent ->
                 showQrScanner = false
                 try {
@@ -2581,7 +2581,7 @@ fun LoginScreen(
                                 requiredRootId = payload.optString("required_root_id", "").ifEmpty { null },
                                 purposeId = payload.optInt("purpose_id", 0)
                             ))
-                            return@QrScannerDialog
+                            return@QRScannerDialog
                         }
                     }
                     
