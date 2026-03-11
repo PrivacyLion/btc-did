@@ -345,14 +345,16 @@ private fun processFrame(
                 barcode.rawValue?.let { value ->
                     Log.i(TAG, "QR Scanner: raw value = ${value.take(80)}...")
                     
-                    if (value.contains("session=") || value.contains("token=")) {
+                    // Bible format: signedby://{client_id}/{nonce}/{amount_sats}
+                    // Example: signedby://acme/a3f9bc12d7/100
+                    if (value.startsWith("signedby://")) {
                         // Mark as scanned to prevent duplicates
                         if (hasScannedValidQr.compareAndSet(false, true)) {
-                            Log.i(TAG, "QR Scanner: MATCH - triggering Layer 2 biometric")
+                            Log.i(TAG, "QR Scanner: MATCH signedby:// - triggering Layer 2 biometric")
                             onValidQrFound(value)
                         }
                     } else {
-                        Log.w(TAG, "QR Scanner: no session=/token= in value, ignoring")
+                        Log.w(TAG, "QR Scanner: not signedby:// format, ignoring")
                     }
                 }
             }

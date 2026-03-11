@@ -210,96 +210,43 @@ class MainActivity : FragmentActivity() {
         updateLastActivity(this)
     }
     
+    /**
+     * Parse deep link intent (signedby://{client_id}/{nonce}/{amount_sats})
+     * Bible Decision 10: Enterprise generates QR locally, no server call.
+     */
     private fun parseLoginIntent(intent: Intent?): LoginSession? {
         val uri = intent?.data ?: return null
         
-        // Handle both signedby.me:// and https://signedby.me/login
-        if (uri.scheme == "signedby.me" || 
-            (uri.scheme == "https" && uri.host == "signedby.me")) {
+        // Bible format: signedby://{client_id}/{nonce}/{amount_sats}
+        // Example: signedby://acme/a3f9bc12d7/100
+        if (uri.scheme == "signedby") {
+            val clientId = uri.host ?: return null
+            val pathSegments = uri.pathSegments
+            val nonce = pathSegments.getOrNull(0) ?: return null
+            val amountSats = pathSegments.getOrNull(1)?.toULongOrNull() ?: 100UL
             
-            // New stateless flow: token parameter contains signed JWT
-            val token = uri.getQueryParameter("token")
-            if (token != null) {
-                return parseSessionToken(token)
-            }
-            
-            // Legacy flow: separate parameters (for backwards compatibility)
-            val sessionId = uri.getQueryParameter("session")
-            val enterprise = uri.getQueryParameter("enterprise") 
-                ?: uri.getQueryParameter("employer")  // Fallback for old QR codes
-            val amountStr = uri.getQueryParameter("amount")
-            val amount = amountStr?.toULongOrNull() ?: 100UL
-            // v3 parameters
-            val nonce = uri.getQueryParameter("nonce")  // 16 bytes hex = 32 chars
-            val expiresStr = uri.getQueryParameter("expires")
-            val expiresAt = expiresStr?.toLongOrNull()
-            
-            if (sessionId != null && enterprise != null) {
-                return LoginSession(
-                    sessionToken = null,
-                    sessionId = sessionId,
-                    enterpriseName = enterprise,
-                    amountSats = amount,
-                    nonce = nonce,
-                    expiresAt = expiresAt
-                )
-            }
+            return LoginSession(
+                clientId = clientId,
+                nonce = nonce,
+                amountSats = amountSats
+            )
         }
         return null
     }
-    
-    /**
-     * Parse a signed session token (JWT) to extract enterprise info.
-     * The token is a JWT with payload containing enterprise_name, amount_sats, etc.
-     */
-    private fun parseSessionToken(token: String): LoginSession? {
-        return try {
-            // JWT format: header.payload.signature
-            val parts = token.split(".")
-            if (parts.size != 3) return null
-            
-            // Decode payload (Base64URL)
-            val payloadJson = String(
-                android.util.Base64.decode(
-                    parts[1].replace('-', '+').replace('_', '/'),
-                    android.util.Base64.DEFAULT
-                ),
-                Charsets.UTF_8
-            )
-            
-            val payload = JSONObject(payloadJson)
-            
-            LoginSession(
-                sessionToken = token,
-                sessionId = payload.optString("session_id", ""),
-                enterpriseName = payload.optString("enterprise_name", "Unknown"),
-                amountSats = payload.optLong("amount_sats", 100).toULong(),
-                nonce = payload.optString("nonce", "").ifEmpty { null },
-                expiresAt = if (payload.has("expires_at")) payload.optLong("expires_at") else null,
-                // Membership fields (v4)
-                clientId = payload.optString("client_id", "").ifEmpty { null },
-                requiredRootId = payload.optString("required_root_id", "").ifEmpty { null },
-                purposeId = payload.optInt("purpose_id", 0)
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("SignedByMe", "Failed to parse session token: ${e.message}")
-            null
-        }
-    }
 }
 
-// Data class for login session from deep link / QR
+/**
+ * Login session from QR code.
+ * Bible format: signedby://{client_id}/{nonce}/{amount_sats}
+ * 
+ * Enterprise generates nonce locally, displays QR, subscribes to NOSTR relay.
+ * App scans, generates invoices + proof, publishes to relay.
+ * Enterprise catches proof, pays invoices, calls /v1/login/verify.
+ */
 data class LoginSession(
-    val sessionToken: String?,  // Full JWT token for stateless API
-    val sessionId: String,
-    val enterpriseName: String,
-    val amountSats: ULong = 100UL,
-    val nonce: String? = null,       // v3: 16-byte session nonce (32 hex chars)
-    val expiresAt: Long? = null,     // v3: Unix timestamp when session expires
-    // Membership fields (v4)
-    val clientId: String? = null,         // Enterprise client ID for root lookup
-    val requiredRootId: String? = null,   // If set, user MUST prove membership
-    val purposeId: Int = 0                // 0=none, 1=allowlist, 2=issuer_batch, 3=revocation
+    val clientId: String,             // Enterprise client ID (e.g., "acme")
+    val nonce: String,                // Random nonce generated by enterprise
+    val amountSats: ULong = 100UL     // Payment amount in sats
 )
 
 // API Configuration
@@ -868,12 +815,28 @@ fun SignedByMeApp(
             loginSession = loginSession,
             onLoginSessionReceived = { session ->
                 loginSession = session
-                android.util.Log.i("SignedByMe", "Session received: id=${session.sessionId}, client=${session.clientId}, root=${session.requiredRootId}")
+                android.util.Log.i("SignedByMe", "QR scanned: client=${session.clientId}, nonce=${session.nonce}, amount=${session.amountSats}")
             },
             onStartLogin = {
                 scope.launch {
                     isCreatingInvoice = true
                     statusMessage = ""
+                    
+                    // Bible login flow:
+                    // 1. Generate 2 NWC invoices (90/10 split)
+                    // 2. Generate Groth16 proof
+                    // 3. Publish proof_event (kind 28101) to NOSTR
+                    // 4. Wait for payment (enterprise catches event, pays, calls /v1/login/verify)
+                    
+                    val clientId = loginSession?.clientId ?: "demo"
+                    val nonce = loginSession?.nonce ?: run {
+                        val bytes = ByteArray(16)
+                        java.security.SecureRandom().nextBytes(bytes)
+                        bytes.joinToString("") { "%02x".format(it) }
+                    }
+                    val amountSats = loginSession?.amountSats ?: 100UL
+                    
+                    lastLoginId = nonce  // Use nonce as login identifier
                     
                     // Initialize NOSTR + NWC
                     val leafSecret = didMgr.loadLeafSecret()
@@ -885,36 +848,22 @@ fun SignedByMeApp(
                         
                         nostrMgr.connectToRelays(
                             scope = scope,
-                            onConnected = {
-                                android.util.Log.i("SignedByMe", "NOSTR relays connected")
-                            },
-                            onFailed = {
-                                android.util.Log.w("SignedByMe", "NOSTR relay connection failed")
-                            }
+                            onConnected = { android.util.Log.i("SignedByMe", "NOSTR relays connected") },
+                            onFailed = { android.util.Log.w("SignedByMe", "NOSTR relay connection failed") }
                         )
                         
                         if (nostrMgr.initNwc()) {
                             nostrMgr.connectNwc(
                                 scope = scope,
-                                onConnected = {
-                                    android.util.Log.i("SignedByMe", "NWC connected")
-                                },
-                                onFailed = {
-                                    android.util.Log.w("SignedByMe", "NWC connection failed")
-                                }
+                                onConnected = { android.util.Log.i("SignedByMe", "NWC connected") },
+                                onFailed = { android.util.Log.w("SignedByMe", "NWC connection failed") }
                             )
                         }
                     } else {
                         android.util.Log.w("SignedByMe", "No leaf_secret - NOSTR/NWC not initialized")
                     }
                     
-                    val sessionId = loginSession?.sessionId ?: "demo_${System.currentTimeMillis()}"
-                    lastLoginId = sessionId
-                    
-                    val amountSats = loginSession?.amountSats ?: 100UL
-                    val clientId = loginSession?.clientId ?: "demo"
-                    
-                    // Generate invoices via NWC
+                    // Step 1: Generate invoices via NWC (90/10 split)
                     var userInvoice: String? = null
                     var operatorInvoice: String? = null
                     
@@ -926,7 +875,7 @@ fun SignedByMeApp(
                         if (invoices != null) {
                             userInvoice = invoices.first
                             operatorInvoice = invoices.second
-                            android.util.Log.i("SignedByMe", "NWC invoices generated")
+                            android.util.Log.i("SignedByMe", "NWC invoices generated (90/10 split)")
                         }
                     }
                     
@@ -944,142 +893,59 @@ fun SignedByMeApp(
                     isLoginActive = true
                     isPollingPayment = true
                     
-                    // Send to API
+                    // Step 2 + 3: Generate Groth16 proof and publish to NOSTR
                     launch(Dispatchers.IO) {
                         try {
-                            val walletAddress = "nwc-wallet"
-                                
-                            val sessionNonce = loginSession?.nonce?.takeIf { it.length == 32 }
-                                ?: run {
-                                    val bytes = ByteArray(16)
-                                    java.security.SecureRandom().nextBytes(bytes)
-                                    bytes.joinToString("") { "%02x".format(it) }
-                                }
-                            val sessionAmount = loginSession?.amountSats?.toLong() ?: 100L
-                            val enterpriseDomain = loginSession?.enterpriseName ?: "demo.signedby.me"
+                            // Generate Groth16 membership proof
+                            android.util.Log.i("SignedByMe", "Generating Groth16 proof for client=$clientId")
+                            val proofResult = didMgr.generateGroth16Proof(clientId, "default")
+                            val proofJson = org.json.JSONObject(proofResult)
                             
-                            val stwoproof: String? = null
-                            
-                            val dlcContract = try {
-                                dlcManager.buildAuthContract(
-                                    loginId = sessionId,
-                                    did = did!!,
-                                    amountSats = sessionAmount
+                            val proofHex = if (proofJson.optBoolean("success", false)) {
+                                android.util.Base64.encodeToString(
+                                    proofResult.toByteArray(Charsets.UTF_8),
+                                    android.util.Base64.NO_WRAP
                                 )
-                            } catch (e: Exception) {
-                                android.util.Log.e("SignedByMe", "Failed to build DLC contract: ${e.message}")
-                                null
-                            }
-
-                            withContext(Dispatchers.Main) {
-                                lastDlcContract = dlcContract
-                            }
-                            
-                            // Generate membership proof if required
-                            var membershipBundle: MembershipBundle? = null
-                            val requiredRootId = loginSession?.requiredRootId
-                            val requiredClientId = loginSession?.clientId
-                            
-                            if (requiredRootId != null && requiredClientId != null) {
-                                android.util.Log.i("SignedByMe", "Membership required: client=$requiredClientId, root=$requiredRootId")
-                                
-                                val witness = didMgr.loadWitness(requiredClientId, requiredRootId)
-                                if (witness != null) {
-                                    val didPubkeyHex = did!!.removePrefix("did:btcr:")
-                                    val didPubkeyBytes = didPubkeyHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-                                    val paymentHashBytes = lastPaymentHash.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-                                    val nonceBytes = sessionNonce.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-                                    
-                                    val bindingHash = NativeBridge.computeBindingHashV4(
-                                        didPubkey = didPubkeyBytes,
-                                        walletAddress = walletAddress,
-                                        clientId = requiredClientId,
-                                        sessionId = sessionId,
-                                        paymentHash = paymentHashBytes,
-                                        amountSats = sessionAmount,
-                                        expiresAt = loginSession?.expiresAt ?: (System.currentTimeMillis() / 1000 + 300),
-                                        nonce = nonceBytes,
-                                        eaDomain = enterpriseDomain,
-                                        purposeId = witness.purposeId,
-                                        rootId = requiredRootId
-                                    )
-                                    
-                                    val sessionIdDecoded = android.util.Base64.decode(
-                                        sessionId, 
-                                        android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING
-                                    )
-                                    val sessionIdBytes = ByteArray(32)
-                                    sessionIdDecoded.copyInto(sessionIdBytes, 0, 0, minOf(sessionIdDecoded.size, 32))
-                                    val proofBase64 = didMgr.generateMembershipProof(witness, bindingHash, sessionIdBytes)
-                                    if (proofBase64 != null) {
-                                        membershipBundle = MembershipBundle(
-                                            rootId = requiredRootId,
-                                            purpose = didMgr.purposeIdToString(witness.purposeId),
-                                            proofBase64 = proofBase64
-                                        )
-                                        android.util.Log.i("SignedByMe", "Membership proof generated successfully")
-                                    } else {
-                                        android.util.Log.e("SignedByMe", "Failed to generate membership proof")
-                                        withContext(Dispatchers.Main) {
-                                            statusMessage = "Error: Could not generate membership proof."
-                                        }
-                                        return@launch
-                                    }
-                                } else {
-                                    android.util.Log.e("SignedByMe", "No witness found for client=$requiredClientId, root=$requiredRootId")
-                                    withContext(Dispatchers.Main) {
-                                        statusMessage = "Error: Not enrolled with this employer."
-                                    }
-                                    return@launch
+                            } else {
+                                android.util.Log.e("SignedByMe", "Proof generation failed: ${proofJson.optString("error")}")
+                                withContext(Dispatchers.Main) {
+                                    statusMessage = "Error: ${proofJson.optString("error", "Proof failed")}"
                                 }
+                                return@launch
                             }
                             
-                            // Publish proof_event to NOSTR
+                            android.util.Log.i("SignedByMe", "Groth16 proof generated successfully")
+                            
+                            // Publish proof_event (kind 28101) to NOSTR relay
+                            // Enterprise subscription will catch this by nonce + client_id
                             if (nostrMgr.isConnected()) {
-                                val proofHex = membershipBundle?.proofBase64 ?: ""
-                                val merkleRoot = ""
-                                val npub = nostrMgr.getNpub() ?: ""
-                                
-                                scope.launch(Dispatchers.IO) {
-                                    nostrMgr.publishProofEvent(
-                                        nonce = sessionNonce,
-                                        clientId = clientId,
-                                        proofHex = proofHex,
-                                        merkleRoot = merkleRoot,
-                                        userInvoice = invoice,
-                                        operatorInvoice = lastOperatorInvoice
-                                    )
-                                }
+                                nostrMgr.publishProofEvent(
+                                    nonce = nonce,
+                                    clientId = clientId,
+                                    proofHex = proofHex,
+                                    merkleRoot = "",
+                                    userInvoice = invoice,
+                                    operatorInvoice = lastOperatorInvoice
+                                )
+                                android.util.Log.i("SignedByMe", "proof_event published to NOSTR (nonce=$nonce)")
                             }
-                            
-                            // Submit to API
-                            val apiResult = sendInvoiceToApiWithDlc(
-                                sessionToken = loginSession?.sessionToken,
-                                sessionId = sessionId,
-                                invoice = invoice,
-                                did = did!!,
-                                enterpriseName = enterpriseDomain,
-                                amountSats = sessionAmount,
-                                stwoproof = stwoproof,
-                                nonce = sessionNonce,
-                                dlcContractJson = dlcContract?.toJson(),
-                                membership = membershipBundle,
-                                walletAddress = walletAddress
-                            )
                             
                             withContext(Dispatchers.Main) {
-                                if (!apiResult.success) {
-                                    statusMessage = "Error: ${apiResult.errorMessage ?: "Could not reach API"}"
-                                }
+                                statusMessage = "Waiting for payment..."
+                                isCreatingInvoice = false
                             }
+                            
+                            // No API call here! Enterprise catches NOSTR event, pays invoices,
+                            // and calls /v1/login/verify themselves (Bible Decision 10)
+                            
                         } catch (e: Exception) {
+                            android.util.Log.e("SignedByMe", "Login flow error: ${e.message}")
                             withContext(Dispatchers.Main) {
-                                statusMessage = "API error: ${e.message}"
+                                statusMessage = "Error: ${e.message}"
+                                isCreatingInvoice = false
                             }
                         }
                     }
-                    
-                    isCreatingInvoice = false
                 }
             },
             onShowInvoiceDialog = { showInvoiceDialog = true },
@@ -1114,11 +980,10 @@ fun SignedByMeApp(
             onDevExportLeafCommitment = if (BuildConfig.DEBUG) {
                 {
                     val cid = loginSession?.clientId
-                    val rid = loginSession?.requiredRootId
-                    if (cid != null && rid != null) {
+                    if (cid != null) {
                         scope.launch {
                             val commitment = withContext(Dispatchers.IO) {
-                                didMgr.devExportLeafCommitment(cid, rid)
+                                didMgr.devExportLeafCommitment(cid, "default")
                             }
                             if (commitment != null) {
                                 Toast.makeText(context, "Leaf commitment exported to logcat", Toast.LENGTH_LONG).show()
@@ -2556,60 +2421,30 @@ fun LoginScreen(
             onQrScanned = { qrContent ->
                 showQrScanner = false
                 try {
+                    // Bible format: signedby://{client_id}/{nonce}/{amount_sats}
+                    // Example: signedby://acme/a3f9bc12d7/100
                     val uri = android.net.Uri.parse(qrContent)
                     
-                    val token = uri.getQueryParameter("token")
-                    if (token != null) {
-                        val parts = token.split(".")
-                        if (parts.size == 3) {
-                            val payloadJson = String(
-                                android.util.Base64.decode(
-                                    parts[1].replace('-', '+').replace('_', '/'),
-                                    android.util.Base64.DEFAULT
-                                ),
-                                Charsets.UTF_8
-                            )
-                            val payload = org.json.JSONObject(payloadJson)
-                            onLoginSessionReceived(LoginSession(
-                                sessionToken = token,
-                                sessionId = payload.optString("session_id", ""),
-                                enterpriseName = payload.optString("enterprise_name", "Unknown"),
-                                amountSats = payload.optLong("amount_sats", 100).toULong(),
-                                nonce = payload.optString("nonce", "").ifEmpty { null },
-                                expiresAt = if (payload.has("expires_at")) payload.optLong("expires_at") else null,
-                                clientId = payload.optString("client_id", "").ifEmpty { null },
-                                requiredRootId = payload.optString("required_root_id", "").ifEmpty { null },
-                                purposeId = payload.optInt("purpose_id", 0)
-                            ))
-                            return@QRScannerDialog
-                        }
-                    }
-                    
-                    val sessionId = uri.getQueryParameter("session")
-                    val enterprise = uri.getQueryParameter("enterprise")
-                        ?: uri.getQueryParameter("employer")
-                    val amountStr = uri.getQueryParameter("amount")
-                    val amount = amountStr?.toULongOrNull() ?: 100UL
-                    val nonce = uri.getQueryParameter("nonce")
-                    val expiresStr = uri.getQueryParameter("expires")
-                    val expiresAt = expiresStr?.toLongOrNull()
-                    val clientId = uri.getQueryParameter("client_id") ?: uri.getQueryParameter("client")
-                    val requiredRootId = uri.getQueryParameter("root_id") ?: uri.getQueryParameter("root")
-                    
-                    if (sessionId != null && enterprise != null) {
+                    if (uri.scheme == "signedby") {
+                        val pathSegments = uri.pathSegments
+                        // Host is client_id, path segments are nonce and amount
+                        // signedby://acme/a3f9bc12d7/100 -> host=acme, path=[a3f9bc12d7, 100]
+                        val clientId = uri.host ?: return@QRScannerDialog
+                        val nonce = pathSegments.getOrNull(0) ?: return@QRScannerDialog
+                        val amountSats = pathSegments.getOrNull(1)?.toULongOrNull() ?: 100UL
+                        
+                        android.util.Log.i("SignedByMe", "QR parsed: client_id=$clientId, nonce=$nonce, amount=$amountSats")
+                        
                         onLoginSessionReceived(LoginSession(
-                            sessionToken = null,
-                            sessionId = sessionId,
-                            enterpriseName = enterprise,
-                            amountSats = amount,
-                            nonce = nonce,
-                            expiresAt = expiresAt,
                             clientId = clientId,
-                            requiredRootId = requiredRootId
+                            nonce = nonce,
+                            amountSats = amountSats
                         ))
+                    } else {
+                        android.util.Log.w("SignedByMe", "QR not in signedby:// format: ${uri.scheme}")
                     }
                 } catch (e: Exception) {
-                    // Invalid QR format
+                    android.util.Log.e("SignedByMe", "QR parse error: ${e.message}")
                 }
             },
             onDismiss = { showQrScanner = false }
