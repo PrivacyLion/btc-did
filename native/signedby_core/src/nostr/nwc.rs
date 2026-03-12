@@ -67,23 +67,45 @@ impl NwcClient {
     }
     
     /// Connect to the NWC relay
+    /// 
+    /// Enables automatic NIP-42 authentication to satisfy relay.privacy-lion.com
+    /// AUTH requirements before publishing make_invoice events.
     pub async fn connect(&mut self) -> Result<()> {
         let uri = self.uri.as_ref()
             .ok_or_else(|| anyhow!("NWC URI not set"))?;
         
-        let nwc = NWC::new(uri.clone());
+        // Enable automatic NIP-42 authentication
+        // The relay requires AUTH handshake before allowing publish
+        let opts = Options::new()
+            .automatic_authentication(true);
         
-        // Connect with timeout
+        let nwc = NWC::with_opts(uri.clone(), opts);
+        
+        // Connect with timeout - NWC connection is implicit on first request,
+        // but we trigger it early to ensure NIP-42 handshake completes
         let timeout = Duration::from_secs(5);
         match tokio::time::timeout(timeout, async {
-            // NWC connect is implicit on first request
-            Ok::<(), anyhow::Error>(())
+            // Ping the relay to trigger connection and NIP-42 handshake
+            // get_info is a lightweight NWC call that forces connection
+            match nwc.get_info().await {
+                Ok(info) => {
+                    eprintln!("[NWC] Connected, wallet: {:?}", info.alias);
+                    Ok(())
+                }
+                Err(e) => {
+                    // get_info might not be supported by all wallets, 
+                    // but connection should still be established
+                    eprintln!("[NWC] get_info failed (may be unsupported): {}", e);
+                    Ok(())
+                }
+            }
         }).await {
-            Ok(_) => {
+            Ok(result) => {
+                result?;
                 self.nwc = Some(nwc);
                 Ok(())
             }
-            Err(_) => Err(anyhow!("NWC connection timeout"))
+            Err(_) => Err(anyhow!("NWC connection timeout (NIP-42 handshake may have failed)"))
         }
     }
     
