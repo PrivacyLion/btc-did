@@ -2,9 +2,9 @@
  * Acme Corp SignedByMe Integration
  * 
  * Flow:
- * 1. Create login session via POST /v1/login/start
- * 2. Display QR code with deep link
- * 3. Subscribe to NOSTR relay for kind 28101 proof events
+ * 1. Generate nonce locally (no server call)
+ * 2. Display QR code with deep link: signedby://{client_id}/{nonce}/{amount_sats}
+ * 3. Subscribe to NOSTR relay for kind 28101 proof events (#n tag)
  * 4. On proof event: pay invoices via Strike, submit to /v1/login/verify
  * 5. Display id_token on success
  */
@@ -13,16 +13,14 @@
 const API_BASE = 'https://api.beta.privacy-lion.com';
 const RELAY_URL = 'wss://relay.privacy-lion.com';
 const CLIENT_ID = 'acme';
-const DOMAIN = 'acme.beta.privacy-lion.com';
+const AMOUNT_SATS = 100;
 
 // Strike API - signedby-demo key
 const STRIKE_API_KEY = '4F683B6BDAD5E8ED8A345B47AA3674060B49412A51352BB183B55ABDBCAC92BC';
 
 // State
-let currentSession = null;
+let currentNonce = null;
 let relayWs = null;
-let expireTimer = null;
-let expiresAt = 0;
 
 // DOM Elements
 const loginView = document.getElementById('login-view');
@@ -33,7 +31,6 @@ const backBtn = document.getElementById('back-btn');
 const rewardAmount = document.getElementById('reward-amount');
 const statusText = document.getElementById('status-text');
 const spinner = document.getElementById('spinner');
-const expireTimerEl = document.getElementById('expire-timer');
 
 // Success view elements
 const tokenSub = document.getElementById('token-sub');
@@ -52,6 +49,16 @@ signedByBtn.addEventListener('click', startSignedByLogin);
 backBtn.addEventListener('click', cancelLogin);
 
 /**
+ * Generate a cryptographically secure nonce
+ * 16 bytes, hex-encoded = 32 characters
+ */
+function generateNonce() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * Start SignedByMe login flow
  */
 async function startSignedByLogin() {
@@ -59,44 +66,17 @@ async function startSignedByLogin() {
         signedByBtn.disabled = true;
         signedByBtn.textContent = 'Starting...';
         
-        // Generate nonce
-        const nonce = crypto.randomUUID();
-        
-        // Create session via /v1/login/start
-        const response = await fetch(`${API_BASE}/v1/login/start`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                client_id: CLIENT_ID,
-                nonce: nonce,
-                domain: DOMAIN
-            })
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to create session');
-        }
-        
-        const data = await response.json();
-        console.log('Session created:', data);
-        
-        // Store session state
-        currentSession = {
-            login_id: data.login_id,
-            nonce: data.nonce,
-            amount_sats: data.pay_terms.amount_sats,
-            expires: data.pay_terms.expires
-        };
+        // Generate nonce locally - no server call
+        currentNonce = generateNonce();
+        console.log('Generated nonce:', currentNonce);
         
         // Update UI
-        rewardAmount.textContent = currentSession.amount_sats;
-        expiresAt = currentSession.expires;
+        rewardAmount.textContent = AMOUNT_SATS;
         
-        // Generate QR code with deep link
-        const qrData = `signedby.me://login?login_id=${currentSession.login_id}&nonce=${currentSession.nonce}`;
+        // Generate QR code with deep link: signedby://{client_id}/{nonce}/{amount_sats}
+        const qrData = `signedby://${CLIENT_ID}/${currentNonce}/${AMOUNT_SATS}`;
+        console.log('QR data:', qrData);
+        
         const qrContainer = document.getElementById('qr-container');
         qrContainer.innerHTML = ''; // Clear previous
         new QRCode(qrContainer, {
@@ -112,10 +92,7 @@ async function startSignedByLogin() {
         qrView.classList.remove('hidden');
         
         // Subscribe to NOSTR relay for proof events
-        subscribeToRelay(currentSession.nonce);
-        
-        // Start expire timer
-        startExpireTimer();
+        subscribeToRelay(currentNonce);
         
     } catch (error) {
         console.error('Error starting login:', error);
@@ -143,13 +120,13 @@ function subscribeToRelay(nonce) {
     
     relayWs.onopen = () => {
         console.log('Relay connected, subscribing to nonce:', nonce);
-        // Subscribe to kind 28101 events tagged with our nonce
+        // Subscribe to kind 28101 events tagged with our nonce via #n tag
         const subRequest = JSON.stringify([
             "REQ", 
             "login-sub", 
             { 
                 kinds: [28101],
-                "#e": [nonce]
+                "#n": [nonce]
             }
         ]);
         relayWs.send(subRequest);
@@ -179,8 +156,8 @@ function subscribeToRelay(nonce) {
         statusText.textContent = 'Connection error. Retrying...';
         // Retry after 3 seconds
         setTimeout(() => {
-            if (currentSession) {
-                subscribeToRelay(currentSession.nonce);
+            if (currentNonce) {
+                subscribeToRelay(currentNonce);
             }
         }, 3000);
     };
@@ -211,14 +188,19 @@ async function handleProofEvent(event) {
     try {
         const content = JSON.parse(event.content);
         
-        // Extract invoices from proof event
-        const userInvoice = content.user_invoice;      // 90% - pay to user
-        const operatorInvoice = content.operator_invoice; // 10% - pay to operator
+        // Extract fields per Bible spec
+        const npub = content.public_outputs.npub;
+        const merkle_root = content.public_outputs.merkle_root;
+        const userInvoice = content.invoices.user_invoice;
+        const operatorInvoice = content.invoices.operator_invoice;
         const proof = content.proof;
-        const publicInputs = content.public_inputs;
         
         if (!userInvoice || !operatorInvoice) {
             throw new Error('Missing invoices in proof event');
+        }
+        
+        if (!npub || !merkle_root) {
+            throw new Error('Missing public_outputs in proof event');
         }
         
         // Pay both invoices via Strike
@@ -232,21 +214,22 @@ async function handleProofEvent(event) {
         console.log('Payments complete:', { userPreimage, operatorPreimage });
         statusText.textContent = 'Verifying proof...';
         
-        // Submit to /v1/login/verify
+        // Submit to /v1/login/verify per Bible spec
         const verifyResponse = await fetch(`${API_BASE}/v1/login/verify`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                login_id: currentSession.login_id,
-                client_id: CLIENT_ID,
                 proof: proof,
-                public_inputs: publicInputs,
+                public_outputs: {
+                    merkle_root: merkle_root,
+                    npub: npub
+                },
                 user_invoice: userInvoice,
                 operator_invoice: operatorInvoice,
-                user_preimage: userPreimage,
-                operator_preimage: operatorPreimage
+                preimage_hex: userPreimage,
+                operator_preimage_hex: operatorPreimage
             })
         });
         
@@ -260,7 +243,6 @@ async function handleProofEvent(event) {
         
         // Success! Close relay and show result
         closeRelay();
-        stopExpireTimer();
         showSuccess(result);
         
     } catch (error) {
@@ -331,50 +313,10 @@ async function payInvoiceViaStrike(bolt11) {
  */
 function cancelLogin() {
     closeRelay();
-    stopExpireTimer();
-    currentSession = null;
+    currentNonce = null;
     
     qrView.classList.add('hidden');
     loginView.classList.remove('hidden');
-}
-
-/**
- * Start expire countdown timer
- */
-function startExpireTimer() {
-    stopExpireTimer();
-    updateExpireTimer();
-    expireTimer = setInterval(updateExpireTimer, 1000);
-}
-
-/**
- * Stop expire timer
- */
-function stopExpireTimer() {
-    if (expireTimer) {
-        clearInterval(expireTimer);
-        expireTimer = null;
-    }
-}
-
-/**
- * Update expire timer display
- */
-function updateExpireTimer() {
-    const now = Math.floor(Date.now() / 1000);
-    const remaining = Math.max(0, expiresAt - now);
-    
-    const minutes = Math.floor(remaining / 60);
-    const seconds = remaining % 60;
-    
-    expireTimerEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    
-    if (remaining <= 0) {
-        stopExpireTimer();
-        closeRelay();
-        statusText.textContent = 'Session expired. Please try again.';
-        spinner.style.display = 'none';
-    }
 }
 
 /**
@@ -417,8 +359,7 @@ function showSuccess(result) {
     }
     
     // Handle payout display
-    const amountPaid = currentSession?.amount_sats || 100;
-    payoutAmount.textContent = amountPaid;
+    payoutAmount.textContent = AMOUNT_SATS;
     payoutInfo.classList.remove('hidden');
     payoutError.classList.add('hidden');
     
@@ -431,10 +372,10 @@ function showSuccess(result) {
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
         // Could pause relay here if needed
-    } else if (currentSession && !qrView.classList.contains('hidden')) {
+    } else if (currentNonce && !qrView.classList.contains('hidden')) {
         // Reconnect if disconnected
         if (!relayWs || relayWs.readyState !== WebSocket.OPEN) {
-            subscribeToRelay(currentSession.nonce);
+            subscribeToRelay(currentNonce);
         }
     }
 });
