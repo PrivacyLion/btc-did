@@ -15,8 +15,11 @@ const RELAY_URL = 'wss://relay.privacy-lion.com';
 const CLIENT_ID = 'acme';
 const AMOUNT_SATS = 100;
 
-// Strike API - signedby-demo key
+// Strike API - signedby-demo key (dev/test only - temporary scaffolding)
 const STRIKE_API_KEY = '4F683B6BDAD5E8ED8A345B47AA3674060B49412A51352BB183B55ABDBCAC92BC';
+
+// Acme API key for /v1/login/verify (from clients.json)
+const ACME_API_KEY = 'acme-test-key-2026';
 
 // State
 let currentNonce = null;
@@ -214,11 +217,12 @@ async function handleProofEvent(event) {
         console.log('Payments complete:', { userPreimage, operatorPreimage });
         statusText.textContent = 'Verifying proof...';
         
-        // Submit to /v1/login/verify per Bible spec
+        // Submit to /v1/login/verify per Bible spec (stateless, one call)
         const verifyResponse = await fetch(`${API_BASE}/v1/login/verify`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-API-Key': ACME_API_KEY
             },
             body: JSON.stringify({
                 proof: proof,
@@ -298,14 +302,18 @@ async function payInvoiceViaStrike(bolt11) {
     }
     
     const payment = await payResponse.json();
-    console.log('Strike payment:', payment);
+    console.log('Strike payment response:', payment);
     
-    // Return preimage (hex)
-    if (!payment.preimage) {
-        throw new Error('No preimage in Strike response');
+    // Extract preimage (hex) - check common field names
+    // Strike API may return 'preimage' or 'paymentPreimage'
+    const preimage = payment.preimage || payment.paymentPreimage || payment.result?.preimage;
+    
+    if (!preimage) {
+        console.error('Strike response missing preimage:', payment);
+        throw new Error('No preimage in Strike response - check API response structure');
     }
     
-    return payment.preimage;
+    return preimage;
 }
 
 /**
@@ -321,6 +329,7 @@ function cancelLogin() {
 
 /**
  * Show success view with id_token contents
+ * This is the investor demo moment - display all the good stuff
  */
 function showSuccess(result) {
     // Decode id_token (JWT) to show claims
@@ -333,17 +342,18 @@ function showSuccess(result) {
         if (parts.length === 3) {
             const payload = JSON.parse(atob(parts[1]));
             claims = payload;
+            console.log('JWT claims:', claims);
         }
     } catch (e) {
         console.error('Error decoding JWT:', e);
     }
     
-    // Display token claims
+    // Display token claims - sub is the npub (bech32)
     tokenSub.textContent = claims.sub || 'Unknown';
     tokenIss.textContent = claims.iss || API_BASE;
     tokenAud.textContent = claims.aud || CLIENT_ID;
     
-    // Membership claims (if present)
+    // Membership claims (merkle_root proves group membership)
     if (claims.membership_root) {
         tokenMembership.textContent = `Root: ${claims.membership_root.substring(0, 16)}...`;
         membershipField.classList.remove('hidden');
@@ -351,17 +361,32 @@ function showSuccess(result) {
         membershipField.classList.add('hidden');
     }
     
-    // Payment proof
+    // Payment proof (preimage or payment_hash)
     if (claims.payment_hash) {
         tokenPayment.textContent = claims.payment_hash.substring(0, 32) + '...';
+    } else if (claims.preimage) {
+        tokenPayment.textContent = claims.preimage.substring(0, 32) + '...';
     } else {
         tokenPayment.textContent = 'Verified ✓';
+    }
+    
+    // AMR (Authentication Methods Reference) - shows what factors were used
+    const tokenAmr = document.getElementById('token-amr');
+    const amrField = document.getElementById('amr-field');
+    if (tokenAmr && claims.amr && Array.isArray(claims.amr)) {
+        tokenAmr.textContent = claims.amr.join(', ');
+        if (amrField) amrField.classList.remove('hidden');
+    } else if (amrField) {
+        amrField.classList.add('hidden');
     }
     
     // Handle payout display
     payoutAmount.textContent = AMOUNT_SATS;
     payoutInfo.classList.remove('hidden');
     payoutError.classList.add('hidden');
+    
+    // Log full token for debugging
+    console.log('Login successful! id_token:', idToken);
     
     // Show success view
     qrView.classList.add('hidden');
