@@ -11,15 +11,22 @@ import java.security.SecureRandom
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import java.net.URL
+import java.net.HttpURLConnection
+import org.json.JSONObject
 
 /**
  * Data class for parsed invoice details
@@ -63,8 +70,46 @@ class BreezWalletManager(private val context: Context) {
     private val _walletState = MutableStateFlow<WalletState>(WalletState.Disconnected)
     val walletState: StateFlow<WalletState> = _walletState.asStateFlow()
     
+    // Payment received events - emits (paymentHash, preimage) when payment is received
+    private val _paymentReceived = MutableSharedFlow<Pair<String, String>>()
+    val paymentReceived: SharedFlow<Pair<String, String>> = _paymentReceived.asSharedFlow()
+    
     private var sdk: BreezSdk? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+    
+    // Event listener for Breez SDK events
+    private val eventListener = object : EventListener {
+        override fun onEvent(event: BreezEvent) {
+            when (event) {
+                is BreezEvent.PaymentReceived -> {
+                    val payment = event.payment
+                    Log.i(TAG, "Payment received event: ${payment.details}")
+                    
+                    // Extract payment hash and preimage from payment details
+                    when (val details = payment.details) {
+                        is PaymentDetails.Lightning -> {
+                            val paymentHash = details.paymentHash
+                            val preimage = details.preimage ?: ""
+                            Log.i(TAG, "Lightning payment received: hash=$paymentHash, preimage=${preimage.take(16)}...")
+                            scope.launch {
+                                _paymentReceived.emit(Pair(paymentHash, preimage))
+                            }
+                        }
+                        else -> {
+                            Log.d(TAG, "Non-Lightning payment received")
+                        }
+                    }
+                }
+                is BreezEvent.Synced -> {
+                    Log.d(TAG, "Wallet synced")
+                    scope.launch { refreshBalance() }
+                }
+                else -> {
+                    Log.d(TAG, "Breez event: $event")
+                }
+            }
+        }
+    }
     
     /**
      * Initialize or restore the wallet
@@ -87,13 +132,14 @@ class BreezWalletManager(private val context: Context) {
             // Storage directory for SDK data
             val storageDir = context.filesDir.absolutePath + "/breez_data"
             
-            // Connect to SDK
+            // Connect to SDK with event listener
             sdk = connect(
                 ConnectRequest(
                     config = config,
                     seed = seed,
                     storageDir = storageDir
-                )
+                ),
+                eventListener
             )
             
             // Fetch initial balance
@@ -176,6 +222,223 @@ class BreezWalletManager(private val context: Context) {
         }
     }
     
+    /**
+     * Fetch a BOLT11 invoice from a Lightning Address using LNURL-pay protocol.
+     * Used to get invoices for third parties (e.g., operator fee invoice).
+     * 
+     * @param lightningAddress Lightning Address (e.g., user@wallet.com)
+     * @param amountSats Amount in satoshis
+     * @param comment Optional comment
+     * @return The BOLT11 invoice string
+     */
+    suspend fun getInvoiceFromLightningAddress(
+        lightningAddress: String,
+        amountSats: ULong,
+        comment: String? = null
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            // Parse Lightning Address: user@domain -> https://domain/.well-known/lnurlp/user
+            val parts = lightningAddress.split("@")
+            if (parts.size != 2) {
+                return@withContext Result.failure(Exception("Invalid Lightning Address format"))
+            }
+            val (user, domain) = parts
+            
+            // Step 1: Fetch LNURL pay request metadata
+            val lnurlUrl = "https://$domain/.well-known/lnurlp/$user"
+            Log.d(TAG, "Fetching LNURL from: $lnurlUrl")
+            
+            val metadataJson = fetchUrl(lnurlUrl)
+            val metadata = JSONObject(metadataJson)
+            
+            // Validate response
+            val tag = metadata.optString("tag")
+            if (tag != "payRequest") {
+                return@withContext Result.failure(Exception("Invalid LNURL response: tag=$tag"))
+            }
+            
+            val minSendable = metadata.getLong("minSendable") / 1000  // Convert millisats to sats
+            val maxSendable = metadata.getLong("maxSendable") / 1000
+            
+            if (amountSats.toLong() < minSendable || amountSats.toLong() > maxSendable) {
+                return@withContext Result.failure(
+                    Exception("Amount $amountSats sats outside range [$minSendable, $maxSendable]")
+                )
+            }
+            
+            val callback = metadata.getString("callback")
+            
+            // Step 2: Request invoice with amount
+            val amountMsats = amountSats.toLong() * 1000
+            val invoiceUrl = if (callback.contains("?")) {
+                "$callback&amount=$amountMsats"
+            } else {
+                "$callback?amount=$amountMsats"
+            }
+            
+            // Add comment if provided and allowed
+            val finalUrl = if (comment != null && metadata.optInt("commentAllowed", 0) > 0) {
+                "$invoiceUrl&comment=${java.net.URLEncoder.encode(comment, "UTF-8")}"
+            } else {
+                invoiceUrl
+            }
+            
+            Log.d(TAG, "Requesting invoice from: $finalUrl")
+            val invoiceJson = fetchUrl(finalUrl)
+            val invoiceResponse = JSONObject(invoiceJson)
+            
+            // Check for error
+            if (invoiceResponse.has("status") && invoiceResponse.getString("status") == "ERROR") {
+                val reason = invoiceResponse.optString("reason", "Unknown error")
+                return@withContext Result.failure(Exception("LNURL error: $reason"))
+            }
+            
+            val bolt11 = invoiceResponse.getString("pr")
+            Log.i(TAG, "Got invoice from Lightning Address: ${bolt11.take(30)}...")
+            
+            Result.success(bolt11)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get invoice from Lightning Address", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Helper function to fetch URL content
+     */
+    private fun fetchUrl(urlString: String): String {
+        val url = URL(urlString)
+        val connection = url.openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.setRequestProperty("Accept", "application/json")
+        connection.connectTimeout = 10000
+        connection.readTimeout = 10000
+        
+        try {
+            val responseCode = connection.responseCode
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                throw Exception("HTTP error: $responseCode")
+            }
+            return connection.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            connection.disconnect()
+        }
+    }
+    
+    /**
+     * Wait for a specific payment to be received by payment hash.
+     * Uses Breez SDK payment events with polling fallback.
+     * 
+     * @param paymentHash The payment hash to wait for
+     * @param timeoutMs Timeout in milliseconds
+     * @return The preimage if payment received, null on timeout
+     */
+    suspend fun waitForPayment(
+        paymentHash: String,
+        timeoutMs: Long = 120000
+    ): String? = withContext(Dispatchers.IO) {
+        Log.d(TAG, "Waiting for payment: $paymentHash (timeout=${timeoutMs}ms)")
+        
+        // Helper to find payment in recent list
+        suspend fun findPaymentPreimage(): String? {
+            val payments = getRecentPayments(50u)
+            val payment = payments.find { p ->
+                when (val details = p.details) {
+                    is PaymentDetails.Lightning -> details.paymentHash == paymentHash
+                    else -> false
+                }
+            }
+            return if (payment != null) {
+                val details = payment.details as? PaymentDetails.Lightning
+                details?.preimage
+            } else null
+        }
+        
+        // First check if already received
+        findPaymentPreimage()?.let { preimage ->
+            Log.i(TAG, "Payment already received: $paymentHash")
+            return@withContext preimage
+        }
+        
+        // Poll for payment (Breez event listener also fires _paymentReceived)
+        // Using polling as primary method since events may be missed if listener 
+        // wasn't attached before payment arrived
+        val startTime = System.currentTimeMillis()
+        val pollIntervalMs = 1000L
+        
+        while (System.currentTimeMillis() - startTime < timeoutMs) {
+            // Check for payment
+            findPaymentPreimage()?.let { preimage ->
+                Log.i(TAG, "Payment received: $paymentHash, preimage: ${preimage.take(16)}...")
+                return@withContext preimage
+            }
+            
+            // Wait before next poll
+            kotlinx.coroutines.delay(pollIntervalMs)
+        }
+        
+        Log.d(TAG, "Payment not received within timeout: $paymentHash")
+        null
+    }
+    
+    /**
+     * Generate login invoices (90% user, 10% operator) using Breez SDK.
+     * 
+     * @param totalSats Total amount from QR code
+     * @param clientId Enterprise client_id for description
+     * @param operatorAddress Operator Lightning Address for 10% fee
+     * @return Pair of (userInvoice, operatorInvoice), or null on error
+     */
+    suspend fun generateLoginInvoices(
+        totalSats: Long,
+        clientId: String,
+        operatorAddress: String = "ops_yypf5wifvp@strike.me"
+    ): Pair<String, String>? = withContext(Dispatchers.IO) {
+        try {
+            // Calculate 90/10 split
+            val userSats = (totalSats * 90) / 100
+            val operatorSats = totalSats - userSats
+            
+            Log.i(TAG, "Generating login invoices: user=$userSats sats, operator=$operatorSats sats")
+            
+            // Invoice 1: 90% to user's Breez wallet
+            val userDescription = "SignedByMe login - $clientId (user)"
+            val userInvoiceResult = createInvoice(
+                amountSats = userSats.toULong(),
+                description = userDescription,
+                expirySecs = 600u  // 10 minutes
+            )
+            
+            if (userInvoiceResult.isFailure) {
+                Log.e(TAG, "Failed to create user invoice: ${userInvoiceResult.exceptionOrNull()}")
+                return@withContext null
+            }
+            
+            val userInvoice = userInvoiceResult.getOrThrow()
+            
+            // Invoice 2: 10% to operator Lightning Address
+            val operatorDescription = "SignedByMe login - $clientId (operator)"
+            val operatorInvoiceResult = getInvoiceFromLightningAddress(
+                lightningAddress = operatorAddress,
+                amountSats = operatorSats.toULong(),
+                comment = operatorDescription
+            )
+            
+            if (operatorInvoiceResult.isFailure) {
+                Log.e(TAG, "Failed to get operator invoice: ${operatorInvoiceResult.exceptionOrNull()}")
+                return@withContext null
+            }
+            
+            val operatorInvoice = operatorInvoiceResult.getOrThrow()
+            
+            Log.i(TAG, "Generated login invoices successfully")
+            Pair(userInvoice, operatorInvoice)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception generating login invoices", e)
+            null
+        }
+    }
+
     /**
      * Extract payment hash from a bolt11 invoice.
      * 

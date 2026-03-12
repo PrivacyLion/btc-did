@@ -668,12 +668,14 @@ fun SignedByMeApp(
     }
 
     // Poll for payment when invoice is active
+    // Phase 9B: Uses Breez SDK payment events instead of NWC polling
     LaunchedEffect(isPollingPayment, lastPaymentHash) {
         if (isPollingPayment && lastPaymentHash.isNotEmpty()) {
             while (isPollingPayment && !paymentReceived) {
-                // Poll NWC for payment (3 second timeout per poll)
-                val preimage = if (nostrMgr.isNwcConnected()) {
-                    nostrMgr.waitForPayment(lastPaymentHash, timeoutSecs = 3)
+                // Wait for payment via Breez SDK (3 second poll intervals)
+                val breezState = breezMgr.walletState.value
+                val preimage = if (breezState is BreezWalletManager.WalletState.Connected) {
+                    breezMgr.waitForPayment(lastPaymentHash, timeoutMs = 3000)
                 } else {
                     null
                 }
@@ -873,31 +875,30 @@ fun SignedByMeApp(
                             onFailed = { android.util.Log.w("SignedByMe", "NOSTR relay connection failed") }
                         )
                         
-                        if (nostrMgr.initNwc()) {
-                            nostrMgr.connectNwc(
-                                scope = scope,
-                                onConnected = { android.util.Log.i("SignedByMe", "NWC connected") },
-                                onFailed = { android.util.Log.w("SignedByMe", "NWC connection failed") }
-                            )
-                        }
+                        // NWC no longer used for invoices - Breez SDK handles this
+                        // NwcWalletManager kept in place but unused in login path
                     } else {
-                        android.util.Log.w("SignedByMe", "No leaf_secret - NOSTR/NWC not initialized")
+                        android.util.Log.w("SignedByMe", "No leaf_secret - NOSTR not initialized")
                     }
                     
-                    // Step 1: Generate invoices via NWC (90/10 split)
+                    // Step 1: Generate invoices via Breez SDK (90/10 split)
+                    // Phase 9B: Replaces nwcGenerateLoginInvoices
                     var userInvoice: String? = null
                     var operatorInvoice: String? = null
                     
-                    if (nostrMgr.isNwcConnected()) {
-                        val invoices = nostrMgr.generateLoginInvoices(
+                    val breezState = breezMgr.walletState.value
+                    if (breezState is BreezWalletManager.WalletState.Connected) {
+                        val invoices = breezMgr.generateLoginInvoices(
                             totalSats = amountSats.toLong(),
                             clientId = clientId
                         )
                         if (invoices != null) {
                             userInvoice = invoices.first
                             operatorInvoice = invoices.second
-                            android.util.Log.i("SignedByMe", "NWC invoices generated (90/10 split)")
+                            android.util.Log.i("SignedByMe", "Breez invoices generated (90/10 split)")
                         }
+                    } else {
+                        android.util.Log.w("SignedByMe", "Breez wallet not connected, state: $breezState")
                     }
                     
                     if (userInvoice == null) {
