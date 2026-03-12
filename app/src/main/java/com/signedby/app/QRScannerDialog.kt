@@ -368,8 +368,14 @@ private fun processFrame(
 }
 
 /**
- * Layer 2 biometric authentication - required before proof generation.
- * Uses BIOMETRIC_STRONG (fingerprint/face hardware) - no fallback.
+ * Layer 2 authentication - required before proof generation.
+ * 
+ * Checks authenticator availability at runtime:
+ * 1. If BIOMETRIC_STRONG available → use fingerprint/face
+ * 2. Otherwise fall back to DEVICE_CREDENTIAL (PIN/pattern/password)
+ * 
+ * Bible intent: hardware-enforced key protection before proof generation.
+ * PIN/passcode satisfies this on devices without enrolled biometrics.
  */
 private fun authenticateLayer2(
     context: Context,
@@ -383,28 +389,40 @@ private fun authenticateLayer2(
     }
     
     val biometricManager = BiometricManager.from(context)
-    val canAuthenticate = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
     
-    when (canAuthenticate) {
-        BiometricManager.BIOMETRIC_SUCCESS -> {
-            // Proceed with biometric prompt
+    // Check what authenticators are available at runtime
+    val canBiometricStrong = biometricManager.canAuthenticate(
+        BiometricManager.Authenticators.BIOMETRIC_STRONG
+    )
+    val canDeviceCredential = biometricManager.canAuthenticate(
+        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+    )
+    
+    Log.i(TAG, "Layer 2: BIOMETRIC_STRONG=$canBiometricStrong, DEVICE_CREDENTIAL=$canDeviceCredential")
+    
+    // Determine which authenticator set to use
+    val (authenticators, useNegativeButton) = when {
+        canBiometricStrong == BiometricManager.BIOMETRIC_SUCCESS -> {
+            Log.i(TAG, "Layer 2: Using BIOMETRIC_STRONG")
+            BiometricManager.Authenticators.BIOMETRIC_STRONG to true
         }
-        BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> {
-            // No biometric hardware - fall through to device credential
-            Log.w(TAG, "Layer 2: No biometric hardware, using device credential")
-            authenticateWithDeviceCredential(activity, onSuccess, onError)
-            return
-        }
-        BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> {
-            onError("Biometric hardware unavailable")
-            return
-        }
-        BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
-            onError("No biometrics enrolled. Please set up fingerprint or face unlock.")
-            return
+        canDeviceCredential == BiometricManager.BIOMETRIC_SUCCESS -> {
+            Log.i(TAG, "Layer 2: BIOMETRIC_STRONG unavailable, falling back to DEVICE_CREDENTIAL")
+            BiometricManager.Authenticators.DEVICE_CREDENTIAL to false
         }
         else -> {
-            onError("Biometric authentication not available")
+            // Neither available - provide helpful error
+            val reason = when (canBiometricStrong) {
+                BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "No biometric hardware"
+                BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> "Biometric hardware unavailable"
+                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "No biometrics enrolled"
+                else -> "Biometric unavailable"
+            }
+            val credentialReason = when (canDeviceCredential) {
+                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "no PIN/pattern set"
+                else -> "device credential unavailable"
+            }
+            onError("$reason and $credentialReason. Please set up device security.")
             return
         }
     }
@@ -431,49 +449,19 @@ private fun authenticateLayer2(
     
     val biometricPrompt = BiometricPrompt(activity, executor, callback)
     
-    val promptInfo = BiometricPrompt.PromptInfo.Builder()
+    // Build prompt info based on selected authenticator
+    // Note: setNegativeButtonText is required for BIOMETRIC_STRONG alone,
+    // but must NOT be set when using DEVICE_CREDENTIAL
+    val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
         .setTitle("Confirm your identity")
         .setSubtitle("Authenticate to sign this login")
-        .setDescription("Your signature proves you authorized this login")
-        .setNegativeButtonText("Cancel")
-        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-        .build()
+        .setAllowedAuthenticators(authenticators)
     
-    biometricPrompt.authenticate(promptInfo)
-}
-
-/**
- * Fallback for devices without biometric hardware - uses PIN/pattern/password.
- */
-private fun authenticateWithDeviceCredential(
-    activity: FragmentActivity,
-    onSuccess: () -> Unit,
-    onError: (String) -> Unit
-) {
-    val executor = ContextCompat.getMainExecutor(activity)
-    
-    val callback = object : BiometricPrompt.AuthenticationCallback() {
-        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-            super.onAuthenticationSucceeded(result)
-            onSuccess()
-        }
-        
-        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-            super.onAuthenticationError(errorCode, errString)
-            onError(errString.toString())
-        }
+    if (useNegativeButton) {
+        promptInfoBuilder
+            .setDescription("Your signature proves you authorized this login")
+            .setNegativeButtonText("Cancel")
     }
     
-    val biometricPrompt = BiometricPrompt(activity, executor, callback)
-    
-    val promptInfo = BiometricPrompt.PromptInfo.Builder()
-        .setTitle("Confirm your identity")
-        .setSubtitle("Enter your device PIN or password")
-        .setAllowedAuthenticators(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or
-            BiometricManager.Authenticators.DEVICE_CREDENTIAL
-        )
-        .build()
-    
-    biometricPrompt.authenticate(promptInfo)
+    biometricPrompt.authenticate(promptInfoBuilder.build())
 }
