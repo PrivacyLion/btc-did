@@ -1826,6 +1826,44 @@ fun LoginScreen(
     var showSeedWordsDialog by remember { mutableStateOf(false) }
     var seedWords by remember { mutableStateOf<List<String>>(emptyList()) }
     
+    // Wallet unlock state (requires biometric auth to view wallet contents)
+    var isWalletUnlocked by remember { mutableStateOf(false) }
+    
+    // Biometric auth for wallet access
+    fun authenticateForWallet() {
+        val activity = context as? androidx.fragment.app.FragmentActivity ?: return
+        val executor = androidx.core.content.ContextCompat.getMainExecutor(context)
+        
+        val callback = object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) {
+                super.onAuthenticationSucceeded(result)
+                isWalletUnlocked = true
+            }
+            
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                super.onAuthenticationError(errorCode, errString)
+                // User cancelled or error - do nothing, stay on main screen
+            }
+            
+            override fun onAuthenticationFailed() {
+                super.onAuthenticationFailed()
+                // Let user retry via BiometricPrompt
+            }
+        }
+        
+        val biometricPrompt = androidx.biometric.BiometricPrompt(activity, executor, callback)
+        
+        val authenticators = androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                            androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        
+        val promptInfo = androidx.biometric.BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Wallet")
+            .setAllowedAuthenticators(authenticators)
+            .build()
+        
+        biometricPrompt.authenticate(promptInfo)
+    }
+    
     // Load payments on start
     LaunchedEffect(Unit) {
         payments = breezMgr.getRecentPayments(20u)
@@ -2139,87 +2177,117 @@ fun LoginScreen(
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    if (!isWalletUnlocked) {
+                        // Locked state - show unlock button
                         Text("⚡ Wallet", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                        IconButton(onClick = { refreshWallet() }) {
-                            if (isRefreshing) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                            }
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    val balanceSats = when (val state = walletState) {
-                        is BreezWalletManager.WalletState.Connected -> state.balanceSats.toLong()
-                        else -> 0L
-                    }
-                    
-                    Text(
-                        text = "${formatSats(balanceSats)} sats",
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    if (btcPriceUsd > 0) {
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
                         Text(
-                            text = satsToUsd(balanceSats, btcPriceUsd),
+                            "🔒",
+                            fontSize = 48.sp
+                        )
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Text(
+                            "Tap to unlock wallet",
                             fontSize = 14.sp,
                             color = Color.Gray
                         )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(20.dp))
-                    
-                    // Send/Receive buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
                         Button(
-                            onClick = { showReceiveDialog = true },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-                        ) {
-                            Text("Receive")
-                        }
-                        Button(
-                            onClick = { showSendDialog = true },
-                            modifier = Modifier.weight(1f),
+                            onClick = { authenticateForWallet() },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
                         ) {
-                            Text("Send")
+                            Text("Unlock Wallet")
                         }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    // View Seed Words
-                    TextButton(
-                        onClick = {
-                            val mnemonic = breezMgr.getMnemonic()
-                            if (mnemonic != null) {
-                                seedWords = mnemonic.split(" ")
-                                showSeedWordsDialog = true
-                            } else {
-                                Toast.makeText(context, "Could not retrieve seed words", Toast.LENGTH_SHORT).show()
+                    } else {
+                        // Unlocked state - show wallet contents
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("⚡ Wallet", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                            IconButton(onClick = { refreshWallet() }) {
+                                if (isRefreshing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                                }
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("🔑 View Seed Words", fontSize = 13.sp, color = Color(0xFF3B82F6))
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        val balanceSats = when (val state = walletState) {
+                            is BreezWalletManager.WalletState.Connected -> state.balanceSats.toLong()
+                            else -> 0L
+                        }
+                        
+                        Text(
+                            text = "${formatSats(balanceSats)} sats",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        
+                        if (btcPriceUsd > 0) {
+                            Text(
+                                text = satsToUsd(balanceSats, btcPriceUsd),
+                                fontSize = 14.sp,
+                                color = Color.Gray
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(20.dp))
+                        
+                        // Send/Receive buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Button(
+                                onClick = { showReceiveDialog = true },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                            ) {
+                                Text("Receive")
+                            }
+                            Button(
+                                onClick = { showSendDialog = true },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
+                            ) {
+                                Text("Send")
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // View Seed Words
+                        TextButton(
+                            onClick = {
+                                val mnemonic = breezMgr.getMnemonic()
+                                if (mnemonic != null) {
+                                    seedWords = mnemonic.split(" ")
+                                    showSeedWordsDialog = true
+                                } else {
+                                    Toast.makeText(context, "Could not retrieve seed words", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("🔑 View Seed Words", fontSize = 13.sp, color = Color(0xFF3B82F6))
+                        }
                     }
                 }
             }
             
-            // Transaction History
-            if (payments.isNotEmpty()) {
+            // Transaction History (only shown when wallet is unlocked)
+            if (isWalletUnlocked && payments.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 Text(
