@@ -2017,30 +2017,6 @@ fun LoginScreen(
                                     )
                                 }
                             }
-                            
-                            if (BuildConfig.DEBUG) {
-                                Spacer(modifier = Modifier.height(16.dp))
-                                OutlinedButton(
-                                    onClick = onShowInvoiceDialog,
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = Color.Gray
-                                    )
-                                ) {
-                                    Text("View Invoice (Debug)", fontSize = 12.sp)
-                                }
-                                
-                                if (onDevExportLeafCommitment != null) {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    OutlinedButton(
-                                        onClick = onDevExportLeafCommitment,
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = Color.Gray
-                                        )
-                                    ) {
-                                        Text("Export Leaf Commitment (Debug)", fontSize = 12.sp)
-                                    }
-                                }
-                            }
 
                         } else {
                             // Ready to start login
