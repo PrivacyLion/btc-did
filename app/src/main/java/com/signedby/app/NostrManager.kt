@@ -2,7 +2,6 @@
 //
 // Key architectural decisions (binding, from Bible):
 // - DECISION 1: Global npub. nsec = Poseidon2(leaf_secret[0..2]), NO client_id
-// - DECISION 2: Ephemeral NWC keypair per login session. Proof npub NEVER touches Strike.
 // - Server has ZERO NOSTR involvement. Phone publishes all events.
 // - NOSTR is invisible to user. No npub displayed, no relay settings.
 
@@ -43,17 +42,6 @@ class NostrManager(private val context: Context) {
     
     // Current session's npub (derived from leaf_secret)
     private var currentNpub: String? = null
-    
-    // Ephemeral keypair for NWC (DECISION 2 - never use proof npub for NWC)
-    private var ephemeralNwcNsecHex: String? = null
-    private var ephemeralNwcNpub: String? = null
-    
-    // NWC connection state
-    private var nwcConnected = false
-    
-    // NWC connection string (MVP: hardcoded, production: from secure storage)
-    // TODO: Move to BuildConfig or secure storage
-    private val NWC_CONNECTION_STRING = "nostr+walletconnect://0f556eb33d73b6a93b88ecff855dacefed2da1036d0842091e974e27fbca3b20?relay=wss://relay.privacy-lion.com&secret=f954e9f1a590fdfecff0c30d198eaa8e475763561c61cff258bc8d59dcc45d37"
 
     /**
      * Initialize NOSTR identity from leaf_secret.
@@ -113,238 +101,6 @@ class NostrManager(private val context: Context) {
     }
 
     /**
-     * Generate ephemeral keypair for NWC communication.
-     * 
-     * DECISION 2: The proof npub NEVER touches Strike.
-     * Use this ephemeral keypair for all NWC make_invoice and payment notifications.
-     * Discard after preimage is received.
-     */
-    fun generateEphemeralNwcKeypair(): Pair<String, String>? {
-        return try {
-            val json = NativeBridge.generateEphemeralNwcKeypair()
-            val obj = JSONObject(json)
-            val nsecHex = obj.getString("ephemeral_nsec_hex")
-            val npub = obj.getString("ephemeral_npub")
-            
-            ephemeralNwcNsecHex = nsecHex
-            ephemeralNwcNpub = npub
-            
-            Log.i(TAG, "Generated ephemeral NWC keypair: ${npub.take(20)}...")
-            Pair(nsecHex, npub)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to generate ephemeral NWC keypair: ${e.message}")
-            null
-        }
-    }
-
-    // =========================================================================
-    // NWC (NOSTR Wallet Connect) - Step 9.5
-    // =========================================================================
-
-    /**
-     * Initialize NWC client with connection string.
-     * Creates ephemeral keypair internally (DECISION 2).
-     * 
-     * @return true if initialized
-     */
-    fun initNwc(): Boolean {
-        return try {
-            val initialized = NativeBridge.nwcInit(NWC_CONNECTION_STRING)
-            if (initialized) {
-                Log.i(TAG, "NWC client initialized")
-            } else {
-                Log.e(TAG, "Failed to initialize NWC client")
-            }
-            initialized
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception initializing NWC: ${e.message}")
-            false
-        }
-    }
-
-    /**
-     * Connect NWC client to relay.
-     * Called after initNwc().
-     * 
-     * @param scope CoroutineScope for async work
-     * @param onConnected Callback on success
-     * @param onFailed Callback on failure
-     */
-    fun connectNwc(
-        scope: CoroutineScope,
-        onConnected: () -> Unit = {},
-        onFailed: () -> Unit = {}
-    ) {
-        scope.launch(Dispatchers.IO) {
-            Log.i(TAG, "Connecting NWC client...")
-            
-            try {
-                val connected = NativeBridge.nwcConnect()
-                
-                if (connected) {
-                    nwcConnected = true
-                    withContext(Dispatchers.Main) {
-                        Log.i(TAG, "NWC connected to relay")
-                        onConnected()
-                    }
-                } else {
-                    Log.e(TAG, "NWC connection failed")
-                    withContext(Dispatchers.Main) {
-                        onFailed()
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "NWC connection exception: ${e.message}")
-                withContext(Dispatchers.Main) {
-                    onFailed()
-                }
-            }
-        }
-    }
-
-    /**
-     * Generate login invoices (90% user, 10% operator).
-     * 
-     * @param totalSats Total amount from QR code
-     * @param clientId Enterprise client_id
-     * @return Pair of (userInvoice, operatorInvoice), or null on error
-     */
-    suspend fun generateLoginInvoices(
-        totalSats: Long,
-        clientId: String
-    ): Pair<String, String>? = withContext(Dispatchers.IO) {
-        if (!nwcConnected) {
-            Log.e(TAG, "Cannot generate invoices: NWC not connected")
-            return@withContext null
-        }
-        
-        try {
-            val resultJson = NativeBridge.nwcGenerateLoginInvoices(totalSats, clientId)
-            val result = JSONObject(resultJson)
-            
-            if (result.has("error")) {
-                Log.e(TAG, "NWC invoice generation error: ${result.getString("error")}")
-                return@withContext null
-            }
-            
-            val userInvoice = result.getString("user_invoice")
-            val operatorInvoice = result.getString("operator_invoice")
-            
-            Log.i(TAG, "Generated login invoices: user=${userInvoice.take(30)}..., op=${operatorInvoice.take(30)}...")
-            Pair(userInvoice, operatorInvoice)
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception generating invoices: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * Make a single invoice via NWC.
-     */
-    suspend fun makeInvoice(
-        amountSats: Long,
-        description: String,
-        expirySecs: Long = 600
-    ): String? = withContext(Dispatchers.IO) {
-        if (!nwcConnected) {
-            Log.e(TAG, "Cannot make invoice: NWC not connected")
-            return@withContext null
-        }
-        
-        try {
-            val result = NativeBridge.nwcMakeInvoice(amountSats, description, expirySecs)
-            
-            if (result.startsWith("error:")) {
-                Log.e(TAG, "NWC make_invoice error: $result")
-                return@withContext null
-            }
-            
-            Log.i(TAG, "Generated invoice: ${result.take(30)}...")
-            result
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception making invoice: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * Get wallet balance in satoshis.
-     */
-    suspend fun getWalletBalance(): Long? = withContext(Dispatchers.IO) {
-        if (!nwcConnected) {
-            Log.w(TAG, "Cannot get balance: NWC not connected")
-            return@withContext null
-        }
-        
-        try {
-            val result = NativeBridge.nwcGetBalance()
-            
-            if (result.startsWith("error:")) {
-                Log.e(TAG, "NWC get_balance error: $result")
-                return@withContext null
-            }
-            
-            result.toLongOrNull()
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception getting balance: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * Wait for payment (poll for preimage).
-     * 
-     * @param paymentHash Payment hash to watch for (hex)
-     * @param timeoutSecs Maximum time to wait (default 120 = 2 minutes)
-     * @return Preimage hex on success, null on failure/timeout
-     */
-    suspend fun waitForPayment(
-        paymentHash: String,
-        timeoutSecs: Long = 120
-    ): String? = withContext(Dispatchers.IO) {
-        if (!nwcConnected) {
-            Log.e(TAG, "Cannot wait for payment: NWC not connected")
-            return@withContext null
-        }
-        
-        Log.i(TAG, "Waiting for payment: $paymentHash (timeout=${timeoutSecs}s)")
-        
-        try {
-            val result = NativeBridge.nwcWaitForPayment(paymentHash, timeoutSecs)
-            
-            if (result.startsWith("error:")) {
-                Log.e(TAG, "NWC wait_for_payment error: $result")
-                return@withContext null
-            }
-            
-            Log.i(TAG, "Payment received! Preimage: ${result.take(16)}...")
-            result
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception waiting for payment: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * Disconnect NWC and discard ephemeral keys.
-     * Called after payment received.
-     */
-    fun disconnectNwc() {
-        try {
-            NativeBridge.nwcDisconnect()
-            nwcConnected = false
-            Log.i(TAG, "NWC disconnected, ephemeral keys discarded")
-        } catch (e: Exception) {
-            Log.w(TAG, "Exception disconnecting NWC: ${e.message}")
-        }
-    }
-
-    /**
-     * Check if NWC is connected.
-     */
-    fun isNwcConnected(): Boolean = nwcConnected
-
-    /**
      * Connect to NOSTR relays.
      * Called on QR scan / login start.
      * 
@@ -391,16 +147,13 @@ class NostrManager(private val context: Context) {
     }
 
     /**
-     * Disconnect from all relays and NWC.
+     * Disconnect from all relays.
      * Called after login completes.
      */
     fun disconnect() {
         connectionJob?.cancel()
         
-        // Disconnect NWC first (DECISION 2 - discard ephemeral keys)
-        disconnectNwc()
-        
-        // Step 9.4: Real NOSTR disconnect via Rust
+        // Disconnect from NOSTR relays via Rust
         try {
             NativeBridge.nostrDisconnect()
         } catch (e: Exception) {
@@ -410,11 +163,7 @@ class NostrManager(private val context: Context) {
         isConnected = false
         currentNpub = null
         
-        // Discard ephemeral NWC keypair references
-        ephemeralNwcNsecHex = null
-        ephemeralNwcNpub = null
-        
-        Log.i(TAG, "Disconnected from NOSTR + NWC, ephemeral keys discarded")
+        Log.i(TAG, "Disconnected from NOSTR relays")
     }
 
     /**
@@ -495,7 +244,7 @@ class NostrManager(private val context: Context) {
     }
 
     /**
-     * Publish payment_receipt (kind 28102) after receiving payment via NWC.
+     * Publish payment_receipt (kind 28102) after receiving payment.
      */
     suspend fun publishPaymentReceipt(
         nonce: String,

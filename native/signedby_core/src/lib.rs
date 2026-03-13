@@ -16,7 +16,7 @@ pub mod dlc_oracle;
 pub mod membership; // Groth16 membership proofs
 pub mod groth16;    // Native Groth16 prover for mobile
 pub mod ffi_c;      // C-ABI exports for iOS
-pub mod nostr;      // NOSTR client + NWC (Phase 9)
+pub mod nostr;      // NOSTR client (Phase 9)
 
 use key_manager::ManagedKey;
 use dlc_builder::{DlcContract, OracleInfo, PayoutSplit};
@@ -425,5 +425,5 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_getXOnlyPubkey(
 pub use groth16::jni::*;
 
 // Re-export JNI functions from nostr module (Phase 9)
-// These provide: deriveNsecFromLeafSecret, deriveNpubFromLeafSecret, signNostrEvent, generateEphemeralNwcKeypair
+// These provide: deriveNsecFromLeafSecret, deriveNpubFromLeafSecret, signNostrEvent
 pub use nostr::jni::*;

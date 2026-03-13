@@ -2,7 +2,7 @@
 //
 // Event kinds:
 // - 28101: proof_event (proof published after generation)
-// - 28102: payment_receipt (after receiving payment via NWC)
+// - 28102: payment_receipt (after receiving payment)
 // - 28103: login_complete (after successful authentication)
 
 use serde::{Deserialize, Serialize};
@@ -64,7 +64,7 @@ impl ProofEvent {
     }
 }
 
-/// Payment receipt event (kind 28102) - Published after receiving 90% payment via NWC
+/// Payment receipt event (kind 28102) - Published after receiving 90% payment
 /// 
 /// Proves the user received their share. Part of the audit trail.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -162,11 +162,8 @@ class MainActivity : FragmentActivity() {
             android.util.Log.i("SignedByMe", "Groth16 prover ready: $initialized")
         }
         
-        // Initialize Breez wallet manager (replaces Strike)
+        // Initialize Breez wallet manager
         val breezMgr = BreezWalletManager(applicationContext)
-        
-        // Initialize NWC wallet manager (for enterprise payment flow - untouched)
-        val nwcMgr = NwcWalletManager(applicationContext)
         
         // Initialize NOSTR manager (Phase 9)
         val nostrMgr = NostrManager(applicationContext)
@@ -176,7 +173,7 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             SignedByMeTheme {
-                SignedByMeApp(didMgr, breezMgr, nwcMgr, nostrMgr, initialLoginSession)
+                SignedByMeApp(didMgr, breezMgr, nostrMgr, initialLoginSession)
             }
         }
     }
@@ -517,7 +514,6 @@ fun formatSats(sats: Long): String {
 fun SignedByMeApp(
     didMgr: DidWalletManager, 
     breezMgr: BreezWalletManager,
-    nwcMgr: NwcWalletManager,
     nostrMgr: NostrManager,
     initialLoginSession: LoginSession? = null
 ) {
@@ -670,8 +666,7 @@ fun SignedByMeApp(
         )
     }
 
-    // Poll for payment when invoice is active
-    // Phase 9B: Uses Breez SDK payment events instead of NWC polling
+    // Poll for payment when invoice is active (uses Breez SDK)
     LaunchedEffect(isPollingPayment, lastPaymentHash) {
         if (isPollingPayment && lastPaymentHash.isNotEmpty()) {
             while (isPollingPayment && !paymentReceived) {
@@ -848,8 +843,8 @@ fun SignedByMeApp(
                     isCreatingInvoice = true
                     statusMessage = ""
                     
-                    // Bible login flow:
-                    // 1. Generate 2 NWC invoices (90/10 split)
+                    // Login flow:
+                    // 1. Generate 2 invoices via Breez SDK (90/10 split)
                     // 2. Generate Groth16 proof
                     // 3. Publish proof_event (kind 28101) to NOSTR
                     // 4. Wait for payment (enterprise catches event, pays, calls /v1/login/verify)
@@ -864,28 +859,22 @@ fun SignedByMeApp(
                     
                     lastLoginId = nonce  // Use nonce as login identifier
                     
-                    // Initialize NOSTR + NWC
+                    // Initialize NOSTR identity
                     val leafSecret = didMgr.loadLeafSecret()
                     if (leafSecret != null) {
                         nostrMgr.initializeIdentity(leafSecret)
                         java.util.Arrays.fill(leafSecret, 0.toByte())
-                        
-                        nostrMgr.generateEphemeralNwcKeypair()
                         
                         nostrMgr.connectToRelays(
                             scope = scope,
                             onConnected = { android.util.Log.i("SignedByMe", "NOSTR relays connected") },
                             onFailed = { android.util.Log.w("SignedByMe", "NOSTR relay connection failed") }
                         )
-                        
-                        // NWC no longer used for invoices - Breez SDK handles this
-                        // NwcWalletManager kept in place but unused in login path
                     } else {
                         android.util.Log.w("SignedByMe", "No leaf_secret - NOSTR not initialized")
                     }
                     
                     // Step 1: Generate invoices via Breez SDK (90/10 split)
-                    // Phase 9B: Replaces nwcGenerateLoginInvoices
                     var userInvoice: String? = null
                     var operatorInvoice: String? = null
                     

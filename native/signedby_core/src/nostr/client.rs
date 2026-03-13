@@ -118,7 +118,7 @@ impl NostrClient {
         Ok(output.val)
     }
     
-    /// Publish payment_receipt (kind 28102) after receiving payment via NWC
+    /// Publish payment_receipt (kind 28102) after receiving payment
     pub async fn publish_payment_receipt(&self, event: &PaymentReceiptEvent) -> Result<EventId> {
         let tags = vec![
             Tag::custom(TagKind::Custom("nonce".into()), vec![event.nonce.clone()]),
