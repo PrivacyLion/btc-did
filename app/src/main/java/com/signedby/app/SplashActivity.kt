@@ -185,6 +185,10 @@ class SplashActivity : FragmentActivity() {
     }
     
     private fun proceedToMain() {
+        // Update last activity BEFORE launching MainActivity to prevent
+        // the inactivity check in onResume() from immediately triggering re-auth
+        updateLastActivity(this)
+        
         startActivity(Intent(this, MainActivity::class.java))
         finish()
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)

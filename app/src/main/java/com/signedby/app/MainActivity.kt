@@ -554,11 +554,14 @@ fun SignedByMeApp(
     var isWalletInitializing by remember { mutableStateOf(false) }
     var walletInitError by remember { mutableStateOf("") }
     
-    // Check if wallet already exists
+    // Check if wallet already exists and auto-connect
     LaunchedEffect(Unit) {
         val hasWallet = breezMgr.hasWallet()
         if (hasWallet) {
             step2Complete = true
+            // Auto-connect the existing wallet on app start
+            android.util.Log.i("SignedByMe", "Existing wallet found, auto-connecting...")
+            breezMgr.initializeWallet()
         }
     }
     
