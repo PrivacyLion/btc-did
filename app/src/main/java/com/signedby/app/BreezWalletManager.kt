@@ -11,14 +11,10 @@ import java.security.SecureRandom
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -70,46 +66,8 @@ class BreezWalletManager(private val context: Context) {
     private val _walletState = MutableStateFlow<WalletState>(WalletState.Disconnected)
     val walletState: StateFlow<WalletState> = _walletState.asStateFlow()
     
-    // Payment received events - emits (paymentHash, preimage) when payment is received
-    private val _paymentReceived = MutableSharedFlow<Pair<String, String>>()
-    val paymentReceived: SharedFlow<Pair<String, String>> = _paymentReceived.asSharedFlow()
-    
     private var sdk: BreezSdk? = null
     private val scope = CoroutineScope(Dispatchers.IO)
-    
-    // Event listener for Breez SDK events
-    private val eventListener = object : EventListener {
-        override fun onEvent(event: BreezEvent) {
-            when (event) {
-                is BreezEvent.PaymentReceived -> {
-                    val payment = event.payment
-                    Log.i(TAG, "Payment received event: ${payment.details}")
-                    
-                    // Extract payment hash and preimage from payment details
-                    when (val details = payment.details) {
-                        is PaymentDetails.Lightning -> {
-                            val paymentHash = details.paymentHash
-                            val preimage = details.preimage ?: ""
-                            Log.i(TAG, "Lightning payment received: hash=$paymentHash, preimage=${preimage.take(16)}...")
-                            scope.launch {
-                                _paymentReceived.emit(Pair(paymentHash, preimage))
-                            }
-                        }
-                        else -> {
-                            Log.d(TAG, "Non-Lightning payment received")
-                        }
-                    }
-                }
-                is BreezEvent.Synced -> {
-                    Log.d(TAG, "Wallet synced")
-                    scope.launch { refreshBalance() }
-                }
-                else -> {
-                    Log.d(TAG, "Breez event: $event")
-                }
-            }
-        }
-    }
     
     /**
      * Initialize or restore the wallet
@@ -132,14 +90,13 @@ class BreezWalletManager(private val context: Context) {
             // Storage directory for SDK data
             val storageDir = context.filesDir.absolutePath + "/breez_data"
             
-            // Connect to SDK with event listener
+            // Connect to SDK
             sdk = connect(
                 ConnectRequest(
                     config = config,
                     seed = seed,
                     storageDir = storageDir
-                ),
-                eventListener
+                )
             )
             
             // Fetch initial balance
@@ -327,7 +284,7 @@ class BreezWalletManager(private val context: Context) {
     
     /**
      * Wait for a specific payment to be received by payment hash.
-     * Uses Breez SDK payment events with polling fallback.
+     * Uses polling against listPayments since Spark SDK doesn't expose event listeners.
      * 
      * @param paymentHash The payment hash to wait for
      * @param timeoutMs Timeout in milliseconds
@@ -360,9 +317,7 @@ class BreezWalletManager(private val context: Context) {
             return@withContext preimage
         }
         
-        // Poll for payment (Breez event listener also fires _paymentReceived)
-        // Using polling as primary method since events may be missed if listener 
-        // wasn't attached before payment arrived
+        // Poll for payment
         val startTime = System.currentTimeMillis()
         val pollIntervalMs = 1000L
         
