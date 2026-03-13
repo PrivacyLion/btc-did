@@ -1823,6 +1823,7 @@ fun LoginScreen(
     var sendError by remember { mutableStateOf("") }
     
     // Seed words state
+    var showSeedWarningScreen by remember { mutableStateOf(false) }
     var showSeedWordsDialog by remember { mutableStateOf(false) }
     var seedWords by remember { mutableStateOf<List<String>>(emptyList()) }
     
@@ -2273,7 +2274,7 @@ fun LoginScreen(
                                 val mnemonic = breezMgr.getMnemonic()
                                 if (mnemonic != null) {
                                     seedWords = mnemonic.split(" ")
-                                    showSeedWordsDialog = true
+                                    showSeedWarningScreen = true
                                 } else {
                                     Toast.makeText(context, "Could not retrieve seed words", Toast.LENGTH_SHORT).show()
                                 }
@@ -2437,6 +2438,20 @@ fun LoginScreen(
                 }
             }
         }
+    }
+    
+    // Seed Phrase Warning Screen (must acknowledge before seeing seed words)
+    if (showSeedWarningScreen) {
+        SeedPhraseWarningScreen(
+            onShowSeedWords = {
+                showSeedWarningScreen = false
+                showSeedWordsDialog = true
+            },
+            onBack = {
+                showSeedWarningScreen = false
+                seedWords = emptyList()
+            }
+        )
     }
     
     // Seed Words Dialog
@@ -2996,6 +3011,159 @@ fun InvoiceDialog(
                     textAlign = TextAlign.Center
                 )
             }
+        }
+    }
+}
+
+// ===== Seed Phrase Warning Screen =====
+@Composable
+fun SeedPhraseWarningScreen(
+    onShowSeedWords: () -> Unit,
+    onBack: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+        ) {
+            // Back button
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                Text("←", fontSize = 24.sp)
+            }
+            
+            // Header
+            Text(
+                text = "Backup Your Seed Phrase",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "Read carefully before proceeding",
+                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+            )
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Warning Card 1: Safe Environment
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text("🛡️", fontSize = 24.sp)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            "Safe Environment",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Make sure no one can see your screen. Do not take a screenshot.",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Warning Card 2: Sensitive Information
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text("⚠️", fontSize = 24.sp)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            "Sensitive Information",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Your seed phrase is the only way to recover your wallet. Anyone with these words has full access to your funds.",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Warning Card 3: Write It Down
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text("✅", fontSize = 24.sp)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            "Write It Down",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Write your seed phrase on paper. Do not store it digitally or in a screenshot.",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.weight(1f))
+            
+            // Show Seed Words button
+            Button(
+                onClick = onShowSeedWords,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
+            ) {
+                Text(
+                    "Show Seed Words",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
