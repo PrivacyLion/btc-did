@@ -210,7 +210,7 @@
         
         tr:last-child td { border-bottom: none; }
         
-        .did-cell {
+        .npub-cell {
             font-family: monospace;
             font-size: 12px;
             max-width: 150px;
@@ -449,22 +449,24 @@
                     <tr>
                         <th>Time</th>
                         <th>Client</th>
-                        <th>DID</th>
-                        <th>Payout</th>
+                        <th>npub</th>
+                        <th>Membership</th>
+                        <th>Root ID</th>
                     </tr>`;
                 
                 for (const e of data.events) {
                     const time = new Date(e.timestamp).toLocaleString();
-                    const did = e.did.substring(0, 12) + '...' + e.did.slice(-8);
-                    const payout = e.payout 
-                        ? `<span class="status-badge ${e.payout.status}">${e.payout.status === 'success' ? '✓ ' + e.payout.amount_sats + ' sats' : e.payout.status}</span>`
-                        : '<span class="status-badge skipped">--</span>';
+                    const npub = e.npub.substring(0, 8) + '...' + e.npub.slice(-4);
+                    const membershipVerified = e.merkle_root ? '✓' : '✗';
+                    const membershipClass = e.merkle_root ? 'success' : 'failed';
+                    const rootId = e.merkle_root ? e.merkle_root.substring(0, 8) + '...' : '--';
                     
                     html += `<tr>
                         <td class="time-cell">${time}</td>
                         <td>${e.client_id}</td>
-                        <td class="did-cell" title="${e.did}">${did}</td>
-                        <td>${payout}</td>
+                        <td class="npub-cell" title="${e.npub}">${npub}</td>
+                        <td><span class="status-badge ${membershipClass}">${membershipVerified}</span></td>
+                        <td class="npub-cell" title="${e.merkle_root || ''}">${rootId}</td>
                     </tr>`;
                 }
                 
