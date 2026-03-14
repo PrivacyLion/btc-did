@@ -12,11 +12,9 @@ class PRP(BaseModel):
     payload: Dict[str, Any]
     expires: int
 
-class DLCMetadata(BaseModel):
-    outcome: str = "auth_verified"
-    split: List[float] = [0.9, 0.1]
-    contract: Optional[str] = None
-    oracle_pubkey: Optional[str] = None
+# DLCMetadata DELETED - Phase 11 compliance
+# Server has ZERO knowledge of DLCs (Bible Section 7.4)
+# DLC logic lives entirely on mobile (native/signedby_core/src/dlc_*.rs)
 
 class ZKProof(BaseModel):
     system: str = "groth16"
