@@ -328,6 +328,19 @@
                 </div>
             </div>
             
+            <!-- Merkle Tree Status -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>🌳 Merkle Tree Status</h2>
+                    <button class="refresh-btn" onclick="loadMerkleStatus()">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div id="merkle-container">
+                    <div class="loading"><div class="spinner"></div></div>
+                </div>
+            </div>
+            
             <!-- Recent Logins -->
             <div class="card">
                 <div class="card-header">
@@ -413,7 +426,7 @@
         }
         
         async function loadAll() {
-            await Promise.all([loadStatus(), loadEvents(), loadPayouts(), loadConfig()]);
+            await Promise.all([loadStatus(), loadMerkleStatus(), loadEvents(), loadPayments(), loadConfig()]);
         }
         
         async function loadStatus() {
@@ -429,6 +442,44 @@
                 
             } catch (e) {
                 console.error('Status error:', e);
+            }
+        }
+        
+        async function loadMerkleStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/v1/admin/merkle-status`, {
+                    headers: { 'Authorization': authHeader }
+                });
+                const data = await res.json();
+                
+                if (data.clients.length === 0) {
+                    document.getElementById('merkle-container').innerHTML = 
+                        '<div class="empty-state">No clients configured</div>';
+                    return;
+                }
+                
+                let html = `<table>
+                    <tr>
+                        <th>Client</th>
+                        <th>Valid Roots</th>
+                        <th>Next Leaf Index</th>
+                        <th>Total Enrolled</th>
+                    </tr>`;
+                
+                for (const c of data.clients) {
+                    html += `<tr>
+                        <td>${c.client_id}</td>
+                        <td>${c.valid_roots} / ${c.total_roots}</td>
+                        <td>${c.next_leaf_index}</td>
+                        <td>${c.total_enrolled}</td>
+                    </tr>`;
+                }
+                
+                html += '</table>';
+                document.getElementById('merkle-container').innerHTML = html;
+                
+            } catch (e) {
+                console.error('Merkle status error:', e);
             }
         }
         

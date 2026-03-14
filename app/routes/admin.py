@@ -134,6 +134,20 @@ class ClientsResponse(BaseModel):
     clients: list[ClientConfigView]
 
 
+class MerkleTreeStatus(BaseModel):
+    """Merkle tree status for a client."""
+    client_id: str
+    valid_roots: int
+    total_roots: int
+    next_leaf_index: int
+    total_enrolled: int
+
+
+class MerkleStatusResponse(BaseModel):
+    """Merkle tree status for all clients."""
+    clients: list[MerkleTreeStatus]
+
+
 # --- Endpoints ---
 
 @router.get("/status", response_model=AdminStatusResponse)
@@ -271,3 +285,65 @@ async def get_clients(authorization: Optional[str] = Header(None)):
         ))
     
     return ClientsResponse(clients=clients)
+
+
+@router.get("/merkle-status", response_model=MerkleStatusResponse)
+async def get_merkle_status(authorization: Optional[str] = Header(None)):
+    """
+    Get Merkle tree status per client.
+    
+    Returns valid roots count, next leaf index, total enrolled for each client.
+    """
+    require_admin(authorization)
+    
+    conn = get_connection()
+    
+    # Load clients config for client list
+    clients_path = os.environ.get("CLIENTS_JSON", "/opt/sbm-api/clients.json")
+    if not os.path.exists(clients_path):
+        clients_path = os.path.join(os.path.dirname(__file__), "../../clients.json")
+    
+    try:
+        with open(clients_path) as f:
+            clients_data = json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load clients.json: {e}")
+        raise HTTPException(500, "Failed to load client configuration")
+    
+    statuses = []
+    for client_id in clients_data.keys():
+        # Count valid (active) roots for this client
+        valid_roots = conn.execute(
+            "SELECT COUNT(*) FROM merkle_roots WHERE client_id = ? AND active = 1",
+            (client_id,)
+        ).fetchone()[0]
+        
+        # Count total roots for this client (last 30 cap for display)
+        total_roots = conn.execute(
+            "SELECT COUNT(*) FROM merkle_roots WHERE client_id = ?",
+            (client_id,)
+        ).fetchone()[0]
+        total_roots = min(total_roots, 30)  # Cap at 30 for display
+        
+        # Get next available leaf index (max leaf_index + 1, or 0 if none)
+        max_leaf = conn.execute(
+            "SELECT MAX(leaf_index) FROM enrollments WHERE client_id = ?",
+            (client_id,)
+        ).fetchone()[0]
+        next_leaf_index = (max_leaf + 1) if max_leaf is not None else 0
+        
+        # Count total enrolled users for this client
+        total_enrolled = conn.execute(
+            "SELECT COUNT(*) FROM enrollments WHERE client_id = ?",
+            (client_id,)
+        ).fetchone()[0]
+        
+        statuses.append(MerkleTreeStatus(
+            client_id=client_id,
+            valid_roots=valid_roots,
+            total_roots=total_roots,
+            next_leaf_index=next_leaf_index,
+            total_enrolled=total_enrolled,
+        ))
+    
+    return MerkleStatusResponse(clients=statuses)
