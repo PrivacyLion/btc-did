@@ -357,15 +357,15 @@
                 </div>
             </div>
             
-            <!-- Recent Payouts -->
+            <!-- Payment Confirmations -->
             <div class="card">
                 <div class="card-header">
-                    <h2>💸 Recent Payouts</h2>
-                    <button class="refresh-btn" onclick="loadPayouts()">
+                    <h2>💰 Payment Confirmations</h2>
+                    <button class="refresh-btn" onclick="loadPayments()">
                         🔄 Refresh
                     </button>
                 </div>
-                <div id="payouts-container">
+                <div id="payments-container">
                     <div class="loading"><div class="spinner"></div></div>
                 </div>
             </div>
@@ -529,45 +529,45 @@
             }
         }
         
-        async function loadPayouts() {
+        async function loadPayments() {
             try {
-                const res = await fetch(`${API_BASE}/v1/admin/payments?limit=20`, {
+                const res = await fetch(`${API_BASE}/v1/admin/verifications?limit=20`, {
                     headers: { 'Authorization': authHeader }
                 });
                 const data = await res.json();
                 
-                if (data.attempts.length === 0) {
-                    document.getElementById('payouts-container').innerHTML = 
-                        '<div class="empty-state">No payout attempts yet</div>';
+                if (data.verifications.length === 0) {
+                    document.getElementById('payments-container').innerHTML = 
+                        '<div class="empty-state">No payment confirmations yet</div>';
                     return;
                 }
                 
                 let html = `<table>
                     <tr>
-                        <th>Time</th>
+                        <th>Verified At</th>
                         <th>Client</th>
-                        <th>Invoice</th>
-                        <th>Status</th>
+                        <th>npub</th>
+                        <th>User Payment Hash</th>
                     </tr>`;
                 
-                for (const p of data.attempts) {
-                    const time = new Date(p.timestamp).toLocaleString();
-                    const status = p.result.status;
-                    const badge = `<span class="status-badge ${status}">${status === 'success' ? '✓ ' + (p.result.amount_sats || '--') + ' sats' : status}</span>`;
+                for (const v of data.verifications) {
+                    const time = new Date(v.verified_at * 1000).toLocaleString();
+                    const npub = v.npub.substring(0, 8) + '...' + v.npub.slice(-4);
+                    const paymentHash = v.payment_hash_user.substring(0, 8) + '...' + v.payment_hash_user.slice(-4);
                     
                     html += `<tr>
                         <td class="time-cell">${time}</td>
-                        <td>${p.client_id}</td>
-                        <td class="did-cell">${p.invoice_prefix}</td>
-                        <td>${badge}</td>
+                        <td>${v.client_id}</td>
+                        <td class="npub-cell" title="${v.npub}">${npub}</td>
+                        <td class="npub-cell" title="${v.payment_hash_user}">${paymentHash}</td>
                     </tr>`;
                 }
                 
                 html += '</table>';
-                document.getElementById('payouts-container').innerHTML = html;
+                document.getElementById('payments-container').innerHTML = html;
                 
             } catch (e) {
-                console.error('Payouts error:', e);
+                console.error('Payments error:', e);
             }
         }
         
