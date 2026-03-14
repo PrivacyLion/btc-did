@@ -21,7 +21,7 @@ use serde::{Serialize, Deserialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::key_manager::ManagedKey;
-use crate::dlc_oracle::{verify_preimage, PreimageSettlement};
+use crate::dlc_oracle::verify_preimage;
 
 /// Default timeout for DLC contracts (10 minutes)
 const DEFAULT_TIMEOUT_SECS: u64 = 600;

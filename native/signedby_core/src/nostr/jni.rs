@@ -487,7 +487,7 @@ fn parse_leaf_secret(bytes: &[u8]) -> Result<[Fr; 5]> {
 mod tests {
     use super::*;
     use ark_ff::UniformRand;
-    use rand::thread_rng;
+    use ark_std::rand::thread_rng;
     
     #[test]
     fn test_parse_leaf_secret() {
