@@ -12,6 +12,11 @@
       "auto_approve": true,
       "auto_build_interval_hours": 24,
       "auto_build_threshold": 10
+    },
+    "enrollment_policy": {
+      "verification_required": false,
+      "verification_provider": "none",
+      "verification_type": "none"
     }
   }
 }
