@@ -26,10 +26,16 @@ class DlcManager {
         const val OUTCOME_AUTH_VERIFIED = "auth_verified"
         const val OUTCOME_REFUND = "refund"
         const val OUTCOME_PAID = "paid=true"
+        
+        // DLC timeout (10 minutes)
+        const val TIMEOUT_SECS = 600L
     }
     
     /**
      * DLC contract data for login authentication
+     * 
+     * Phase 11: Settlement based on Breez SDK preimage receipt.
+     * SHA256(preimage) == paymentHash is the cryptographic proof of payment.
      */
     data class AuthDlcContract(
         val contractId: String,
@@ -44,7 +50,13 @@ class DlcManager {
         val amountSats: Long,
         val createdAt: Long,
         val adaptorPointHex: String?,
-        val scriptHashHex: String?
+        val scriptHashHex: String?,
+        // Phase 11 fields
+        val paymentHashHex: String? = null,
+        val timeoutAt: Long = 0,
+        var status: String = "pending",
+        var preimageHex: String? = null,
+        var settledAt: Long? = null
     ) {
         fun toJson(): String {
             return JSONObject().apply {
@@ -179,25 +191,25 @@ class DlcManager {
     
     /**
      * Build a DLC contract for login authentication.
-     * This contract specifies the 90/10 payout split that will be enforced
-     * when the oracle signs the auth_verified outcome.
      * 
-     * Steps 6-8 in the spec:
-     * 6. Build DLC outcome auth_verified, payout 90/10
-     * 7. Request outcome sign policy for auth_verified
-     * 8. Oracle policy acknowledged
+     * Phase 11 Architecture:
+     * - Settlement condition: phone receives 90% preimage via Breez SDK
+     * - DLC encodes: nonce, payment_hash, timeout (10 min), payout split (90/10)
+     * - Server has ZERO knowledge of this DLC
      * 
-     * @param loginId Session login ID
+     * @param loginId Session login ID (nonce from QR)
      * @param did User's DID
      * @param amountSats Payment amount in satoshis
+     * @param paymentHashHex Payment hash for user's 90% invoice (optional, set later)
      * @param userPct User's percentage (default 90)
      * @param operatorPct Operator's percentage (default 10)
-     * @return DLC contract ready for signing
+     * @return DLC contract ready for settlement
      */
     fun buildAuthContract(
         loginId: String,
         did: String,
         amountSats: Long,
+        paymentHashHex: String? = null,
         userPct: Int = DEFAULT_USER_PCT,
         operatorPct: Int = DEFAULT_OPERATOR_PCT
     ): AuthDlcContract {
@@ -216,15 +228,15 @@ class DlcManager {
             oracleJson
         )
         
-        Log.i(TAG, "Built DLC contract for login $loginId: $contractJson")
+        Log.i(TAG, "Built DLC contract for login $loginId")
         
         // Parse contract response
         val contractObj = JSONObject(contractJson)
         val contractId = contractObj.optString("contract_id", "dlc_${System.currentTimeMillis()}")
         
-        // Step 7-8: Request and receive oracle policy acknowledgment
-        val policyAck = requestPolicyAcknowledgment(OUTCOME_AUTH_VERIFIED, contractId)
-        Log.i(TAG, "Oracle policy acknowledged: ${policyAck?.commitmentHex?.take(16)}...")
+        // Calculate timeout (10 minutes from now)
+        val createdAt = System.currentTimeMillis() / 1000
+        val timeoutAt = createdAt + TIMEOUT_SECS
         
         return AuthDlcContract(
             contractId = contractId,
@@ -237,9 +249,15 @@ class DlcManager {
             userPct = userPct,
             operatorPct = operatorPct,
             amountSats = amountSats,
-            createdAt = System.currentTimeMillis() / 1000,
+            createdAt = createdAt,
             adaptorPointHex = contractObj.optString("adaptor_point_hex", null),
-            scriptHashHex = contractObj.optString("script_hash_hex", null)
+            scriptHashHex = contractObj.optString("script_hash_hex", null),
+            // Phase 11 fields
+            paymentHashHex = paymentHashHex,
+            timeoutAt = timeoutAt,
+            status = "pending",
+            preimageHex = null,
+            settledAt = null
         )
     }
     
@@ -359,5 +377,107 @@ class DlcManager {
             Log.e(TAG, "Attestation verification failed: ${e.message}")
             false
         }
+    }
+    
+    // ========== Phase 11: Preimage-Based Settlement ==========
+    
+    /**
+     * Settle a DLC contract with a preimage from Breez SDK.
+     * 
+     * This is the core settlement for Phase 11:
+     * - Receives preimage from Breez SDK payment notification
+     * - Verifies SHA256(preimage) == payment_hash
+     * - If valid, marks contract as settled
+     * 
+     * @param contract The DLC contract to settle
+     * @param preimageHex The preimage from Breez SDK (32 bytes, hex)
+     * @return true if settlement succeeded, false otherwise
+     */
+    fun settleWithPreimage(contract: AuthDlcContract, preimageHex: String): Boolean {
+        if (contract.status != "pending") {
+            Log.w(TAG, "Cannot settle: contract status is ${contract.status}")
+            return false
+        }
+        
+        val paymentHash = contract.paymentHashHex
+        if (paymentHash.isNullOrEmpty()) {
+            Log.e(TAG, "Cannot settle: no payment_hash on contract")
+            return false
+        }
+        
+        // Verify: SHA256(preimage) == payment_hash
+        val isValid = verifyPreimage(preimageHex, paymentHash)
+        
+        if (isValid) {
+            contract.status = "settled"
+            contract.preimageHex = preimageHex
+            contract.settledAt = System.currentTimeMillis() / 1000
+            Log.i(TAG, "DLC settled successfully: contract=${contract.contractId}")
+            return true
+        } else {
+            contract.status = "failed"
+            Log.e(TAG, "DLC settlement failed: invalid preimage")
+            return false
+        }
+    }
+    
+    /**
+     * Verify a preimage against a payment hash.
+     * 
+     * SHA256(preimage) == payment_hash is the cryptographic proof of payment.
+     * 
+     * @param preimageHex The preimage (32 bytes, hex)
+     * @param paymentHashHex The expected payment hash (32 bytes, hex)
+     * @return true if valid, false otherwise
+     */
+    fun verifyPreimage(preimageHex: String, paymentHashHex: String): Boolean {
+        return try {
+            // Use Rust for SHA256 verification
+            NativeBridge.verifyPreimage(preimageHex, paymentHashHex)
+        } catch (e: Exception) {
+            // Fallback to Java SHA256
+            try {
+                val preimageBytes = hexToBytes(preimageHex)
+                val md = java.security.MessageDigest.getInstance("SHA-256")
+                val computedHash = md.digest(preimageBytes)
+                val computedHashHex = bytesToHex(computedHash)
+                computedHashHex.equals(paymentHashHex, ignoreCase = true)
+            } catch (e2: Exception) {
+                Log.e(TAG, "Preimage verification failed: ${e2.message}")
+                false
+            }
+        }
+    }
+    
+    /**
+     * Check if a contract has timed out (10 minutes with no payment).
+     */
+    fun isTimedOut(contract: AuthDlcContract): Boolean {
+        if (contract.status != "pending") return false
+        val now = System.currentTimeMillis() / 1000
+        return contract.timeoutAt > 0 && now > contract.timeoutAt
+    }
+    
+    /**
+     * Handle contract timeout - marks as refunded.
+     */
+    fun handleTimeout(contract: AuthDlcContract): Boolean {
+        if (!isTimedOut(contract)) return false
+        contract.status = "refunded"
+        Log.i(TAG, "DLC timed out: contract=${contract.contractId}")
+        return true
+    }
+    
+    // ========== Helper Functions ==========
+    
+    private fun hexToBytes(hex: String): ByteArray {
+        val cleanHex = hex.removePrefix("0x")
+        return ByteArray(cleanHex.length / 2) { i ->
+            cleanHex.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+        }
+    }
+    
+    private fun bytesToHex(bytes: ByteArray): String {
+        return bytes.joinToString("") { "%02x".format(it) }
     }
 }

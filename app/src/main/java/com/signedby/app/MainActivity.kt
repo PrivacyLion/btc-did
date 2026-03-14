@@ -963,6 +963,16 @@ fun SignedByMeApp(
                     lastOperatorInvoice = operatorInvoice ?: ""
                     lastPaymentHash = NativeBridge.extractPaymentHashFromBolt11(invoice)
                     
+                    // Phase 11: Build DLC contract after invoice generation
+                    // The DLC encodes: 90/10 split, nonce, payment_hash, 10-minute timeout
+                    // Settlement fires when Breez SDK delivers preimage
+                    lastDlcContract = dlcManager.buildAuthContract(
+                        loginId = nonce,
+                        did = did ?: "",
+                        amountSats = amountSats.toLong()
+                    )
+                    android.util.Log.i("SignedByMe", "DLC contract built: ${lastDlcContract?.contractId}")
+                    
                     isLoginActive = true
                     isPollingPayment = true
                     

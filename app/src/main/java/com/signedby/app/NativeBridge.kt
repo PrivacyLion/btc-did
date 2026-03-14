@@ -303,6 +303,35 @@ object NativeBridge {
     @JvmStatic external fun verifyPayment(paymentHash: String, preimageHex: String): String
     
     /**
+     * Verify a preimage against a payment hash (Phase 11 DLC settlement).
+     * 
+     * Checks: SHA256(preimage) == payment_hash
+     * This is the cryptographic proof of payment for DLC settlement.
+     * 
+     * @param preimageHex The preimage from Breez SDK (32 bytes hex)
+     * @param paymentHashHex The expected payment hash (32 bytes hex)
+     * @return true if SHA256(preimage) == payment_hash
+     */
+    @JvmStatic 
+    fun verifyPreimage(preimageHex: String, paymentHashHex: String): Boolean {
+        return try {
+            val resultJson = verifyPayment(paymentHashHex, preimageHex)
+            val result = org.json.JSONObject(resultJson)
+            result.optBoolean("valid", false)
+        } catch (e: Exception) {
+            // Fallback to pure Kotlin SHA256 verification
+            try {
+                val preimageBytes = preimageHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                val md = java.security.MessageDigest.getInstance("SHA-256")
+                val computedHash = md.digest(preimageBytes).joinToString("") { "%02x".format(it) }
+                computedHash.equals(paymentHashHex, ignoreCase = true)
+            } catch (e2: Exception) {
+                false
+            }
+        }
+    }
+    
+    /**
      * Create a Payment Request Package (PRP) for DLC-tagged payments
      * @param amountSats Amount in satoshis
      * @param description Payment description
