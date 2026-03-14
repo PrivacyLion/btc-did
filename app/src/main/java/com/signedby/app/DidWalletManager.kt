@@ -1359,6 +1359,108 @@ class DidWalletManager(private val context: Context) {
         } catch (_: Throwable) { false }
     }
 
+    // ============================================================================
+    // Enrollment List (Phase 21.6 - Recovery Support)
+    // ============================================================================
+
+    private val enrollmentListFile = "enrollments_list.json"
+
+    /**
+     * Entry in the local enrollment list - tracks services the user has enrolled in.
+     * Stored locally for re-enrollment guidance after wallet recovery.
+     */
+    data class EnrollmentListEntry(
+        val clientId: String,
+        val serviceName: String,
+        val enrolledAt: Long
+    ) {
+        fun toJson(): org.json.JSONObject = org.json.JSONObject().apply {
+            put("client_id", clientId)
+            put("service_name", serviceName)
+            put("enrolled_at", enrolledAt)
+        }
+
+        companion object {
+            fun fromJson(obj: org.json.JSONObject): EnrollmentListEntry {
+                return EnrollmentListEntry(
+                    clientId = obj.getString("client_id"),
+                    serviceName = obj.optString("service_name", obj.getString("client_id")),
+                    enrolledAt = obj.getLong("enrolled_at")
+                )
+            }
+        }
+    }
+
+    /**
+     * Add a service to the local enrollment list.
+     * Called after every successful performEnrollment().
+     */
+    fun addToEnrollmentList(clientId: String, serviceName: String) {
+        try {
+            val existing = loadEnrollmentList().toMutableList()
+            
+            // Update or add entry
+            val existingIndex = existing.indexOfFirst { it.clientId == clientId }
+            val entry = EnrollmentListEntry(
+                clientId = clientId,
+                serviceName = serviceName,
+                enrolledAt = System.currentTimeMillis() / 1000
+            )
+            
+            if (existingIndex >= 0) {
+                existing[existingIndex] = entry
+            } else {
+                existing.add(entry)
+            }
+            
+            // Write back
+            val jsonArray = org.json.JSONArray()
+            existing.forEach { jsonArray.put(it.toJson()) }
+            
+            context.openFileOutput(enrollmentListFile, Context.MODE_PRIVATE).use {
+                it.write(jsonArray.toString().toByteArray())
+            }
+            
+            android.util.Log.i("SignedByMe", "Added $clientId to enrollment list (total: ${existing.size})")
+        } catch (e: Exception) {
+            android.util.Log.e("SignedByMe", "Failed to add to enrollment list: ${e.message}")
+        }
+    }
+
+    /**
+     * Load the local enrollment list.
+     * Returns empty list if file doesn't exist (fresh install or wiped).
+     */
+    fun loadEnrollmentList(): List<EnrollmentListEntry> {
+        return try {
+            val json = context.openFileInput(enrollmentListFile).use { 
+                it.bufferedReader().readText() 
+            }
+            val jsonArray = org.json.JSONArray(json)
+            (0 until jsonArray.length()).map { i ->
+                EnrollmentListEntry.fromJson(jsonArray.getJSONObject(i))
+            }
+        } catch (_: Throwable) { 
+            emptyList() 
+        }
+    }
+
+    /**
+     * Check if user has any recorded enrollments.
+     */
+    fun hasEnrollmentHistory(): Boolean {
+        return loadEnrollmentList().isNotEmpty()
+    }
+
+    /**
+     * Clear enrollment list (called on wallet wipe/reset).
+     */
+    fun clearEnrollmentList() {
+        try {
+            context.deleteFile(enrollmentListFile)
+        } catch (_: Throwable) { }
+    }
+
     /**
      * Get leaf commitment for enrollment (production - no logging).
      * Generates leaf secret if not exists.
@@ -1457,6 +1559,10 @@ class DidWalletManager(private val context: Context) {
 
             // Store locally
             storeEnrollment(enrollment)
+            
+            // Add to enrollment list for recovery support (Phase 21.6)
+            // Service name from client_id - will be updated with proper name in future
+            addToEnrollmentList(enrollment.clientId, enrollment.clientId)
 
             android.util.Log.i("SignedByMe", "Enrollment complete: ${enrollment.enrollmentId}")
             enrollment
