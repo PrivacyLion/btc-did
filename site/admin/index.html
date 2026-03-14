@@ -629,12 +629,8 @@
                             <span class="val">${c.name}</span>
                         </div>
                         <div class="config-item">
-                            <span class="key">Reward</span>
-                            <span class="val">${c.reward_enabled ? c.reward_amount_sats + ' sats' : 'Disabled'}</span>
-                        </div>
-                        <div class="config-item">
-                            <span class="key">Provider</span>
-                            <span class="val">${c.reward_provider || '--'}</span>
+                            <span class="key">Payment</span>
+                            <span class="val">${c.payment_amount_sats ? c.payment_amount_sats + ' sats' : '--'}</span>
                         </div>
                         <div class="config-item">
                             <span class="key">Membership</span>

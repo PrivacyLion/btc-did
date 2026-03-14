@@ -123,9 +123,7 @@ class ClientConfigView(BaseModel):
     """Read-only view of client config (no secrets)."""
     client_id: str
     name: str
-    reward_enabled: bool
-    reward_amount_sats: int
-    reward_provider: Optional[str] = None
+    payment_amount_sats: Optional[int] = None
     require_membership: bool
     redirect_uris: list[str]
 
@@ -281,13 +279,11 @@ async def get_clients(authorization: Optional[str] = Header(None)):
     
     clients = []
     for client_id, config in clients_data.items():
-        reward_policy = config.get("reward_policy", {})
+        payment_model = config.get("payment_model", {})
         clients.append(ClientConfigView(
             client_id=client_id,
             name=config.get("name", client_id),
-            reward_enabled=reward_policy.get("enabled", False),
-            reward_amount_sats=reward_policy.get("amount_sats", 0),
-            reward_provider=reward_policy.get("provider"),
+            payment_amount_sats=payment_model.get("amount_sats"),
             require_membership=config.get("require_membership", True),  # Default: mandatory
             redirect_uris=config.get("redirect_uris", [])
         ))
