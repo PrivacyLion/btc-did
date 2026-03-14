@@ -12,11 +12,6 @@
       "auto_approve": true,
       "auto_build_interval_hours": 24,
       "auto_build_threshold": 10
-    },
-    "reward_policy": {
-      "enabled": true,
-      "provider": "strike",
-      "amount_sats": 100
     }
   }
 }
