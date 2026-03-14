@@ -315,20 +315,16 @@
             <!-- Stats -->
             <div class="stats-grid">
                 <div class="stat-card">
-                    <div class="label">Strike Status</div>
-                    <div class="value" id="strike-status">--</div>
+                    <div class="label">Active Roots</div>
+                    <div class="value success" id="active-roots">--</div>
                 </div>
                 <div class="stat-card">
-                    <div class="label">Strike Balance</div>
-                    <div class="value success" id="strike-balance">--</div>
+                    <div class="label">Total Enrolled Users</div>
+                    <div class="value" id="total-enrolled">--</div>
                 </div>
                 <div class="stat-card">
-                    <div class="label">Login Events</div>
+                    <div class="label">Login Verifications</div>
                     <div class="value" id="total-events">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="label">Payout Attempts</div>
-                    <div class="value" id="total-payouts">--</div>
                 </div>
             </div>
             
@@ -427,21 +423,9 @@
                 });
                 const data = await res.json();
                 
-                document.getElementById('strike-status').textContent = 
-                    data.strike_configured ? '✓ Connected' : '✗ Not configured';
-                document.getElementById('strike-status').className = 
-                    'value ' + (data.strike_configured ? 'success' : 'warning');
-                
-                if (data.strike_balance) {
-                    const btc = data.strike_balance.find(b => b.currency === 'BTC');
-                    document.getElementById('strike-balance').textContent = 
-                        btc ? `${Math.round(btc.available * 100000000)} sats` : '--';
-                } else {
-                    document.getElementById('strike-balance').textContent = '--';
-                }
-                
-                document.getElementById('total-events').textContent = data.total_login_events;
-                document.getElementById('total-payouts').textContent = data.total_payout_attempts;
+                document.getElementById('active-roots').textContent = data.valid_root_count;
+                document.getElementById('total-enrolled').textContent = data.merkle_tree_size;
+                document.getElementById('total-events').textContent = data.total_login_verifications;
                 
             } catch (e) {
                 console.error('Status error:', e);
