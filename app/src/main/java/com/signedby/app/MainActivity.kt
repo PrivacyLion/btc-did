@@ -550,6 +550,11 @@ fun SignedByMeApp(
     var isWalletInitializing by remember { mutableStateOf(false) }
     var walletInitError by remember { mutableStateOf("") }
     
+    // Re-enrollment state (Phase 21.5)
+    var showReEnrollmentScreen by remember { mutableStateOf(false) }
+    var enrollmentList by remember { mutableStateOf<List<DidWalletManager.EnrollmentListEntry>>(emptyList()) }
+    var isReEnrolling by remember { mutableStateOf(false) }
+    
     // Check if wallet already exists and auto-connect
     LaunchedEffect(Unit) {
         val hasWallet = breezMgr.hasWallet()
@@ -558,6 +563,18 @@ fun SignedByMeApp(
             // Auto-connect the existing wallet on app start
             android.util.Log.i("SignedByMe", "Existing wallet found, auto-connecting...")
             breezMgr.initializeWallet()
+            
+            // Phase 21.5: Check for recovered wallet without enrollment
+            val onboardingWasComplete = isOnboardingComplete(context)
+            val hasEnrollment = didMgr.hasEnrollment()
+            val hasLeafSecret = didMgr.hasLeafSecret()
+            
+            if (onboardingWasComplete && hasWallet && !hasEnrollment && !hasLeafSecret) {
+                // This is a recovered wallet - user needs to re-enroll
+                android.util.Log.i("SignedByMe", "Recovered wallet detected - showing re-enrollment screen")
+                enrollmentList = didMgr.loadEnrollmentList()
+                showReEnrollmentScreen = true
+            }
         }
     }
     
@@ -821,6 +838,48 @@ fun SignedByMeApp(
                 }
             }
         }
+    } else if (showReEnrollmentScreen) {
+        // Show Re-Enrollment Screen (Phase 21.5)
+        ReEnrollmentScreen(
+            enrollmentList = enrollmentList,
+            isReEnrolling = isReEnrolling,
+            onReEnroll = { clientId ->
+                scope.launch {
+                    isReEnrolling = true
+                    android.util.Log.i("SignedByMe", "Starting re-enrollment for $clientId...")
+                    
+                    // Regenerate leaf_secret (will create new one since old is gone)
+                    val leafCommitment = withContext(Dispatchers.IO) { didMgr.getLeafCommitment() }
+                    if (leafCommitment == null) {
+                        android.util.Log.e("SignedByMe", "Failed to generate leaf commitment")
+                        isReEnrolling = false
+                        return@launch
+                    }
+                    
+                    // Perform enrollment
+                    val success = withContext(Dispatchers.IO) {
+                        didMgr.performEnrollment(
+                            apiBaseUrl = API_BASE_URL,
+                            apiKey = "acme-test-key-2026"  // TODO: Get from clientId config
+                        )
+                    }
+                    
+                    isReEnrolling = false
+                    if (success) {
+                        android.util.Log.i("SignedByMe", "Re-enrollment succeeded")
+                        showReEnrollmentScreen = false
+                        showLoginScreen = true
+                    } else {
+                        android.util.Log.e("SignedByMe", "Re-enrollment failed")
+                    }
+                }
+            },
+            onSkip = {
+                // User wants to skip and just go to login (enrollment will happen on first login)
+                showReEnrollmentScreen = false
+                showLoginScreen = true
+            }
+        )
     } else if (showLoginScreen) {
         // Show Login Screen
         LoginScreen(
@@ -1763,6 +1822,202 @@ fun PaymentRow(payment: Payment, btcPriceUsd: Double) {
                 }
             }
         }
+    }
+}
+
+// ===== Re-Enrollment Screen (Phase 21.5) =====
+@Composable
+fun ReEnrollmentScreen(
+    enrollmentList: List<DidWalletManager.EnrollmentListEntry>,
+    isReEnrolling: Boolean,
+    onReEnroll: (String) -> Unit,
+    onSkip: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0D1117))
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(60.dp))
+        
+        // Welcome back header
+        Text(
+            text = "👋",
+            fontSize = 48.sp
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "Welcome Back",
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Text(
+            text = "Your wallet has been restored.",
+            fontSize = 16.sp,
+            color = Color(0xFF8B949E),
+            textAlign = TextAlign.Center
+        )
+        
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        // Re-enrollment message
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🔄",
+                        fontSize = 24.sp
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Re-enrollment Required",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Text(
+                    text = if (enrollmentList.isEmpty()) {
+                        "You'll need to re-enroll in any services you previously used to start logging in again."
+                    } else {
+                        "You need to re-enroll in your services to start logging in again."
+                    },
+                    fontSize = 14.sp,
+                    color = Color(0xFF8B949E),
+                    lineHeight = 20.sp
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // List of previously enrolled services (if any)
+        if (enrollmentList.isNotEmpty()) {
+            Text(
+                text = "Previously Enrolled Services",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF8B949E),
+                modifier = Modifier.fillMaxWidth()
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            enrollmentList.forEach { entry ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF21262D)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = entry.serviceName,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "client_id: ${entry.clientId}",
+                                fontSize = 12.sp,
+                                color = Color(0xFF8B949E)
+                            )
+                        }
+                        
+                        Button(
+                            onClick = { onReEnroll(entry.clientId) },
+                            enabled = !isReEnrolling,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF238636)
+                            ),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            if (isReEnrolling) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("Re-enroll", fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.weight(1f))
+        
+        // Primary action button (for first-time recovery without enrollment list)
+        if (enrollmentList.isEmpty()) {
+            Button(
+                onClick = { onReEnroll("acme") },  // Default to acme for now
+                enabled = !isReEnrolling,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF238636)
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                if (isReEnrolling) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Re-enrolling...", fontSize = 16.sp)
+                } else {
+                    Text("Re-enroll Now", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+        
+        // Skip button
+        TextButton(
+            onClick = onSkip,
+            enabled = !isReEnrolling
+        ) {
+            Text(
+                text = "Skip for now",
+                color = Color(0xFF8B949E),
+                fontSize = 14.sp
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
