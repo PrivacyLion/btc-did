@@ -82,6 +82,7 @@ class AdminStatusResponse(BaseModel):
     valid_root_count: int
     total_login_verifications: int
     merkle_tree_size: int
+    last_login_timestamp: Optional[int] = None
 
 
 class LoginEvent(BaseModel):
@@ -174,12 +175,19 @@ async def get_admin_status(authorization: Optional[str] = Header(None)):
         "SELECT COUNT(*) FROM enrollments"
     ).fetchone()[0]
     
+    # Get last login timestamp
+    last_login_row = conn.execute(
+        "SELECT MAX(verified_at) FROM login_verifications"
+    ).fetchone()
+    last_login_timestamp = last_login_row[0] if last_login_row and last_login_row[0] else None
+    
     return AdminStatusResponse(
         ok=True,
         timestamp=datetime.now(timezone.utc).isoformat(),
         valid_root_count=valid_root_count,
         total_login_verifications=total_verifications,
         merkle_tree_size=merkle_tree_size,
+        last_login_timestamp=last_login_timestamp,
     )
 
 

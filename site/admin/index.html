@@ -370,6 +370,27 @@
                 </div>
             </div>
             
+            <!-- NOSTR Relay Health -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>📡 NOSTR Relay Health</h2>
+                </div>
+                <div id="relay-container">
+                    <table>
+                        <tr>
+                            <th>Relay URL</th>
+                            <th>Status</th>
+                            <th>Last Login Event</th>
+                        </tr>
+                        <tr>
+                            <td class="npub-cell">wss://relay.privacy-lion.com</td>
+                            <td><span class="status-badge success">Configured</span></td>
+                            <td class="time-cell" id="last-login-time">--</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
             <!-- Config -->
             <div class="card">
                 <div class="card-header">
@@ -439,6 +460,14 @@
                 document.getElementById('active-roots').textContent = data.valid_root_count;
                 document.getElementById('total-enrolled').textContent = data.merkle_tree_size;
                 document.getElementById('total-events').textContent = data.total_login_verifications;
+                
+                // Update relay health last login time
+                if (data.last_login_timestamp) {
+                    document.getElementById('last-login-time').textContent = 
+                        new Date(data.last_login_timestamp * 1000).toLocaleString();
+                } else {
+                    document.getElementById('last-login-time').textContent = 'No logins yet';
+                }
                 
             } catch (e) {
                 console.error('Status error:', e);
