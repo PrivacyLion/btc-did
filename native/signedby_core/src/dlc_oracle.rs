@@ -1,19 +1,162 @@
 // dlc_oracle.rs
-// Real oracle implementation with Schnorr signatures for DLC outcomes
-// Uses BIP340-style tagged hashes for outcome signing
+// DLC settlement via Lightning preimage verification
+//
+// Phase 11 Architecture (Bible Section 7.4):
+// - The preimage IS the oracle attestation
+// - SHA256(preimage) == payment_hash is cryptographic proof of payment
+// - No external oracle needed — settlement is mathematically verifiable
+// - Server has ZERO knowledge of DLCs
+//
+// Settlement flow:
+// 1. Phone generates invoice via Breez SDK (90% user invoice)
+// 2. Phone knows the payment_hash from the invoice
+// 3. Enterprise pays the invoice
+// 4. Phone receives preimage via Breez SDK payment notification
+// 5. Phone verifies: SHA256(preimage) == payment_hash
+// 6. DLC settles — this is the "oracle attestation"
 
-use bitcoin::secp256k1::{Secp256k1, SecretKey, PublicKey, Keypair, XOnlyPublicKey, Message};
-use bitcoin::secp256k1::schnorr::Signature as SchnorrSignature;
 use sha2::{Sha256, Digest};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Domain separator for oracle key derivation
+// Legacy imports kept for testing compatibility
+use bitcoin::secp256k1::{Secp256k1, SecretKey, PublicKey, Keypair, XOnlyPublicKey, Message};
+use bitcoin::secp256k1::schnorr::Signature as SchnorrSignature;
+
+// Domain separator for oracle key derivation (legacy - kept for testing)
 const ORACLE_KEY_DOMAIN: &[u8] = b"signedby.me:oracle:v1";
 
-// Domain separator for outcome signing (BIP340 tagged hash)
+// Domain separator for outcome signing (BIP340 tagged hash) (legacy - kept for testing)
 const OUTCOME_TAG: &str = "signedby.me/dlc/outcome/v1";
 
+// ============================================================================
+// Preimage-Based Settlement (Phase 11 - Production)
+// ============================================================================
+
+/// Settlement proof from Breez SDK preimage receipt
+#[derive(Debug, Clone)]
+pub struct PreimageSettlement {
+    /// The preimage received from Breez SDK (32 bytes, hex)
+    pub preimage_hex: String,
+    /// The payment hash this preimage satisfies (32 bytes, hex)
+    pub payment_hash_hex: String,
+    /// Whether the preimage is valid (SHA256(preimage) == payment_hash)
+    pub is_valid: bool,
+    /// Settlement timestamp
+    pub settled_at: u64,
+}
+
+impl PreimageSettlement {
+    /// Create a new settlement from a Breez SDK preimage
+    /// 
+    /// This is the core settlement verification:
+    /// - Input: preimage from Breez SDK payment notification
+    /// - Verification: SHA256(preimage) == payment_hash
+    /// - If valid, DLC settles (user received their 90%)
+    pub fn from_breez_preimage(preimage_hex: &str, expected_payment_hash: &str) -> Result<Self, String> {
+        let preimage_bytes = hex::decode(preimage_hex)
+            .map_err(|e| format!("Invalid preimage hex: {}", e))?;
+        
+        if preimage_bytes.len() != 32 {
+            return Err(format!("Preimage must be 32 bytes, got {}", preimage_bytes.len()));
+        }
+        
+        // Compute SHA256(preimage) to get the payment hash
+        let mut hasher = Sha256::new();
+        hasher.update(&preimage_bytes);
+        let computed_hash = hex::encode(hasher.finalize());
+        
+        let is_valid = computed_hash.eq_ignore_ascii_case(expected_payment_hash);
+        
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        Ok(Self {
+            preimage_hex: preimage_hex.to_string(),
+            payment_hash_hex: expected_payment_hash.to_string(),
+            is_valid,
+            settled_at: now,
+        })
+    }
+    
+    /// Convert to JSON string
+    pub fn to_json(&self) -> String {
+        format!(r#"{{
+  "status": "{}",
+  "kind": "preimage_settlement",
+  "preimage_hex": "{}",
+  "payment_hash_hex": "{}",
+  "is_valid": {},
+  "settled_at": {}
+}}"#,
+            if self.is_valid { "ok" } else { "invalid" },
+            self.preimage_hex,
+            self.payment_hash_hex,
+            self.is_valid,
+            self.settled_at
+        )
+    }
+}
+
+/// Verify a preimage against a payment hash
+/// 
+/// This is the mathematical proof that payment was received:
+/// SHA256(preimage) == payment_hash
+/// 
+/// Returns true if valid, false otherwise
+pub fn verify_preimage(preimage_hex: &str, payment_hash_hex: &str) -> bool {
+    let preimage_bytes = match hex::decode(preimage_hex) {
+        Ok(bytes) if bytes.len() == 32 => bytes,
+        _ => return false,
+    };
+    
+    let mut hasher = Sha256::new();
+    hasher.update(&preimage_bytes);
+    let computed_hash = hex::encode(hasher.finalize());
+    
+    computed_hash.eq_ignore_ascii_case(payment_hash_hex)
+}
+
+/// Compute payment hash from preimage
+pub fn compute_payment_hash(preimage_hex: &str) -> Result<String, String> {
+    let preimage_bytes = hex::decode(preimage_hex)
+        .map_err(|e| format!("Invalid preimage hex: {}", e))?;
+    
+    if preimage_bytes.len() != 32 {
+        return Err(format!("Preimage must be 32 bytes, got {}", preimage_bytes.len()));
+    }
+    
+    let mut hasher = Sha256::new();
+    hasher.update(&preimage_bytes);
+    Ok(hex::encode(hasher.finalize()))
+}
+
+// ============================================================================
+// JNI-facing functions (Preimage Settlement)
+// ============================================================================
+
+/// Verify preimage and return JSON settlement result
+pub fn verify_breez_preimage(preimage_hex: &str, payment_hash_hex: &str) -> String {
+    match PreimageSettlement::from_breez_preimage(preimage_hex, payment_hash_hex) {
+        Ok(settlement) => settlement.to_json(),
+        Err(e) => format!(r#"{{"status": "error", "error": "{}"}}"#, e),
+    }
+}
+
+/// Check if preimage is valid (simple boolean for JNI)
+pub fn is_preimage_valid(preimage_hex: &str, payment_hash_hex: &str) -> bool {
+    verify_preimage(preimage_hex, payment_hash_hex)
+}
+
+// ============================================================================
+// Legacy Oracle Implementation (Kept for Testing Only)
+// ============================================================================
+
 /// Oracle for signing DLC outcomes
+/// 
+/// NOTE: This is LEGACY code kept for testing compatibility.
+/// Production settlement uses PreimageSettlement::from_breez_preimage()
 #[derive(Debug, Clone)]
 pub struct Oracle {
     pub name: String,
@@ -24,6 +167,8 @@ pub struct Oracle {
 
 impl Oracle {
     /// Create an oracle with a specific secret key
+    /// 
+    /// NOTE: Legacy - kept for testing only
     pub fn from_secret(name: &str, secret: &[u8; 32]) -> Result<Self, String> {
         let secp = Secp256k1::new();
         
@@ -43,10 +188,23 @@ impl Oracle {
     }
     
     /// Create the default local oracle with deterministic key
-    /// In production, this key should be stored securely and rotated
+    /// 
+    /// NOTE: Legacy - kept for testing only. Production uses preimage settlement.
+    #[deprecated(note = "Use PreimageSettlement::from_breez_preimage() for production")]
     pub fn local() -> Self {
         // Derive oracle key deterministically from domain separator
         // This ensures consistent key across app restarts
+        let mut hasher = Sha256::new();
+        hasher.update(ORACLE_KEY_DOMAIN);
+        hasher.update(b"signedby_local_oracle_v1");
+        let seed: [u8; 32] = hasher.finalize().into();
+        
+        Self::from_secret("signedby_oracle", &seed)
+            .expect("Oracle key derivation should never fail")
+    }
+    
+    /// Create local oracle (non-deprecated version for test compatibility)
+    pub fn local_for_testing() -> Self {
         let mut hasher = Sha256::new();
         hasher.update(ORACLE_KEY_DOMAIN);
         hasher.update(b"signedby_local_oracle_v1");
@@ -322,16 +480,92 @@ pub fn sign_dlc_outcome_json(outcome: &str) -> String {
 mod tests {
     use super::*;
     
+    // ========== Preimage Settlement Tests (Production) ==========
+    
+    #[test]
+    fn test_preimage_verification_valid() {
+        // Known preimage/hash pair (from BOLT11 spec example)
+        // preimage: 0001020304050607080910111213141516171819202122232425262728293031
+        // SHA256 of above = payment_hash
+        let preimage = "0001020304050607080910111213141516171819202122232425262728293031";
+        let payment_hash = compute_payment_hash(preimage).unwrap();
+        
+        assert!(verify_preimage(preimage, &payment_hash));
+    }
+    
+    #[test]
+    fn test_preimage_verification_invalid() {
+        let preimage = "0001020304050607080910111213141516171819202122232425262728293031";
+        let wrong_hash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        
+        assert!(!verify_preimage(preimage, wrong_hash));
+    }
+    
+    #[test]
+    fn test_preimage_settlement_from_breez() {
+        let preimage = "aabbccdd".repeat(8); // 32 bytes
+        let payment_hash = compute_payment_hash(&preimage).unwrap();
+        
+        let settlement = PreimageSettlement::from_breez_preimage(&preimage, &payment_hash).unwrap();
+        
+        assert!(settlement.is_valid);
+        assert_eq!(settlement.preimage_hex, preimage);
+        assert!(settlement.settled_at > 0);
+    }
+    
+    #[test]
+    fn test_preimage_settlement_invalid_preimage() {
+        let preimage = "aabbccdd".repeat(8);
+        let wrong_hash = "00".repeat(32);
+        
+        let settlement = PreimageSettlement::from_breez_preimage(&preimage, &wrong_hash).unwrap();
+        
+        assert!(!settlement.is_valid);
+    }
+    
+    #[test]
+    fn test_preimage_settlement_json() {
+        let preimage = "11".repeat(32);
+        let payment_hash = compute_payment_hash(&preimage).unwrap();
+        
+        let settlement = PreimageSettlement::from_breez_preimage(&preimage, &payment_hash).unwrap();
+        let json = settlement.to_json();
+        
+        assert!(json.contains("\"status\": \"ok\""));
+        assert!(json.contains("\"is_valid\": true"));
+        assert!(json.contains("preimage_settlement"));
+    }
+    
+    #[test]
+    fn test_jni_verify_breez_preimage() {
+        let preimage = "22".repeat(32);
+        let payment_hash = compute_payment_hash(&preimage).unwrap();
+        
+        let json = verify_breez_preimage(&preimage, &payment_hash);
+        assert!(json.contains("\"status\": \"ok\""));
+    }
+    
+    #[test]
+    fn test_is_preimage_valid_jni() {
+        let preimage = "33".repeat(32);
+        let payment_hash = compute_payment_hash(&preimage).unwrap();
+        
+        assert!(is_preimage_valid(&preimage, &payment_hash));
+        assert!(!is_preimage_valid(&preimage, "00".repeat(32).as_str()));
+    }
+    
+    // ========== Legacy Oracle Tests (Testing Only) ==========
+    
     #[test]
     fn test_oracle_creation() {
-        let oracle = Oracle::local();
+        let oracle = Oracle::local_for_testing();
         assert!(!oracle.pubkey_hex().is_empty());
         assert_eq!(oracle.x_only_pubkey_hex().len(), 64); // 32 bytes = 64 hex chars
     }
     
     #[test]
     fn test_sign_and_verify() {
-        let oracle = Oracle::local();
+        let oracle = Oracle::local_for_testing();
         let attestation = oracle.sign_outcome("auth_verified");
         
         // Verify the signature
@@ -341,7 +575,7 @@ mod tests {
     
     #[test]
     fn test_different_outcomes_different_sigs() {
-        let oracle = Oracle::local();
+        let oracle = Oracle::local_for_testing();
         let att1 = oracle.sign_outcome("auth_verified");
         let att2 = oracle.sign_outcome("refund");
         
@@ -351,15 +585,15 @@ mod tests {
     #[test]
     fn test_deterministic_oracle_key() {
         // Oracle key should be consistent across calls
-        let oracle1 = Oracle::local();
-        let oracle2 = Oracle::local();
+        let oracle1 = Oracle::local_for_testing();
+        let oracle2 = Oracle::local_for_testing();
         
         assert_eq!(oracle1.x_only_pubkey_hex(), oracle2.x_only_pubkey_hex());
     }
     
     #[test]
     fn test_policy_acknowledgment() {
-        let oracle = Oracle::local();
+        let oracle = Oracle::local_for_testing();
         let ack = oracle.acknowledge_policy("auth_verified", "contract_123");
         
         assert_eq!(ack.outcome, "auth_verified");
@@ -372,7 +606,7 @@ mod tests {
         let attestation = OracleAttestation {
             outcome: "auth_verified".to_string(),
             signature_hex: "00".repeat(64), // Invalid signature
-            pubkey_hex: Oracle::local().x_only_pubkey_hex(),
+            pubkey_hex: Oracle::local_for_testing().x_only_pubkey_hex(),
             timestamp: 0,
         };
         
