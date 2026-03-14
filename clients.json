@@ -17,6 +17,9 @@
       "verification_required": false,
       "verification_provider": "none",
       "verification_type": "none"
+    },
+    "payment_model": {
+      "amount_sats": 100
     }
   }
 }
