@@ -1047,6 +1047,181 @@ class DidWalletManager(private val context: Context) {
     
     private val witnessDir = "witnesses"
     private val leafSecretFile = "leaf_secret.bin"
+    private val rootCacheFile = "root_cache.json"
+
+    // ============================================================================
+    // Root Freshness Check (Phase 25)
+    // ============================================================================
+
+    /**
+     * Cached root info for freshness checking.
+     * Stored on-device (internal storage, not cloud).
+     */
+    data class RootCache(
+        val rootId: String,
+        val clientId: String,
+        val lastUpdated: Long
+    ) {
+        fun toJson(): String = org.json.JSONObject().apply {
+            put("root_id", rootId)
+            put("client_id", clientId)
+            put("last_updated", lastUpdated)
+        }.toString()
+
+        companion object {
+            fun fromJson(json: String): RootCache {
+                val obj = org.json.JSONObject(json)
+                return RootCache(
+                    rootId = obj.getString("root_id"),
+                    clientId = obj.getString("client_id"),
+                    lastUpdated = obj.getLong("last_updated")
+                )
+            }
+        }
+    }
+
+    /**
+     * Result of root freshness check.
+     */
+    sealed class RootCheckResult {
+        /** Root is fresh, proceed with proof generation */
+        object Fresh : RootCheckResult()
+        /** Root rotated, witness refreshed successfully */
+        object Refreshed : RootCheckResult()
+        /** User was pruned from tree, needs re-enrollment */
+        data class Pruned(val serviceName: String) : RootCheckResult()
+        /** Check failed (network error, etc.) - proceed with cached witness */
+        data class Error(val message: String) : RootCheckResult()
+    }
+
+    /**
+     * Store root cache after fetching witness.
+     */
+    fun storeRootCache(rootId: String, clientId: String) {
+        try {
+            val cache = RootCache(
+                rootId = rootId,
+                clientId = clientId,
+                lastUpdated = System.currentTimeMillis() / 1000
+            )
+            val dir = context.getDir(witnessDir, Context.MODE_PRIVATE)
+            java.io.File(dir, "${clientId}_$rootCacheFile").writeText(cache.toJson())
+            android.util.Log.i("SignedByMe", "Root cache stored: $rootId for $clientId")
+        } catch (e: Exception) {
+            android.util.Log.e("SignedByMe", "Failed to store root cache: ${e.message}")
+        }
+    }
+
+    /**
+     * Load cached root info for a client.
+     */
+    fun loadRootCache(clientId: String): RootCache? {
+        return try {
+            val dir = context.getDir(witnessDir, Context.MODE_PRIVATE)
+            val file = java.io.File(dir, "${clientId}_$rootCacheFile")
+            if (file.exists()) {
+                RootCache.fromJson(file.readText())
+            } else null
+        } catch (e: Exception) {
+            android.util.Log.e("SignedByMe", "Failed to load root cache: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Check if root is fresh before proof generation (Phase 25.1).
+     * 
+     * Called silently before generateGroth16Proof(). In happy path, this adds
+     * no visible delay. If root rotated, fetches new witness automatically.
+     * 
+     * @param clientId Enterprise client ID
+     * @param apiBaseUrl API base URL for freshness check
+     * @param apiKey API key for requests
+     * @return RootCheckResult indicating action taken
+     */
+    suspend fun checkRootFreshness(
+        clientId: String,
+        apiBaseUrl: String,
+        apiKey: String
+    ): RootCheckResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val cachedRoot = loadRootCache(clientId)
+            
+            // Fetch current root from server
+            val currentRootId = fetchCurrentRootId(clientId, apiBaseUrl, apiKey)
+            if (currentRootId == null) {
+                android.util.Log.w("SignedByMe", "Root freshness check failed, proceeding with cached witness")
+                return@withContext RootCheckResult.Error("Could not fetch current root")
+            }
+
+            // If no cache exists, this is first login - fetch witness
+            if (cachedRoot == null) {
+                android.util.Log.i("SignedByMe", "No root cache, fetching initial witness")
+                val witness = fetchWitness(apiBaseUrl, apiKey)
+                return@withContext if (witness != null) {
+                    RootCheckResult.Fresh
+                } else {
+                    RootCheckResult.Error("Could not fetch witness")
+                }
+            }
+
+            // Compare root IDs
+            if (cachedRoot.rootId == currentRootId) {
+                android.util.Log.i("SignedByMe", "Root is fresh: ${cachedRoot.rootId}")
+                return@withContext RootCheckResult.Fresh
+            }
+
+            // Root rotated - need to fetch fresh witness
+            android.util.Log.i("SignedByMe", "Root rotated: ${cachedRoot.rootId} -> $currentRootId")
+            
+            val freshWitness = fetchWitness(apiBaseUrl, apiKey)
+            if (freshWitness != null) {
+                android.util.Log.i("SignedByMe", "Witness refreshed for new root: ${freshWitness.rootId}")
+                return@withContext RootCheckResult.Refreshed
+            }
+
+            // Witness fetch failed - user may have been pruned
+            android.util.Log.w("SignedByMe", "Witness fetch failed after root rotation - user may be pruned")
+            val enrollment = loadEnrollment()
+            val serviceName = enrollment?.clientId ?: clientId
+            return@withContext RootCheckResult.Pruned(serviceName)
+
+        } catch (e: Exception) {
+            android.util.Log.e("SignedByMe", "Root freshness check exception: ${e.message}")
+            RootCheckResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    /**
+     * Fetch current root ID from API.
+     * GET /v1/roots/current?client_id=<client_id>
+     */
+    private suspend fun fetchCurrentRootId(
+        clientId: String,
+        apiBaseUrl: String,
+        apiKey: String
+    ): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val url = java.net.URL("$apiBaseUrl/v1/roots/current?client_id=${java.net.URLEncoder.encode(clientId, "UTF-8")}")
+            val conn = url.openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("X-API-Key", apiKey)
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
+
+            if (conn.responseCode != 200) {
+                android.util.Log.w("SignedByMe", "Fetch current root failed: HTTP ${conn.responseCode}")
+                return@withContext null
+            }
+
+            val response = conn.inputStream.bufferedReader().readText()
+            val json = org.json.JSONObject(response)
+            json.getString("root_id")
+        } catch (e: Exception) {
+            android.util.Log.e("SignedByMe", "Fetch current root exception: ${e.message}")
+            null
+        }
+    }
     
     /**
      * Copy bundled witness files from assets to app_witnesses directory.
@@ -1694,6 +1869,9 @@ class DidWalletManager(private val context: Context) {
                 put("path_bits", org.json.JSONArray(pathBits.map { it.toInt() }))
                 put("root_hash", witnessData.rootHex)
             }.toString())
+
+            // Phase 25.2: Store root cache for freshness checking
+            storeRootCache(witnessData.rootId, witnessData.clientId)
 
             android.util.Log.i("SignedByMe", "Witness fetched and stored: ${witnessData.rootId}")
             witnessData
