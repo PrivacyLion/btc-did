@@ -991,6 +991,46 @@ fun SignedByMeApp(
                                 return@launch
                             }
                             
+                            // Phase 25.1: Root freshness check before proof generation
+                            val rootCheckResult = didMgr.checkRootFreshness(
+                                clientId = clientId,
+                                apiBaseUrl = API_BASE_URL,
+                                apiKey = "acme-test-key-2026"
+                            )
+                            
+                            when (rootCheckResult) {
+                                is DidWalletManager.RootCheckResult.Fresh -> {
+                                    // Happy path - root unchanged, proceed silently
+                                    android.util.Log.i("SignedByMe", "Root fresh, proceeding with proof")
+                                }
+                                is DidWalletManager.RootCheckResult.Refreshed -> {
+                                    // Root rotated but witness refreshed - brief status
+                                    withContext(Dispatchers.Main) {
+                                        statusMessage = "Updating membership data..."
+                                    }
+                                    kotlinx.coroutines.delay(500) // Brief pause so user sees update
+                                    android.util.Log.i("SignedByMe", "Witness refreshed, proceeding with proof")
+                                }
+                                is DidWalletManager.RootCheckResult.Pruned -> {
+                                    // User pruned from tree - show re-enrollment screen
+                                    android.util.Log.w("SignedByMe", "User pruned from tree: ${rootCheckResult.serviceName}")
+                                    withContext(Dispatchers.Main) {
+                                        statusMessage = "You are no longer enrolled in ${rootCheckResult.serviceName}. Please re-enroll."
+                                        isCreatingInvoice = false
+                                        isLoginActive = false
+                                        isPollingPayment = false
+                                        // Trigger re-enrollment screen
+                                        showReEnrollmentScreen = true
+                                        enrollmentList = didMgr.loadEnrollmentList()
+                                    }
+                                    return@launch
+                                }
+                                is DidWalletManager.RootCheckResult.Error -> {
+                                    // Check failed - proceed with cached witness (best effort)
+                                    android.util.Log.w("SignedByMe", "Root check failed: ${rootCheckResult.message}, proceeding with cached witness")
+                                }
+                            }
+                            
                             // Generate Groth16 membership proof
                             android.util.Log.i("SignedByMe", "Generating Groth16 proof for client=$clientId")
                             val proofResult = didMgr.generateGroth16Proof(clientId, "default")
