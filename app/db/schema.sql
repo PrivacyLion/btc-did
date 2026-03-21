@@ -1,90 +1,86 @@
 -- SignedByMe SQLite Schema
--- Phase 8: Stateless architecture (no sessions, no DIDs on server)
+-- Phase 26: Simplified architecture with NOSTR-native authorization
 
 -- Version tracking
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
     applied_at TEXT DEFAULT (datetime('now'))
 );
-INSERT OR IGNORE INTO schema_version (version) VALUES (3);
+INSERT OR IGNORE INTO schema_version (version) VALUES (26);
 
 -- ============================================================================
--- ENROLLMENTS
--- User membership enrollment with status tracking
+-- MERKLE LEAVES
+-- Phase 26: Stores leaf commitments (enrollment_id eliminated)
+-- Authorization is via kind 28200 NOSTR event signature
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS enrollments (
-    id TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    purpose TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS merkle_leaves (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tree_id TEXT NOT NULL,
+    leaf_index INTEGER NOT NULL,
+    leaf_commitment TEXT NOT NULL,          -- 32-byte hex
     
-    -- Enrollment data
-    leaf_commitment TEXT NOT NULL,  -- Never changes
-    email_hash TEXT,                -- For verification
-    
-    -- Status: pending, approved, rejected, in_tree
-    status TEXT DEFAULT 'pending',
-    
-    -- Tree position (set when status = in_tree)
-    tree_id TEXT,
-    leaf_index INTEGER,
+    -- Authorization event (kind 28200)
+    authorization_event_id TEXT NOT NULL,   -- NOSTR event ID
+    authorization_pubkey TEXT NOT NULL,     -- Enterprise pubkey (hex)
     
     -- Timestamps
     created_at INTEGER DEFAULT (strftime('%s', 'now')),
-    approved_at INTEGER,
-    rejected_at INTEGER,
-    tree_built_at INTEGER
+    
+    UNIQUE(tree_id, leaf_index),
+    UNIQUE(tree_id, leaf_commitment)
 );
-CREATE INDEX IF NOT EXISTS idx_enrollments_client ON enrollments(client_id);
-CREATE INDEX IF NOT EXISTS idx_enrollments_status ON enrollments(status);
-CREATE INDEX IF NOT EXISTS idx_enrollments_purpose ON enrollments(client_id, purpose);
+CREATE INDEX IF NOT EXISTS idx_leaves_tree ON merkle_leaves(tree_id);
+CREATE INDEX IF NOT EXISTS idx_leaves_commitment ON merkle_leaves(leaf_commitment);
+CREATE INDEX IF NOT EXISTS idx_leaves_auth_event ON merkle_leaves(authorization_event_id);
 
 -- ============================================================================
 -- MERKLE ROOTS
--- Published roots per client/purpose
+-- Published roots per tree (last 30 valid)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS merkle_roots (
-    id TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    purpose TEXT NOT NULL,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tree_id TEXT NOT NULL,
     root_hash TEXT NOT NULL,
-    
-    -- Tree metadata
-    leaf_count INTEGER NOT NULL,
-    tree_depth INTEGER NOT NULL,
-    
-    -- Active flag (only one active per client+purpose)
-    active INTEGER DEFAULT 1,
+    leaf_index INTEGER NOT NULL,            -- Index when this root was computed
     
     -- Timestamps
-    created_at INTEGER DEFAULT (strftime('%s', 'now')),
-    superseded_at INTEGER
+    created_at INTEGER DEFAULT (strftime('%s', 'now'))
 );
-CREATE INDEX IF NOT EXISTS idx_roots_client ON merkle_roots(client_id);
-CREATE INDEX IF NOT EXISTS idx_roots_active ON merkle_roots(client_id, purpose, active);
+CREATE INDEX IF NOT EXISTS idx_roots_tree ON merkle_roots(tree_id);
+CREATE INDEX IF NOT EXISTS idx_roots_hash ON merkle_roots(root_hash);
+CREATE INDEX IF NOT EXISTS idx_roots_created ON merkle_roots(tree_id, created_at DESC);
 
 -- ============================================================================
--- MERKLE WITNESSES
--- Per-user witnesses for proving membership
+-- LOGIN VERIFICATIONS
+-- Log of successful logins (receipts for audit)
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS merkle_witnesses (
-    enrollment_id TEXT PRIMARY KEY,
-    root_id TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS login_verifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    npub TEXT NOT NULL,                     -- bech32 npub
+    client_id TEXT NOT NULL,
+    merkle_root TEXT NOT NULL,
     
-    -- Witness data (JSON array of siblings)
-    siblings_json TEXT NOT NULL,
-    path_bits_json TEXT NOT NULL,
-    leaf_index INTEGER NOT NULL,
+    -- NOSTR event (Phase 26)
+    login_event_id TEXT,                    -- NOSTR event ID containing proof
     
-    FOREIGN KEY (enrollment_id) REFERENCES enrollments(id),
-    FOREIGN KEY (root_id) REFERENCES merkle_roots(id)
+    -- Payment verification
+    payment_hash_user TEXT,
+    payment_hash_operator TEXT,
+    
+    -- Timestamps
+    verified_at INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_verifications_client ON login_verifications(client_id);
+CREATE INDEX IF NOT EXISTS idx_verifications_npub ON login_verifications(npub);
+CREATE INDEX IF NOT EXISTS idx_verifications_time ON login_verifications(verified_at);
+CREATE INDEX IF NOT EXISTS idx_verifications_event ON login_verifications(login_event_id);
 
 -- ============================================================================
--- INCREMENTAL MERKLE TREES
--- Stores tree state for incremental updates (new root on each insert)
+-- MERKLE TREES (state tracking)
+-- Stores incremental tree state for O(log n) updates
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS merkle_trees (
-    id TEXT PRIMARY KEY,  -- tree_id (e.g., "acme-allowlist")
+    id TEXT PRIMARY KEY,                    -- tree_id (e.g., "acme-allowlist")
     client_id TEXT NOT NULL,
     purpose TEXT NOT NULL,
     
@@ -102,69 +98,22 @@ CREATE TABLE IF NOT EXISTS merkle_trees (
 CREATE INDEX IF NOT EXISTS idx_trees_client ON merkle_trees(client_id);
 
 -- ============================================================================
--- ROOT HISTORY
--- Track last N roots for validity window (last 30 roots valid)
+-- MERKLE WITNESSES
+-- Per-leaf witnesses for proving membership
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS root_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE IF NOT EXISTS merkle_witnesses (
+    leaf_id INTEGER PRIMARY KEY,
     tree_id TEXT NOT NULL,
-    root_hash TEXT NOT NULL,
-    leaf_index INTEGER NOT NULL,  -- Index when this root was computed
-    created_at INTEGER DEFAULT (strftime('%s', 'now')),
     
-    FOREIGN KEY (tree_id) REFERENCES merkle_trees(id)
+    -- Witness data
+    siblings_json TEXT NOT NULL,            -- JSON array of sibling hashes
+    path_bits_json TEXT NOT NULL,           -- JSON array of path bits
+    leaf_index INTEGER NOT NULL,
+    root_hash TEXT NOT NULL,                -- Root at time of insertion
+    
+    FOREIGN KEY (leaf_id) REFERENCES merkle_leaves(id)
 );
-CREATE INDEX IF NOT EXISTS idx_root_history_tree ON root_history(tree_id);
-CREATE INDEX IF NOT EXISTS idx_root_history_hash ON root_history(root_hash);
-
--- ============================================================================
--- LOGIN VERIFICATIONS
--- Phase 8: Log of successful Groth16 verifications (receipts only, no preimages)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS login_verifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    npub TEXT NOT NULL,
-    client_id TEXT NOT NULL,
-    merkle_root TEXT NOT NULL,
-    payment_hash_user TEXT NOT NULL,
-    payment_hash_operator TEXT NOT NULL,
-    verified_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_verifications_client ON login_verifications(client_id);
-CREATE INDEX IF NOT EXISTS idx_verifications_npub ON login_verifications(npub);
-CREATE INDEX IF NOT EXISTS idx_verifications_time ON login_verifications(verified_at);
-
--- ============================================================================
--- ENROLLMENT SESSIONS (3-step verification flow)
--- Phase 10: Enrollment sessions for third-party verification (Persona, Jumio)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS enrollment_sessions (
-    id TEXT PRIMARY KEY,                    -- enrollment_session_id
-    client_id TEXT NOT NULL,
-    verification_type TEXT NOT NULL,        -- e.g., "age_18_plus", "kyc_basic"
-    verification_provider TEXT,             -- e.g., "persona", "jumio"
-    callback_url TEXT,                      -- Enterprise webhook for completion
-    
-    -- Verification status
-    verification_passed INTEGER DEFAULT 0,  -- 0=pending, 1=passed
-    provider_signature TEXT,                -- Cryptographic attestation from verifier
-    
-    -- Commitment (set by enroll/commit)
-    leaf_commitment TEXT,                   -- Set when user commits
-    used INTEGER DEFAULT 0,                 -- 1=commitment submitted, session consumed
-    
-    -- Timestamps
-    created_at INTEGER DEFAULT (strftime('%s', 'now')),
-    verified_at INTEGER,                    -- When verification passed
-    committed_at INTEGER,                   -- When commitment was submitted
-    expires_at INTEGER NOT NULL             -- Session expiry
-);
-CREATE INDEX IF NOT EXISTS idx_enroll_sessions_client ON enrollment_sessions(client_id);
-CREATE INDEX IF NOT EXISTS idx_enroll_sessions_expires ON enrollment_sessions(expires_at);
-
--- NOTE: enrollment_tokens and did_challenges tables REMOVED per Bible Phase 8 cleanup
--- - enrollment_tokens: Deleted - enrollment uses session-based auth only
--- - did_challenges: Deleted - server must never store anything labeled "DID" (Bible violation)
+CREATE INDEX IF NOT EXISTS idx_witnesses_tree ON merkle_witnesses(tree_id);
 
 -- ============================================================================
 -- AUDIT LOG (optional - for debugging)
@@ -173,7 +122,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_type TEXT NOT NULL,
     client_id TEXT,
+    session_id TEXT,
     details_json TEXT,
     created_at INTEGER DEFAULT (strftime('%s', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+
+-- ============================================================================
+-- MIGRATION: Phase 26
+-- If upgrading from Phase 10, run these to migrate data:
+-- 
+-- 1. Create new tables (merkle_leaves from enrollments)
+-- 2. Drop deprecated tables (enrollments, enrollment_sessions, enrollment_tokens)
+--
+-- Note: Fresh installs don't need migration.
+-- ============================================================================
