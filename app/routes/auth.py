@@ -5,7 +5,7 @@ Per the Bible:
 - Enterprise generates QR locally (no server call)
 - App publishes proof_event to NOSTR
 - Enterprise catches event, pays invoices, calls POST /v1/login/verify
-- /v1/login/verify is in groth16_login.py
+- /v1/login/verify is in login.py (Phase 26)
 
 All endpoints in this file are DEPRECATED and will be removed.
 """
@@ -23,7 +23,7 @@ from ..lib import store
 router = APIRouter(tags=["login"])
 
 # DEPRECATED: All login/* endpoints below are removed per Bible Decision 10.
-# Enterprise generates QR locally. Only /v1/login/verify exists (in groth16_login.py).
+# Enterprise generates QR locally. Only /v1/login/verify exists (in login.py).
 
 # @router.post("/login/start") - DELETED: Enterprise generates nonce locally
 # @router.post("/login/complete") - DELETED: App publishes to NOSTR, not server  
