@@ -21,8 +21,6 @@ from ..db import (
     get_connection,
     count_verifications,
     get_verifications,
-    list_roots,
-    list_enrollments,
 )
 
 logger = logging.getLogger("admin")
