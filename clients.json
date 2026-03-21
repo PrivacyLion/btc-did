@@ -1,6 +1,7 @@
 {
   "acme": {
     "name": "Acme Corp",
+    "domain": "acme.beta.privacy-lion.com",
     "api_key": "acme-test-key-2026",
     "redirect_uris": [
       "https://acme.beta.privacy-lion.com/callback",

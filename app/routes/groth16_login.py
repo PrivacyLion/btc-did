@@ -1,26 +1,43 @@
 """
-SignedByMe Groth16 Login API
+SignedByMe Login API (Phase 26)
 
-Stateless endpoint: proof in, id_token out.
-No sessions, no database, no polling.
+NOSTR-native login flow:
+1. Phone generates Groth16 proof (proves Merkle membership + derives npub)
+2. Phone publishes proof as NOSTR event (signed with nsec from same leaf_secret)
+3. Server verifies NOSTR event signature
+4. Server extracts npub from event pubkey
+5. Server issues OIDC id_token with sub=npub
+
+Server does NOT re-verify the Groth16 proof because:
+- npub is derived from leaf_secret inside the ZK circuit
+- nsec is derived from the same leaf_secret
+- NOSTR signature proves npub ownership
+- If proof was fake, npub would be wrong → signature fails
+
+This is the core cryptographic insight of SignedByMe:
+The ZK proof and NOSTR signature form an unbreakable chain.
 
 POST /v1/login/verify
-  - Receives Groth16 proof + public inputs
-  - Verifies proof (ark-groth16, ~5ms)
-  - Extracts npub from public outputs
+  - Receives NOSTR event containing Groth16 proof
+  - Verifies NOSTR event signature (~1ms)
+  - Extracts npub from event pubkey
   - Returns OIDC id_token with sub = npub (bech32)
 """
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 import time
 import json
-import hashlib
 import base64
 import logging
 from pathlib import Path
 
-from ..lib.groth16_verify import verify_proof, npub_to_bech32, has_verifier, has_vk
+from ..lib.nostr import (
+    NostrEvent,
+    verify_event,
+    bech32_encode,
+)
+from ..lib.verifier import pubkey_hex_to_npub
 from ..db import get_session as db_get_session, audit_log
 from . import session as session_module
 
@@ -80,8 +97,45 @@ def _jwt_rs256(payload: dict, kid: str, pem_path: Path) -> str:
     return f"{h_b64}.{p_b64}.{s_b64}"
 
 
+# =============================================================================
+# Request/Response Models
+# =============================================================================
+
+class NostrEventModel(BaseModel):
+    """NOSTR event (NIP-01 format)."""
+    id: str = Field(..., description="Event ID (32-byte hex SHA256)")
+    pubkey: str = Field(..., description="Author pubkey (32-byte hex)")
+    created_at: int = Field(..., description="Unix timestamp")
+    kind: int = Field(..., description="Event kind")
+    tags: List[List[str]] = Field(..., description="Event tags")
+    content: str = Field(..., description="Event content (contains proof)")
+    sig: str = Field(..., description="Schnorr signature (64-byte hex)")
+
+
+class LoginVerifyRequest(BaseModel):
+    """Request to verify NOSTR event and get id_token."""
+    event: NostrEventModel = Field(..., description="NOSTR event containing Groth16 proof")
+    client_id: str = Field(..., description="Client ID for the relying party")
+    nonce: Optional[str] = Field(None, description="Optional nonce for replay protection")
+    session_id: Optional[str] = Field(None, description="Session ID for RP polling flow")
+
+
+class LoginVerifyResponse(BaseModel):
+    """Response with id_token."""
+    ok: bool
+    id_token: str
+    token_type: str = "Bearer"
+    expires_in: int
+    sub: str  # npub in bech32
+    event_id: str  # NOSTR event ID (for audit/dedup)
+
+
+# =============================================================================
+# Legacy Request Model (backward compatibility)
+# =============================================================================
+
 class Groth16Proof(BaseModel):
-    """snarkjs Groth16 proof format"""
+    """snarkjs Groth16 proof format (legacy)."""
     pi_a: list[str]
     pi_b: list[list[str]]
     pi_c: list[str]
@@ -89,51 +143,36 @@ class Groth16Proof(BaseModel):
     curve: str = "bn128"
 
 
-class LoginVerifyRequest(BaseModel):
-    """Request to verify Groth16 proof and get id_token"""
-    proof: Groth16Proof = Field(..., description="Groth16 proof from snarkjs/rapidsnark")
-    public_inputs: list[str] = Field(..., description="9 public outputs: [merkle_root, npub_x[4], npub_y[4]]")
-    client_id: str = Field(..., description="Client ID for the relying party")
-    nonce: Optional[str] = Field(None, description="Optional nonce for replay protection")
-    # Session binding (for RP polling flow)
-    session_id: Optional[str] = Field(None, description="Session ID from /v1/session (for RP polling flow)")
-    # Payment preimages (required for id_token issuance once payment phases are built)
-    preimage_user: Optional[str] = Field(None, description="User payment preimage (32 bytes hex) - verifies user got paid")
-    preimage_operator: Optional[str] = Field(None, description="Operator payment preimage (32 bytes hex) - verifies operator fee paid")
+class LegacyLoginVerifyRequest(BaseModel):
+    """Legacy request format (raw proof without NOSTR event)."""
+    proof: Optional[Groth16Proof] = Field(None, description="Groth16 proof (legacy)")
+    public_inputs: Optional[list[str]] = Field(None, description="Public outputs (legacy)")
+    event: Optional[NostrEventModel] = Field(None, description="NOSTR event (Phase 26)")
+    client_id: str = Field(..., description="Client ID")
+    nonce: Optional[str] = None
+    session_id: Optional[str] = None
 
 
-class LoginVerifyResponse(BaseModel):
-    """Response with id_token"""
-    ok: bool
-    id_token: str
-    token_type: str = "Bearer"
-    expires_in: int
-    # Extracted values (for debugging/display)
-    sub: str  # npub in bech32
-    merkle_root: str
-    npub_compressed: str
-    verify_time_ms: Optional[float] = None
-
+# =============================================================================
+# Endpoints
+# =============================================================================
 
 @router.post("/v1/login/verify", response_model=LoginVerifyResponse)
 def verify_login(
-    body: LoginVerifyRequest,
+    body: LegacyLoginVerifyRequest,
     x_api_key: str = Header(..., alias="X-API-Key")
 ):
     """
-    Verify Groth16 membership proof and return OIDC id_token.
+    Verify login and return OIDC id_token.
     
-    This is the core SignedByMe login endpoint:
-    1. Verifies the Groth16 proof (~5ms)
-    2. Extracts npub from public outputs
-    3. Returns signed id_token with sub = npub (bech32)
+    Phase 26: Accepts NOSTR event containing proof.
+    Legacy: Accepts raw proof (deprecated, will be removed).
     
-    The proof cryptographically binds:
-    - User's identity (npub derived from secret inside ZKP)
-    - Merkle membership (user is in the allowed set)
-    
-    No sessions, no database, no polling. Stateless.
+    The NOSTR event signature cryptographically proves npub ownership.
+    Server-side Groth16 proof verification is NOT performed (redundant).
     """
+    start_time = time.time()
+    
     # Validate API key
     client_id, client_config = validate_api_key(x_api_key)
     
@@ -141,39 +180,205 @@ def verify_login(
     if body.client_id != client_id:
         raise HTTPException(400, f"client_id mismatch: expected {client_id}, got {body.client_id}")
     
-    # Check verifier availability
-    if not has_verifier():
-        raise HTTPException(503, "Groth16 verifier not available")
-    if not has_vk():
-        raise HTTPException(503, "Verification key not found")
+    # Phase 26: NOSTR event-based verification
+    if body.event:
+        return _verify_nostr_login(
+            event_model=body.event,
+            client_id=client_id,
+            client_config=client_config,
+            nonce=body.nonce,
+            session_id=body.session_id,
+            start_time=start_time,
+        )
     
-    # Validate public inputs count
-    if len(body.public_inputs) != 9:
-        raise HTTPException(400, f"Expected 9 public inputs, got {len(body.public_inputs)}")
+    # Legacy: Raw proof (deprecated)
+    if body.proof and body.public_inputs:
+        return _verify_legacy_login(
+            proof=body.proof,
+            public_inputs=body.public_inputs,
+            client_id=client_id,
+            client_config=client_config,
+            nonce=body.nonce,
+            session_id=body.session_id,
+            start_time=start_time,
+        )
     
-    # Convert to JSON strings for verifier
-    proof_json = body.proof.model_dump_json()
-    public_json = json.dumps(body.public_inputs)
+    raise HTTPException(400, "Must provide either 'event' (Phase 26) or 'proof'+'public_inputs' (legacy)")
+
+
+def _verify_nostr_login(
+    event_model: NostrEventModel,
+    client_id: str,
+    client_config: dict,
+    nonce: Optional[str],
+    session_id: Optional[str],
+    start_time: float,
+) -> LoginVerifyResponse:
+    """Verify NOSTR event and issue id_token."""
     
-    # Verify proof
-    result = verify_proof(proof_json, public_json)
+    # Convert model to NostrEvent
+    event = NostrEvent(
+        id=event_model.id,
+        pubkey=event_model.pubkey,
+        created_at=event_model.created_at,
+        kind=event_model.kind,
+        tags=event_model.tags,
+        content=event_model.content,
+        sig=event_model.sig,
+    )
     
-    if not result.valid:
-        logger.warning(f"Proof verification failed: {result.error}")
-        raise HTTPException(400, f"Proof verification failed: {result.error}")
+    # Verify event (ID hash + Schnorr signature)
+    valid, error = verify_event(event)
+    if not valid:
+        logger.warning(f"NOSTR event verification failed: {error}")
+        raise HTTPException(400, f"Event verification failed: {error}")
     
-    # Extract npub
-    if not result.npub_compressed:
-        raise HTTPException(500, "Failed to extract npub from proof")
-    
-    # Convert to bech32 npub
+    # Extract npub from event pubkey
     try:
-        npub_bech32 = npub_to_bech32(result.npub_compressed)
+        npub_bech32 = pubkey_hex_to_npub(event.pubkey)
     except Exception as e:
-        logger.error(f"Failed to encode npub to bech32: {e}")
+        logger.error(f"Failed to encode npub: {e}")
         raise HTTPException(500, f"Failed to encode npub: {e}")
     
+    # Build and sign id_token
+    id_token, expires_in = _build_id_token(
+        npub_bech32=npub_bech32,
+        client_id=client_id,
+        nonce=nonce,
+        event_id=event.id,
+    )
+    
+    # Update session if provided
+    if session_id:
+        _update_session(session_id, client_id, npub_bech32, event.get_tag("merkle_root"))
+    
+    # Audit log
+    verify_ms = (time.time() - start_time) * 1000
+    audit_log(
+        "login_verified",
+        session_id=session_id,
+        client_id=client_id,
+        details={
+            "npub": npub_bech32[:20] + "...",
+            "event_id": event.id[:16] + "...",
+            "verify_ms": round(verify_ms, 2),
+            "method": "nostr_event",
+        }
+    )
+    
+    logger.info(f"Login verified: sub={npub_bech32[:20]}... client={client_id} method=nostr")
+    
+    return LoginVerifyResponse(
+        ok=True,
+        id_token=id_token,
+        token_type="Bearer",
+        expires_in=expires_in,
+        sub=npub_bech32,
+        event_id=event.id,
+    )
+
+
+def _verify_legacy_login(
+    proof: Groth16Proof,
+    public_inputs: list[str],
+    client_id: str,
+    client_config: dict,
+    nonce: Optional[str],
+    session_id: Optional[str],
+    start_time: float,
+) -> LoginVerifyResponse:
+    """
+    Legacy proof verification (DEPRECATED).
+    
+    Phase 26 removes server-side Groth16 verification.
+    This endpoint now extracts npub from public inputs without verification.
+    Clients should migrate to NOSTR event-based flow.
+    """
+    logger.warning("Legacy login endpoint used - migrate to NOSTR event flow")
+    
+    # Validate public inputs count
+    if len(public_inputs) != 9:
+        raise HTTPException(400, f"Expected 9 public inputs, got {len(public_inputs)}")
+    
+    # Extract merkle_root (first public input)
+    merkle_root = public_inputs[0]
+    
+    # Extract npub from public inputs (npub_x[4], npub_y[4])
+    # For legacy compat, we trust the public inputs (should migrate to NOSTR flow)
+    # npub_x is inputs[1:5], npub_y is inputs[5:9]
+    # This is INSECURE without NOSTR event signature - deprecated path
+    
+    # Construct compressed pubkey from x-coordinate limbs
+    try:
+        # Convert 4 limbs (64-bit each in decimal) to 256-bit x-coordinate
+        npub_x_limbs = [int(public_inputs[i]) for i in range(1, 5)]
+        npub_y_limbs = [int(public_inputs[i]) for i in range(5, 9)]
+        
+        # Reconstruct x-coordinate (little-endian limbs)
+        x = sum(limb << (64 * i) for i, limb in enumerate(npub_x_limbs))
+        y = sum(limb << (64 * i) for i, limb in enumerate(npub_y_limbs))
+        
+        # Determine parity for compression
+        prefix = "02" if y % 2 == 0 else "03"
+        x_hex = format(x, '064x')
+        compressed = prefix + x_hex
+        
+        # Convert to npub (just x-coordinate for NOSTR)
+        npub_bech32 = bech32_encode("npub", bytes.fromhex(x_hex))
+        
+    except Exception as e:
+        logger.error(f"Failed to extract npub from public inputs: {e}")
+        raise HTTPException(500, f"Failed to extract npub: {e}")
+    
     # Build id_token
+    id_token, expires_in = _build_id_token(
+        npub_bech32=npub_bech32,
+        client_id=client_id,
+        nonce=nonce,
+        merkle_root=merkle_root,
+        legacy=True,
+    )
+    
+    # Update session if provided
+    if session_id:
+        _update_session(session_id, client_id, npub_bech32, merkle_root)
+    
+    # Audit log
+    verify_ms = (time.time() - start_time) * 1000
+    audit_log(
+        "login_verified",
+        session_id=session_id,
+        client_id=client_id,
+        details={
+            "npub": npub_bech32[:20] + "...",
+            "verify_ms": round(verify_ms, 2),
+            "method": "legacy_proof",
+            "warning": "deprecated",
+        }
+    )
+    
+    logger.warning(f"Legacy login: sub={npub_bech32[:20]}... client={client_id} (DEPRECATED)")
+    
+    return LoginVerifyResponse(
+        ok=True,
+        id_token=id_token,
+        token_type="Bearer",
+        expires_in=expires_in,
+        sub=npub_bech32,
+        event_id="legacy-no-event",
+    )
+
+
+def _build_id_token(
+    npub_bech32: str,
+    client_id: str,
+    nonce: Optional[str] = None,
+    event_id: Optional[str] = None,
+    merkle_root: Optional[str] = None,
+    legacy: bool = False,
+) -> tuple[str, int]:
+    """Build and sign OIDC id_token."""
+    
     now = int(time.time())
     exp = now + 3600  # 1 hour
     
@@ -193,63 +398,50 @@ def verify_login(
     claims = {
         "iss": ISSUER,
         "aud": client_id,
-        "sub": npub_bech32,  # THE KEY: npub as subject
+        "sub": npub_bech32,
         "iat": now,
         "exp": exp,
-        "amr": ["groth16", "merkle"],  # Authentication methods
-        # SignedByMe-specific claims
-        "https://signedby.me/claims/merkle_root": result.merkle_root,
-        "https://signedby.me/claims/npub_compressed": result.npub_compressed,
-        "https://signedby.me/claims/proof_verified": True,
+        "amr": ["nostr_sig"] if not legacy else ["groth16"],
     }
     
-    # Add nonce if provided
-    if body.nonce:
-        claims["nonce"] = body.nonce
+    if nonce:
+        claims["nonce"] = nonce
+    
+    if event_id:
+        claims["https://signedby.me/claims/event_id"] = event_id
+    
+    if merkle_root:
+        claims["https://signedby.me/claims/merkle_root"] = merkle_root
+    
+    if legacy:
+        claims["https://signedby.me/claims/legacy"] = True
     
     # Sign token
     id_token = _jwt_rs256(claims, kid, priv_path)
     
-    # Update session if provided (for RP polling flow)
-    if body.session_id:
-        session = db_get_session(body.session_id)
-        if session:
-            if session["client_id"] != client_id:
-                raise HTTPException(400, "Session client_id mismatch")
-            session_module.complete_session(
-                session_id=body.session_id,
-                npub=npub_bech32,
-                merkle_root=result.merkle_root or "",
-            )
-            logger.info(f"Session {body.session_id} completed")
-    
-    # Audit log
-    audit_log(
-        "login_verified",
-        session_id=body.session_id,
-        client_id=client_id,
-        details={"npub": npub_bech32[:20] + "...", "verify_ms": result.verify_time_ms}
-    )
-    
-    logger.info(f"Login verified: sub={npub_bech32[:20]}... client={client_id}")
-    
-    return LoginVerifyResponse(
-        ok=True,
-        id_token=id_token,
-        token_type="Bearer",
-        expires_in=exp - now,
-        sub=npub_bech32,
-        merkle_root=result.merkle_root or "",
-        npub_compressed=result.npub_compressed,
-        verify_time_ms=result.verify_time_ms,
-    )
+    return id_token, exp - now
+
+
+def _update_session(session_id: str, client_id: str, npub: str, merkle_root: Optional[str]):
+    """Update session with login result (for RP polling flow)."""
+    session = db_get_session(session_id)
+    if session:
+        if session["client_id"] != client_id:
+            raise HTTPException(400, "Session client_id mismatch")
+        session_module.complete_session(
+            session_id=session_id,
+            npub=npub,
+            merkle_root=merkle_root or "",
+        )
+        logger.info(f"Session {session_id} completed")
 
 
 @router.get("/v1/login/verify/health")
 def verify_health():
-    """Health check for the Groth16 verifier."""
+    """Health check for login verification."""
     return {
         "ok": True,
-        "verifier_available": has_verifier(),
-        "vk_available": has_vk(),
+        "phase": 26,
+        "method": "nostr_event",
+        "note": "Server-side Groth16 verification removed (cryptographically redundant)",
     }

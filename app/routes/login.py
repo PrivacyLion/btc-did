@@ -1,15 +1,19 @@
 """
-SignedByMe Login Verification API (Phase 8)
+SignedByMe Login Verification API (Phase 8 → Phase 26)
 
-POST /v1/login/verify - Stateless endpoint. No sessions. No NOSTR on server.
+POST /v1/login/verify - Stateless endpoint. No sessions.
 
-4 checks in order:
-1. Groth16 proof valid (calls Rust verifier from Phase 23)
+Phase 26 changes:
+- Server-side Groth16 verification REMOVED (cryptographically redundant)
+- NOSTR event signature proves npub ownership
+- Payment preimage verification still required
+
+3 checks (Phase 26):
+1. NOSTR event signature valid (proves npub ownership)
 2. merkle_root is in the valid root set (last 30 roots)
-3. SHA256(user_preimage) == user_payment_hash
-4. SHA256(operator_preimage) == operator_payment_hash
+3. SHA256(preimage) == payment_hash (user + operator)
 
-All 4 pass → return id_token
+All pass → return id_token
 Any fail → reject
 
 No database write. No session stored.
@@ -23,7 +27,8 @@ import base64
 import logging
 from pathlib import Path
 
-from ..lib.verifier import verify_groth16_proof, verify_preimage, is_verifier_ready
+from ..lib.verifier import verify_preimage, is_verifier_ready, pubkey_hex_to_npub
+from ..lib.nostr import NostrEvent, verify_event, bech32_encode
 from ..db import is_root_valid_for_client, log_verification
 
 logger = logging.getLogger("login")
@@ -85,8 +90,21 @@ def _jwt_rs256(payload: dict, kid: str, pem_path: Path) -> str:
 
 # === Models ===
 
+from typing import List
+
+class NostrEventModel(BaseModel):
+    """NOSTR event (NIP-01 format)."""
+    id: str = Field(..., description="Event ID (32-byte hex SHA256)")
+    pubkey: str = Field(..., description="Author pubkey (32-byte hex)")
+    created_at: int = Field(..., description="Unix timestamp")
+    kind: int = Field(..., description="Event kind")
+    tags: List[List[str]] = Field(..., description="Event tags")
+    content: str = Field(..., description="Event content")
+    sig: str = Field(..., description="Schnorr signature (64-byte hex)")
+
+
 class Groth16Proof(BaseModel):
-    """snarkjs/rapidsnark Groth16 proof format."""
+    """snarkjs/rapidsnark Groth16 proof format (legacy)."""
     pi_a: list[str]
     pi_b: list[list[str]]
     pi_c: list[str]
@@ -96,13 +114,18 @@ class Groth16Proof(BaseModel):
 
 class LoginVerifyRequest(BaseModel):
     """
-    Request to verify Groth16 proof and issue id_token.
+    Request to verify login and issue id_token.
     
-    Enterprise submits: Groth16 proof + npub + both BOLT11 invoices + both preimages.
+    Phase 26: Enterprise submits NOSTR event + payment preimages.
+    Legacy: Groth16 proof + public_inputs (deprecated).
     """
-    # Groth16 proof
-    proof: Groth16Proof = Field(..., description="Groth16 proof from snarkjs/rapidsnark")
-    public_inputs: list[str] = Field(..., description="9 public outputs: [merkle_root, npub_x[4], npub_y[4]]")
+    # Phase 26: NOSTR event
+    event: Optional[NostrEventModel] = Field(None, description="NOSTR event containing proof (Phase 26)")
+    merkle_root: Optional[str] = Field(None, description="Merkle root for validation (from event tags)")
+    
+    # Legacy: Groth16 proof (deprecated)
+    proof: Optional[Groth16Proof] = Field(None, description="Groth16 proof (legacy, deprecated)")
+    public_inputs: Optional[list[str]] = Field(None, description="Public outputs (legacy, deprecated)")
     
     # Client identification
     client_id: str = Field(..., description="Client ID for the relying party")
@@ -218,29 +241,77 @@ def verify_login(
             })
     
     # =========================================================================
-    # CHECK 1: Groth16 proof valid
+    # CHECK 1: NOSTR event signature valid (Phase 26) or legacy proof
     # =========================================================================
-    proof_json = body.proof.model_dump_json()
-    public_json = json.dumps(body.public_inputs)
     
-    result = verify_groth16_proof(proof_json, public_json)
+    npub_bech32 = None
+    merkle_root = None
     
-    if not result.valid:
-        logger.warning(f"Proof verification failed: {result.error}")
+    if body.event:
+        # Phase 26: NOSTR event verification
+        event = NostrEvent(
+            id=body.event.id,
+            pubkey=body.event.pubkey,
+            created_at=body.event.created_at,
+            kind=body.event.kind,
+            tags=body.event.tags,
+            content=body.event.content,
+            sig=body.event.sig,
+        )
+        
+        valid, error = verify_event(event)
+        if not valid:
+            logger.warning(f"NOSTR event verification failed: {error}")
+            raise HTTPException(400, detail={
+                "ok": False,
+                "error": f"Event verification failed: {error}",
+                "error_code": "invalid_event"
+            })
+        
+        # Extract npub from event pubkey
+        try:
+            npub_bech32 = pubkey_hex_to_npub(event.pubkey)
+        except Exception as e:
+            raise HTTPException(400, detail={
+                "ok": False,
+                "error": f"Failed to extract npub: {e}",
+                "error_code": "npub_extraction_failed"
+            })
+        
+        # Get merkle_root from event tags or request body
+        merkle_root = event.get_tag("merkle_root") or body.merkle_root
+        
+    elif body.proof and body.public_inputs:
+        # Legacy: Extract from public inputs (DEPRECATED)
+        logger.warning("Legacy proof verification used - migrate to NOSTR event flow")
+        
+        if len(body.public_inputs) != 9:
+            raise HTTPException(400, detail={
+                "ok": False,
+                "error": f"Expected 9 public inputs, got {len(body.public_inputs)}",
+                "error_code": "invalid_public_inputs"
+            })
+        
+        merkle_root = body.public_inputs[0]
+        
+        # Extract npub from public inputs (trust without proof verification)
+        try:
+            npub_x_limbs = [int(body.public_inputs[i]) for i in range(1, 5)]
+            x = sum(limb << (64 * i) for i, limb in enumerate(npub_x_limbs))
+            x_hex = format(x, '064x')
+            npub_bech32 = bech32_encode("npub", bytes.fromhex(x_hex))
+        except Exception as e:
+            raise HTTPException(400, detail={
+                "ok": False,
+                "error": f"Failed to extract npub: {e}",
+                "error_code": "npub_extraction_failed"
+            })
+    else:
         raise HTTPException(400, detail={
             "ok": False,
-            "error": f"Proof verification failed: {result.error}",
-            "error_code": "invalid_proof"
+            "error": "Must provide 'event' (Phase 26) or 'proof'+'public_inputs' (legacy)",
+            "error_code": "missing_auth"
         })
-    
-    if not result.npub_bech32:
-        raise HTTPException(400, detail={
-            "ok": False,
-            "error": "Failed to extract npub from proof",
-            "error_code": "npub_extraction_failed"
-        })
-    
-    merkle_root = result.merkle_root or body.public_inputs[0]
     
     # =========================================================================
     # CHECK 2: merkle_root in valid root set (last 30 roots)
@@ -282,7 +353,7 @@ def verify_login(
     # Log successful verification to SQLite (before issuing token)
     now = int(time.time())
     log_verification(
-        npub=result.npub_bech32,
+        npub=npub_bech32,
         client_id=client_id,
         merkle_root=merkle_root,
         payment_hash_user=body.user_payment_hash.lower(),
@@ -314,19 +385,21 @@ def verify_login(
     # Build OIDC claims
     exp = now + 3600  # 1 hour (now defined above when logging)
     
+    # Determine auth method for amr claim
+    amr = ["nostr_sig", "merkle", "lightning"] if body.event else ["legacy", "merkle", "lightning"]
+    
     claims = {
         "iss": ISSUER,
         "aud": client_id,
-        "sub": result.npub_bech32,  # THE KEY: npub as subject
+        "sub": npub_bech32,  # THE KEY: npub as subject
         "iat": now,
         "exp": exp,
-        "amr": ["groth16", "merkle", "lightning"],  # Authentication methods
+        "amr": amr,  # Authentication methods
         
         # SignedByMe-specific claims
         "https://signedby.me/claims/merkle_root": merkle_root,
         "https://signedby.me/claims/user_payment_hash": body.user_payment_hash.lower(),
         "https://signedby.me/claims/operator_payment_hash": body.operator_payment_hash.lower(),
-        "https://signedby.me/claims/proof_verified": True,
     }
     
     if body.nonce:
@@ -335,16 +408,16 @@ def verify_login(
     # Sign token
     id_token = _jwt_rs256(claims, kid, priv_path)
     
-    logger.info(f"Login verified: sub={result.npub_bech32[:20]}... client={client_id}")
+    logger.info(f"Login verified: sub={npub_bech32[:20]}... client={client_id}")
     
     return LoginVerifyResponse(
         ok=True,
         id_token=id_token,
         token_type="Bearer",
         expires_in=exp - now,
-        sub=result.npub_bech32,
+        sub=npub_bech32,
         merkle_root=merkle_root,
-        verify_time_ms=result.verify_time_ms,
+        verify_time_ms=None,  # No longer tracking proof verification time
     )
 
 

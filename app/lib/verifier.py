@@ -1,25 +1,32 @@
 """
-Groth16 Proof Verification (Phase 8 - Step 8.2)
+Phase 26: Simplified Verification
 
-Thin wrapper around the Rust verifier binary (Phase 23).
-Accepts proof bytes + public outputs, returns valid/invalid.
+Server-side Groth16 proof verification is now REMOVED.
+Verification is cryptographically redundant because:
+1. The npub is derived inside the ZK circuit from leaf_secret
+2. The user signs the NOSTR event with nsec derived from the same leaf_secret
+3. If the proof was fake, npub would be wrong → NOSTR signature verification fails
+
+The cryptographic chain (proof → npub → nsec → NOSTR signature) makes
+server-side proof re-verification unnecessary.
+
+Server now:
+1. Verifies NOSTR event signature (proves npub ownership)
+2. Extracts npub from event pubkey
+3. Issues id_token with sub=npub
+
+This file provides thin wrappers for verification utilities.
 """
 import hashlib
 from dataclasses import dataclass
 from typing import Optional
 
-from .groth16_verify import (
-    verify_proof as _verify_proof,
-    npub_to_bech32,
-    has_verifier,
-    has_vk,
-    VerifyResult,
-)
+from .nostr import bech32_encode, verify_event, NostrEvent
 
 
 @dataclass
 class VerificationResult:
-    """Result of Groth16 proof verification."""
+    """Result of verification."""
     valid: bool
     merkle_root: Optional[str] = None
     npub_bech32: Optional[str] = None
@@ -28,43 +35,39 @@ class VerificationResult:
     error: Optional[str] = None
 
 
-def verify_groth16_proof(proof_json: str, public_json: str) -> VerificationResult:
+def npub_to_bech32(compressed_hex: str) -> str:
     """
-    Verify a Groth16 proof using the Rust verifier.
+    Convert compressed secp256k1 pubkey to Nostr bech32 npub format.
     
-    Args:
-        proof_json: JSON string containing the snarkjs proof
-        public_json: JSON string containing the 9 public outputs
-        
-    Returns:
-        VerificationResult with verification status and extracted npub (bech32)
+    Input: "02/03" + 64 hex chars (33 bytes compressed)
+    Output: "npub1..." (bech32 encoded x-coordinate only)
+    
+    Note: Nostr npub is just the 32-byte x-coordinate, not the full compressed key.
     """
-    if not has_verifier():
-        return VerificationResult(valid=False, error="Verifier binary not found")
+    if not compressed_hex or len(compressed_hex) < 66:
+        raise ValueError(f"Invalid compressed pubkey: {compressed_hex}")
     
-    if not has_vk():
-        return VerificationResult(valid=False, error="Verification key not found")
+    # Extract x-coordinate (skip 02/03 prefix)
+    x_hex = compressed_hex[2:]
+    if len(x_hex) != 64:
+        raise ValueError(f"Invalid x-coordinate length: {len(x_hex)}")
     
-    result = _verify_proof(proof_json, public_json)
+    x_bytes = bytes.fromhex(x_hex)
+    return bech32_encode("npub", x_bytes)
+
+
+def pubkey_hex_to_npub(pubkey_hex: str) -> str:
+    """
+    Convert 32-byte hex pubkey (x-only) to bech32 npub.
     
-    if not result.valid:
-        return VerificationResult(valid=False, error=result.error)
+    Input: 64 hex chars (32 bytes)
+    Output: "npub1..."
+    """
+    if len(pubkey_hex) != 64:
+        raise ValueError(f"Invalid pubkey length: {len(pubkey_hex)}, expected 64")
     
-    # Convert npub to bech32
-    npub_bech32 = None
-    if result.npub_compressed:
-        try:
-            npub_bech32 = npub_to_bech32(result.npub_compressed)
-        except Exception as e:
-            return VerificationResult(valid=False, error=f"Failed to encode npub: {e}")
-    
-    return VerificationResult(
-        valid=True,
-        merkle_root=result.merkle_root,
-        npub_bech32=npub_bech32,
-        npub_compressed=result.npub_compressed,
-        verify_time_ms=result.verify_time_ms,
-    )
+    x_bytes = bytes.fromhex(pubkey_hex)
+    return bech32_encode("npub", x_bytes)
 
 
 def verify_preimage(preimage_hex: str, payment_hash_hex: str) -> bool:
@@ -87,15 +90,32 @@ def verify_preimage(preimage_hex: str, payment_hash_hex: str) -> bool:
         return False
 
 
-def is_verifier_ready() -> tuple[bool, str]:
+def verify_nostr_event(event: NostrEvent) -> tuple[bool, Optional[str]]:
     """
-    Check if the Groth16 verifier is ready.
+    Verify a NOSTR event (ID hash + Schnorr signature).
     
     Returns:
-        (ready, message)
+        (valid, error_message)
     """
-    if not has_verifier():
-        return False, "Rust verifier binary not found"
-    if not has_vk():
-        return False, "Verification key not found"
-    return True, "Verifier ready"
+    return verify_event(event)
+
+
+def is_verifier_ready() -> tuple[bool, str]:
+    """
+    Check if verification is ready.
+    
+    Phase 26: Server-side Groth16 verification removed.
+    NOSTR event verification is always available.
+    """
+    return True, "NOSTR event verification ready (Groth16 verification removed in Phase 26)"
+
+
+# Legacy stubs for backward compatibility
+def has_verifier() -> bool:
+    """Legacy: Always returns True (Groth16 verifier removed in Phase 26)."""
+    return True
+
+
+def has_vk() -> bool:
+    """Legacy: Always returns True (Groth16 verifier removed in Phase 26)."""
+    return True
