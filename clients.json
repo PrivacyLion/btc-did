@@ -22,5 +22,29 @@
     "payment_model": {
       "amount_sats": 100
     }
+  },
+  "ageverify": {
+    "name": "Age Verify Demo",
+    "domain": "ageverify.beta.privacy-lion.com",
+    "api_key": "ageverify-test-key-2026",
+    "redirect_uris": [
+      "https://ageverify.beta.privacy-lion.com/callback",
+      "http://localhost:3001/callback"
+    ],
+    "require_membership": true,
+    "default_root_id": "ageverify-allowlist",
+    "membership_policy": {
+      "auto_approve": false,
+      "auto_build_interval_hours": 24,
+      "auto_build_threshold": 10
+    },
+    "enrollment_policy": {
+      "verification_required": true,
+      "verification_provider": "persona",
+      "verification_type": "age_18_plus"
+    },
+    "payment_model": {
+      "amount_sats": 50
+    }
   }
 }

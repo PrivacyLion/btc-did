@@ -329,6 +329,80 @@ def verify_login(
     )
 
 
+# =============================================================================
+# Login Start (Phase 26.4) — Returns enrollment_policy if verification required
+# =============================================================================
+
+class EnrollmentPolicy(BaseModel):
+    """Enrollment policy returned in login/start response."""
+    verification_required: bool = False
+    verification_provider: Optional[str] = None  # "persona" | "jumio" | "none"
+    verification_type: Optional[str] = None  # "age_18_plus" | "identity_verified" | "none"
+
+
+class LoginStartRequest(BaseModel):
+    """Login start request."""
+    client_id: str = Field(..., description="Client ID")
+    nonce: Optional[str] = Field(None, description="Session nonce")
+
+
+class LoginStartResponse(BaseModel):
+    """Login start response."""
+    ok: bool
+    client_id: str
+    client_name: Optional[str] = None
+    enrollment_policy: Optional[EnrollmentPolicy] = None
+    require_membership: bool = False
+
+
+@router.post("/v1/login/start", response_model=LoginStartResponse)
+def login_start(
+    body: LoginStartRequest,
+    x_api_key: str = Header(..., alias="X-API-Key")
+):
+    """
+    Check login requirements for a client (Phase 26.4).
+    
+    Returns enrollment_policy if verification_required = true.
+    App uses this to determine if KYC flow is needed before proof generation.
+    
+    This endpoint does NOT create a session (per Bible Decision 10).
+    Enterprise generates QR locally. This just returns client config.
+    """
+    # Validate API key
+    api_client_id, _ = validate_api_key(x_api_key)
+    
+    # Get target client config
+    clients = load_clients()
+    client_config = clients.get(body.client_id)
+    
+    if not client_config:
+        raise HTTPException(404, detail={
+            "ok": False,
+            "error": f"Client not found: {body.client_id}",
+            "error_code": "client_not_found"
+        })
+    
+    # Build enrollment_policy from config
+    enrollment_config = client_config.get("enrollment_policy", {})
+    enrollment_policy = None
+    
+    if enrollment_config.get("verification_required", False):
+        enrollment_policy = EnrollmentPolicy(
+            verification_required=True,
+            verification_provider=enrollment_config.get("verification_provider"),
+            verification_type=enrollment_config.get("verification_type"),
+        )
+    
+    return LoginStartResponse(
+        ok=True,
+        client_id=body.client_id,
+        client_name=client_config.get("name"),
+        enrollment_policy=enrollment_policy,
+        require_membership=client_config.get("require_membership", False),
+    )
+
+
 @router.get("/v1/login/verify/health")
 def verify_health():
     """Health check for login verification."""
