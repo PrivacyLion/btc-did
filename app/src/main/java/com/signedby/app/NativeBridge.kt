@@ -620,4 +620,23 @@ object NativeBridge {
         clientId: String
     ): String
 
+    // ============================================================================
+    // NOSTR Event Polling (Phase 26.5 / 26.7)
+    // ============================================================================
+
+    /**
+     * Poll for a NOSTR event matching kind and tag.
+     * Used for KYC verification events (28201) and M2M login events (28200).
+     * 
+     * @param kind Event kind to filter for
+     * @param tagName Tag name to match (e.g., "nonce", "p")
+     * @param tagValue Tag value to match
+     * @return Event content JSON if found, empty string if not found, "error:..." on failure
+     */
+    @JvmStatic external fun nostrPollForEvent(
+        kind: Int,
+        tagName: String,
+        tagValue: String
+    ): String
+
 }

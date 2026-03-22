@@ -311,4 +311,136 @@ class NostrManager(private val context: Context) {
             null
         }
     }
+
+    // =============================================================================
+    // Phase 26.5: KYC Enrollment Event Polling
+    // =============================================================================
+
+    /**
+     * Poll for kind 28201 (kyc_verification) event tagged with nonce.
+     * Used in KYC enrollment flow.
+     * 
+     * @param nonce Enrollment session nonce
+     * @return JSONObject with event content if found, null otherwise
+     */
+    suspend fun pollForKycEvent(nonce: String): JSONObject? = withContext(Dispatchers.IO) {
+        if (!isConnected()) {
+            Log.d(TAG, "Not connected - cannot poll for KYC event")
+            return@withContext null
+        }
+        
+        try {
+            // Poll via Rust nostr-sdk for kind 28201 tagged with nonce
+            val result = NativeBridge.nostrPollForEvent(
+                kind = 28201,
+                tagName = "nonce",
+                tagValue = nonce
+            )
+            
+            if (result.isEmpty() || result.startsWith("error:")) {
+                null
+            } else {
+                try {
+                    JSONObject(result)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse KYC event: ${e.message}")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception polling for KYC event: ${e.message}")
+            null
+        }
+    }
+
+    // =============================================================================
+    // Phase 26.7: Mobile-to-Mobile Login (Poll for kind 28200 by npub)
+    // =============================================================================
+
+    /**
+     * Poll for kind 28200 (enrollment_authorization) event tagged with user's npub.
+     * Used for mobile-to-mobile login - enterprise publishes event addressed to user.
+     * 
+     * @return JSONObject with event content if found (includes nonce), null otherwise
+     */
+    suspend fun pollForM2MLoginEvent(): JSONObject? = withContext(Dispatchers.IO) {
+        if (!isConnected()) {
+            Log.d(TAG, "Not connected - cannot poll for M2M event")
+            return@withContext null
+        }
+        
+        val npub = getNpub()
+        if (npub == null) {
+            Log.w(TAG, "No npub available for M2M polling")
+            return@withContext null
+        }
+        
+        // Convert npub to hex pubkey for tag matching
+        val pubkeyHex = npubToHex(npub)
+        if (pubkeyHex == null) {
+            Log.e(TAG, "Failed to convert npub to hex")
+            return@withContext null
+        }
+        
+        try {
+            // Poll via Rust nostr-sdk for kind 28200 tagged with "p" (user pubkey)
+            val result = NativeBridge.nostrPollForEvent(
+                kind = 28200,
+                tagName = "p",
+                tagValue = pubkeyHex
+            )
+            
+            if (result.isEmpty() || result.startsWith("error:")) {
+                null
+            } else {
+                try {
+                    JSONObject(result)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse M2M event: ${e.message}")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception polling for M2M event: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Convert bech32 npub to hex pubkey.
+     */
+    private fun npubToHex(npub: String): String? {
+        if (!npub.startsWith("npub1")) return null
+        
+        return try {
+            // Bech32 decode
+            val CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+            val data = npub.substring(5) // Skip "npub1"
+            
+            val values = data.map { CHARSET.indexOf(it) }
+            if (values.any { it < 0 }) return null
+            
+            // Remove checksum (last 6)
+            val dataValues = values.dropLast(6)
+            
+            // Convert 5-bit to 8-bit
+            var acc = 0
+            var bits = 0
+            val result = mutableListOf<Byte>()
+            
+            for (v in dataValues) {
+                acc = (acc shl 5) or v
+                bits += 5
+                while (bits >= 8) {
+                    bits -= 8
+                    result.add(((acc shr bits) and 0xFF).toByte())
+                }
+            }
+            
+            result.toByteArray().joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            Log.e(TAG, "npub decode error: ${e.message}")
+            null
+        }
+    }
 }
