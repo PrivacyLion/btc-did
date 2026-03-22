@@ -4,7 +4,7 @@ NOSTR Protocol Library for SignedByMe (Phase 26)
 Handles:
 - NIP-05 identity verification for enterprises
 - Kind 28200 (enrollment_authorization) event verification
-- Kind 28201 (kyc_verification) event publishing
+- Kind 28201 (kyc_verification) event publishing + relay publishing
 - Schnorr signature verification (BIP-340)
 
 Server pubkey: 27718b2653a87c2978fe714fe8077703b41af36ca72ca9eb3ad8080426e2bc0f
@@ -13,11 +13,14 @@ import os
 import json
 import time
 import hashlib
+import hmac
 import logging
+import asyncio
 from typing import Optional, Dict, Any, Tuple, List
 from dataclasses import dataclass
 
 import httpx
+import websockets
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +31,21 @@ logger = logging.getLogger(__name__)
 # NIP-05 base URL (no trailing slash)
 NIP05_BASE_URL = "https://beta.privacy-lion.com"
 
+# NOSTR relay for publishing (Phase 26)
+NOSTR_RELAY_URL = os.getenv("SIGNEDBYME_RELAY_URL", "wss://relay.privacy-lion.com")
+
 # Event kinds
 KIND_ENROLLMENT_AUTHORIZATION = 28200
 KIND_KYC_VERIFICATION = 28201
+
+# KYC provider webhook secrets (from env)
+def get_persona_webhook_secret() -> Optional[str]:
+    """Get Persona webhook signing secret from environment."""
+    return os.getenv("PERSONA_WEBHOOK_SECRET")
+
+def get_jumio_webhook_secret() -> Optional[str]:
+    """Get Jumio webhook signing secret from environment."""
+    return os.getenv("JUMIO_WEBHOOK_SECRET")
 
 # Server keys (from env)
 def get_server_privkey() -> Optional[str]:
@@ -653,3 +668,240 @@ def npub_to_pubkey(npub: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"Failed to decode npub: {e}")
         return None
+
+
+# =============================================================================
+# KYC Webhook HMAC Verification (Phase 26.1)
+# =============================================================================
+
+@dataclass
+class WebhookVerifyResult:
+    """Result of webhook HMAC verification."""
+    valid: bool
+    provider: str
+    error: Optional[str] = None
+
+
+def verify_persona_webhook(signature_header: str, raw_body: bytes) -> WebhookVerifyResult:
+    """
+    Verify Persona webhook HMAC-SHA256 signature.
+    
+    Persona signature header format: t=<timestamp>,v1=<hmac>
+    
+    Args:
+        signature_header: Value of persona-signature header
+        raw_body: Raw request body bytes
+        
+    Returns:
+        WebhookVerifyResult with verification status
+    """
+    secret = get_persona_webhook_secret()
+    if not secret:
+        return WebhookVerifyResult(valid=False, provider="persona", error="PERSONA_WEBHOOK_SECRET not configured")
+    
+    try:
+        # Parse signature header: t=<timestamp>,v1=<hmac>
+        parts = {}
+        for part in signature_header.split(","):
+            if "=" in part:
+                key, value = part.split("=", 1)
+                parts[key.strip()] = value.strip()
+        
+        timestamp = parts.get("t")
+        signature = parts.get("v1")
+        
+        if not timestamp or not signature:
+            return WebhookVerifyResult(valid=False, provider="persona", error="Invalid signature header format")
+        
+        # Compute expected HMAC: HMAC-SHA256(secret, timestamp + "." + body)
+        signed_payload = f"{timestamp}.".encode() + raw_body
+        expected = hmac.new(
+            secret.encode(),
+            signed_payload,
+            hashlib.sha256
+        ).hexdigest()
+        
+        # Constant-time comparison
+        if hmac.compare_digest(expected, signature):
+            return WebhookVerifyResult(valid=True, provider="persona")
+        else:
+            return WebhookVerifyResult(valid=False, provider="persona", error="HMAC mismatch")
+            
+    except Exception as e:
+        return WebhookVerifyResult(valid=False, provider="persona", error=f"Verification error: {e}")
+
+
+def verify_jumio_webhook(signature_header: str, raw_body: bytes) -> WebhookVerifyResult:
+    """
+    Verify Jumio webhook HMAC-SHA256 signature.
+    
+    Jumio sends x-jumio-signature header with HMAC-SHA256(secret, body).
+    
+    Args:
+        signature_header: Value of x-jumio-signature header
+        raw_body: Raw request body bytes
+        
+    Returns:
+        WebhookVerifyResult with verification status
+    """
+    secret = get_jumio_webhook_secret()
+    if not secret:
+        return WebhookVerifyResult(valid=False, provider="jumio", error="JUMIO_WEBHOOK_SECRET not configured")
+    
+    try:
+        # Compute expected HMAC: HMAC-SHA256(secret, body)
+        expected = hmac.new(
+            secret.encode(),
+            raw_body,
+            hashlib.sha256
+        ).hexdigest()
+        
+        # Constant-time comparison
+        if hmac.compare_digest(expected, signature_header):
+            return WebhookVerifyResult(valid=True, provider="jumio")
+        else:
+            return WebhookVerifyResult(valid=False, provider="jumio", error="HMAC mismatch")
+            
+    except Exception as e:
+        return WebhookVerifyResult(valid=False, provider="jumio", error=f"Verification error: {e}")
+
+
+# =============================================================================
+# Kind 28201 for KYC Webhook (Phase 26.1)
+# =============================================================================
+
+def create_kyc_webhook_event(
+    nonce: str,
+    passed: bool,
+    attribute: str,
+    provider: str,
+    client_id: Optional[str] = None,
+    timestamp: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Create a kind 28201 KYC verification event for webhook flow.
+    
+    Tagged with nonce (not user npub) per Phase 26.1 spec.
+    
+    Args:
+        nonce: Enrollment nonce from the webhook
+        passed: Whether KYC passed
+        attribute: Attribute verified (e.g., "age_18_plus", "identity_verified")
+        provider: KYC provider name ("persona" or "jumio")
+        client_id: Optional client_id for the c tag
+        timestamp: Event timestamp (defaults to now)
+        
+    Returns:
+        Signed event dict ready for publishing, or None on failure
+    """
+    privkey = get_server_privkey()
+    if not privkey:
+        logger.error("SIGNEDBYME_NOSTR_PRIVKEY not set - cannot create KYC event")
+        return None
+    
+    pubkey = get_server_pubkey()
+    created_at = timestamp or int(time.time())
+    
+    # Tags per Phase 26 spec
+    tags = [
+        ["nonce", nonce],
+    ]
+    if client_id:
+        tags.append(["c", client_id])
+    
+    content = json.dumps({
+        "passed": passed,
+        "attribute": attribute,
+        "provider": provider,
+        "verified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(created_at)),
+    })
+    
+    # Create event
+    event = {
+        "pubkey": pubkey,
+        "created_at": created_at,
+        "kind": KIND_KYC_VERIFICATION,
+        "tags": tags,
+        "content": content,
+    }
+    
+    # Compute event ID
+    serialized = json.dumps(
+        [0, event["pubkey"], event["created_at"], event["kind"], event["tags"], event["content"]],
+        separators=(',', ':'),
+        ensure_ascii=False,
+    )
+    event["id"] = hashlib.sha256(serialized.encode('utf-8')).hexdigest()
+    
+    # Sign with server key
+    try:
+        sig = sign_event_id(event["id"], privkey)
+        if sig:
+            event["sig"] = sig
+            return event
+        else:
+            logger.error("Failed to sign KYC webhook event")
+            return None
+    except Exception as e:
+        logger.error(f"Failed to sign KYC webhook event: {e}")
+        return None
+
+
+# =============================================================================
+# NOSTR Relay Publishing (Phase 26.1)
+# =============================================================================
+
+async def publish_event_to_relay(
+    event: Dict[str, Any],
+    relay_url: Optional[str] = None,
+    timeout: float = 10.0,
+) -> Tuple[bool, Optional[str]]:
+    """
+    Publish a signed NOSTR event to the relay.
+    
+    Args:
+        event: Signed event dict with id, pubkey, sig, etc.
+        relay_url: Relay URL (defaults to SIGNEDBYME_RELAY_URL)
+        timeout: Connection timeout in seconds
+        
+    Returns:
+        (success, error_message)
+    """
+    url = relay_url or NOSTR_RELAY_URL
+    
+    try:
+        async with websockets.connect(url, close_timeout=5) as ws:
+            # Send EVENT message per NIP-01
+            message = json.dumps(["EVENT", event])
+            await ws.send(message)
+            
+            # Wait for OK response
+            try:
+                response = await asyncio.wait_for(ws.recv(), timeout=timeout)
+                response_data = json.loads(response)
+                
+                # Response format: ["OK", event_id, success, message]
+                if response_data[0] == "OK":
+                    event_id = response_data[1]
+                    success = response_data[2]
+                    msg = response_data[3] if len(response_data) > 3 else ""
+                    
+                    if success:
+                        logger.info(f"Published event {event_id[:16]}... to {url}")
+                        return True, None
+                    else:
+                        return False, f"Relay rejected: {msg}"
+                else:
+                    return False, f"Unexpected response: {response_data[0]}"
+                    
+            except asyncio.TimeoutError:
+                # Some relays don't send OK, treat send as success
+                logger.warning(f"No OK response from {url}, assuming success")
+                return True, None
+                
+    except websockets.exceptions.InvalidURI:
+        return False, f"Invalid relay URL: {url}"
+    except websockets.exceptions.WebSocketException as e:
+        return False, f"WebSocket error: {e}"
+    except Exception as e:
+        return False, f"Failed to publish: {e}"

@@ -32,7 +32,7 @@ import subprocess
 import logging
 from pathlib import Path
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, HTTPException, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -68,6 +68,10 @@ from ..lib.nostr import (
     verify_enterprise_pubkey,
     parse_enrollment_authorization,
     create_kyc_verification_event,
+    create_kyc_webhook_event,
+    verify_persona_webhook,
+    verify_jumio_webhook,
+    publish_event_to_relay,
     KIND_ENROLLMENT_AUTHORIZATION,
     KIND_KYC_VERIFICATION,
 )
@@ -523,8 +527,104 @@ def validate_root(
 
 
 # =============================================================================
-# KYC Webhook (Phase 26)
+# KYC Webhook (Phase 26.1)
 # =============================================================================
+
+class KYCVerifyCallbackBody(BaseModel):
+    """KYC verification callback body from Persona/Jumio."""
+    nonce: str = Field(..., description="Enrollment nonce")
+    passed: bool = Field(..., description="Whether verification passed")
+    attribute: str = Field(..., description="Attribute verified (e.g., age_18_plus)")
+    provider: str = Field(..., description="KYC provider: persona or jumio")
+
+
+@router.post("/enroll/verify-callback")
+async def kyc_verify_callback(
+    request: Request,
+    persona_signature: Optional[str] = Header(None, alias="persona-signature"),
+    jumio_signature: Optional[str] = Header(None, alias="x-jumio-signature"),
+):
+    """
+    KYC provider webhook endpoint (Phase 26.1).
+    
+    POST /v1/membership/enroll/verify-callback
+    
+    Receives signed webhooks from Persona or Jumio.
+    Acts as thin converter: HTTP webhook in, kind 28201 NOSTR event out.
+    
+    - Verifies HMAC-SHA256 signature against vendor shared secret
+    - Publishes kind 28201 to relay tagged with nonce
+    - NO database write
+    - Returns 200 immediately
+    
+    Persona header: persona-signature: t=<timestamp>,v1=<hmac>
+    Jumio header: x-jumio-signature: <hmac>
+    """
+    # Get raw body for HMAC verification
+    raw_body = await request.body()
+    
+    # Determine provider and verify HMAC
+    if persona_signature:
+        result = verify_persona_webhook(persona_signature, raw_body)
+        provider = "persona"
+    elif jumio_signature:
+        result = verify_jumio_webhook(jumio_signature, raw_body)
+        provider = "jumio"
+    else:
+        logger.warning("KYC webhook missing signature header")
+        raise HTTPException(401, "Missing signature header")
+    
+    if not result.valid:
+        logger.warning(f"KYC webhook HMAC verification failed: {result.error}")
+        raise HTTPException(401, "Invalid signature")
+    
+    # Parse body
+    try:
+        body_json = json.loads(raw_body)
+        body = KYCVerifyCallbackBody(**body_json)
+    except Exception as e:
+        logger.warning(f"KYC webhook invalid body: {e}")
+        raise HTTPException(400, f"Invalid request body: {e}")
+    
+    # Verify provider matches header
+    if body.provider != provider:
+        logger.warning(f"KYC webhook provider mismatch: body={body.provider}, header={provider}")
+        raise HTTPException(400, f"Provider mismatch: {body.provider} vs {provider}")
+    
+    # Create kind 28201 event tagged with nonce
+    event = create_kyc_webhook_event(
+        nonce=body.nonce,
+        passed=body.passed,
+        attribute=body.attribute,
+        provider=body.provider,
+    )
+    
+    if not event:
+        logger.error("Failed to create KYC verification event")
+        raise HTTPException(500, "Failed to create verification event")
+    
+    # Publish to relay
+    success, error = await publish_event_to_relay(event)
+    
+    if not success:
+        logger.error(f"Failed to publish KYC event to relay: {error}")
+        # Still return 200 - webhook received, event created
+        # The event can be retried later
+    else:
+        logger.info(f"Published kind 28201 for nonce {body.nonce[:8]}...")
+    
+    # Log without PII (nonce only per spec)
+    audit_log("kyc_verify_callback", details={
+        "nonce": body.nonce,
+        "passed": body.passed,
+        "provider": body.provider,
+        "event_id": event["id"][:16] + "...",
+        "published": success,
+    })
+    
+    # Return 200 immediately
+    return JSONResponse(status_code=200, content={"ok": True})
+
 
 @router.post("/kyc/webhook")
 async def kyc_webhook(
@@ -532,13 +632,10 @@ async def kyc_webhook(
     x_api_key: str = Header(..., alias="X-API-Key")
 ):
     """
-    KYC provider webhook endpoint.
+    DEPRECATED: Use /enroll/verify-callback instead.
     
-    When user completes KYC on external platform (Persona/Jumio),
-    provider calls this webhook. Server publishes kind 28201 event
-    that the app can detect to proceed with enrollment.
-    
-    This is the ONLY place server publishes NOSTR events.
+    KYC provider webhook endpoint (old implementation).
+    Kept for backward compatibility.
     """
     client_id, config = validate_api_key(x_api_key)
     
@@ -560,13 +657,14 @@ async def kyc_webhook(
         "event_id": event["id"][:16] + "...",
     })
     
-    # TODO: Publish event to relay
-    # For now, return the event for the client to publish
+    # Publish to relay
+    success, error = await publish_event_to_relay(event)
     
     return {
         "success": True,
         "event": event,
-        "message": "KYC verification event created. Publish to relay.",
+        "published": success,
+        "message": "KYC verification event created" + (" and published" if success else ""),
     }
 
 
