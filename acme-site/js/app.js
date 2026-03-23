@@ -1,12 +1,20 @@
 /**
  * Acme Corp SignedByMe Integration
  * 
- * Flow:
+ * Two flows:
+ * 
+ * LOGIN FLOW:
  * 1. Generate nonce locally (no server call)
  * 2. Display QR code with deep link: signedby://{client_id}/{nonce}/{amount_sats}
  * 3. Subscribe to NOSTR relay for kind 28101 proof events (#n tag)
  * 4. On proof event: pay invoices via Strike, submit to /v1/login/verify
  * 5. Display id_token on success
+ * 
+ * ENROLLMENT FLOW (Phase 26.9):
+ * 1. Generate nonce locally (no server call)
+ * 2. Sign and publish kind 28200 event to relay
+ * 3. Display QR code with deep link: signedby://enroll/{client_id}/{nonce}?exp={unix_timestamp_90s}
+ * 4. Regenerate every 90 seconds
  */
 
 // Configuration
@@ -14,6 +22,13 @@ const API_BASE = 'https://api.beta.privacy-lion.com';
 const RELAY_URL = 'wss://relay.privacy-lion.com';
 const CLIENT_ID = 'acme';
 const AMOUNT_SATS = 100;
+
+// Acme Enterprise NOSTR Keys (Phase 26.9)
+// Public key published at https://acme.beta.privacy-lion.com/.well-known/nostr.json
+const ACME_PUBKEY_HEX = 'f1ff989f13592f68206bc42b9b67fae5c5390e77858afc0e369dfd6d2b2cb7d7';
+// Private key - hex format (64 chars). Retrieved from Bitwarden "Acme Enterprise NOSTR Private Key"
+// To convert nsec to hex: use `nak decode <nsec>` or online converter
+const ACME_PRIVKEY_HEX = '%%ACME_PRIVKEY_HEX%%'; // TODO: Scott to fill in
 
 // Strike API - signedby-demo key (dev/test only - temporary scaffolding)
 const STRIKE_API_KEY = '4F683B6BDAD5E8ED8A345B47AA3674060B49412A51352BB183B55ABDBCAC92BC';
@@ -23,17 +38,23 @@ const ACME_API_KEY = 'acme-test-key-2026';
 
 // State
 let currentNonce = null;
+let currentMode = 'login'; // 'login' or 'enroll'
 let relayWs = null;
+let enrollmentInterval = null;
 
 // DOM Elements
 const loginView = document.getElementById('login-view');
 const qrView = document.getElementById('qr-view');
 const successView = document.getElementById('success-view');
 const signedByBtn = document.getElementById('signedby-btn');
+const enrollBtn = document.getElementById('enroll-btn');
 const backBtn = document.getElementById('back-btn');
 const rewardAmount = document.getElementById('reward-amount');
+const rewardInfo = document.getElementById('reward-info');
 const statusText = document.getElementById('status-text');
 const spinner = document.getElementById('spinner');
+const qrTitle = document.getElementById('qr-title');
+const qrSubtitle = document.getElementById('qr-subtitle');
 
 // Success view elements
 const tokenSub = document.getElementById('token-sub');
@@ -48,8 +69,93 @@ const payoutError = document.getElementById('payout-error');
 const payoutErrorMsg = document.getElementById('payout-error-msg');
 
 // Event Listeners
-signedByBtn.addEventListener('click', startSignedByLogin);
-backBtn.addEventListener('click', cancelLogin);
+if (signedByBtn) signedByBtn.addEventListener('click', startSignedByLogin);
+if (enrollBtn) enrollBtn.addEventListener('click', startEnrollment);
+if (backBtn) backBtn.addEventListener('click', cancelFlow);
+
+// ============================================================================
+// NOSTR Cryptographic Functions (subset of nostr-tools for signing)
+// ============================================================================
+
+/**
+ * Convert hex string to Uint8Array
+ */
+function hexToBytes(hex) {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+    }
+    return bytes;
+}
+
+/**
+ * Convert Uint8Array to hex string
+ */
+function bytesToHex(bytes) {
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * SHA-256 hash using Web Crypto API
+ */
+async function sha256(message) {
+    const msgBuffer = new TextEncoder().encode(message);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    return new Uint8Array(hashBuffer);
+}
+
+/**
+ * Compute NOSTR event ID (NIP-01)
+ * ID = SHA256(JSON.stringify([0, pubkey, created_at, kind, tags, content]))
+ */
+async function computeEventId(event) {
+    const serialized = JSON.stringify([
+        0,
+        event.pubkey,
+        event.created_at,
+        event.kind,
+        event.tags,
+        event.content
+    ]);
+    const hash = await sha256(serialized);
+    return bytesToHex(hash);
+}
+
+/**
+ * Sign a message with secp256k1 Schnorr signature (BIP-340)
+ * Uses the Web Crypto subtle API with the noble-secp256k1 algorithm
+ * 
+ * For browser compatibility, we use the nostr-tools/pure approach
+ */
+async function schnorrSign(messageHash, privateKeyHex) {
+    // We need secp256k1 Schnorr signing which isn't in Web Crypto
+    // Import nostr-tools dynamically or use a minimal implementation
+    
+    // For now, use the nostr object if nostr-tools is loaded
+    if (typeof nostrTools !== 'undefined' && nostrTools.finalizeEvent) {
+        return null; // Will use finalizeEvent instead
+    }
+    
+    // Fallback: we need nostr-tools for proper Schnorr signing
+    throw new Error('nostr-tools library required for signing');
+}
+
+/**
+ * Finalize and sign a NOSTR event
+ * Uses the global finalizeEvent from index.html module script
+ */
+async function signNostrEvent(eventTemplate, privateKeyHex) {
+    // Use global finalizeEvent from noble-secp256k1 module (defined in index.html)
+    if (typeof window.finalizeEvent === 'function') {
+        return await window.finalizeEvent(eventTemplate, privateKeyHex);
+    }
+    
+    throw new Error('Signing library not loaded. Check that noble-secp256k1 module is included.');
+}
+
+// ============================================================================
+// Common Functions
+// ============================================================================
 
 /**
  * Generate a cryptographically secure nonce
@@ -62,10 +168,210 @@ function generateNonce() {
 }
 
 /**
+ * Cancel current flow and go back
+ */
+function cancelFlow() {
+    closeRelay();
+    stopEnrollmentRefresh();
+    currentNonce = null;
+    currentMode = 'login';
+    
+    qrView.classList.add('hidden');
+    successView.classList.add('hidden');
+    loginView.classList.remove('hidden');
+}
+
+// ============================================================================
+// ENROLLMENT FLOW (Phase 26.9)
+// ============================================================================
+
+/**
+ * Start enrollment flow
+ * 1. Generate nonce
+ * 2. Publish kind 28200 event
+ * 3. Show enrollment QR
+ * 4. Regenerate every 90 seconds
+ */
+async function startEnrollment() {
+    if (ACME_PRIVKEY_HEX === '%%ACME_PRIVKEY_HEX%%') {
+        alert('Enrollment not configured. Acme enterprise private key not set.');
+        return;
+    }
+    
+    try {
+        currentMode = 'enroll';
+        if (enrollBtn) {
+            enrollBtn.disabled = true;
+            enrollBtn.textContent = 'Starting...';
+        }
+        
+        // Generate and publish first enrollment event
+        await generateEnrollmentQR();
+        
+        // Show QR view with enrollment-specific UI
+        if (qrTitle) qrTitle.textContent = 'Scan to Enroll';
+        if (qrSubtitle) qrSubtitle.textContent = 'Open SignedByMe app and scan this code to join Acme';
+        if (rewardInfo) rewardInfo.classList.add('hidden');
+        statusText.textContent = 'Waiting for enrollment...';
+        
+        loginView.classList.add('hidden');
+        qrView.classList.remove('hidden');
+        
+        // Set up 90-second refresh
+        enrollmentInterval = setInterval(async () => {
+            console.log('Refreshing enrollment QR...');
+            await generateEnrollmentQR();
+        }, 90 * 1000);
+        
+        // Subscribe to relay for enrollment completion (kind 28201)
+        subscribeToEnrollmentCompletion();
+        
+    } catch (error) {
+        console.error('Error starting enrollment:', error);
+        alert('Failed to start enrollment: ' + error.message);
+    } finally {
+        if (enrollBtn) {
+            enrollBtn.disabled = false;
+            enrollBtn.innerHTML = `
+                <span class="icon">📝</span>
+                <div class="btn-text">
+                    Enroll with SignedByMe
+                    <span class="reward-badge">BECOME A MEMBER</span>
+                </div>
+            `;
+        }
+    }
+}
+
+/**
+ * Generate enrollment QR code and publish kind 28200 event
+ */
+async function generateEnrollmentQR() {
+    // Generate nonce locally - NO API call
+    currentNonce = generateNonce();
+    console.log('Generated enrollment nonce:', currentNonce);
+    
+    // Build kind 28200 event per Bible spec
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+    const createdAt = Math.floor(Date.now() / 1000);
+    
+    const eventTemplate = {
+        kind: 28200,
+        created_at: createdAt,
+        tags: [
+            ['nonce', currentNonce],
+            ['c', CLIENT_ID]
+        ],
+        content: JSON.stringify({
+            client_id: CLIENT_ID,
+            expires_at: expiresAt
+        })
+    };
+    
+    // Sign and finalize the event
+    const signedEvent = await signNostrEvent(eventTemplate, ACME_PRIVKEY_HEX);
+    console.log('Signed enrollment event:', signedEvent);
+    
+    // Publish to relay
+    await publishToRelay(signedEvent);
+    
+    // Generate QR code: signedby://enroll/{client_id}/{nonce}?exp={unix_timestamp_90s}
+    const qrExpiry = Math.floor(Date.now() / 1000) + 90;
+    const qrData = `signedby://enroll/${CLIENT_ID}/${currentNonce}?exp=${qrExpiry}`;
+    console.log('Enrollment QR data:', qrData);
+    
+    // Render QR
+    const qrContainer = document.getElementById('qr-container');
+    qrContainer.innerHTML = '';
+    new QRCode(qrContainer, {
+        text: qrData,
+        width: 250,
+        height: 250,
+        colorDark: '#059669', // Green for enrollment
+        colorLight: '#ffffff'
+    });
+    
+    // Update expiry timer
+    startExpiryTimer(90);
+}
+
+/**
+ * Publish event to NOSTR relay
+ */
+async function publishToRelay(event) {
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(RELAY_URL);
+        
+        ws.onopen = () => {
+            console.log('Publishing event to relay...');
+            const msg = JSON.stringify(['EVENT', event]);
+            ws.send(msg);
+        };
+        
+        ws.onmessage = (e) => {
+            try {
+                const response = JSON.parse(e.data);
+                console.log('Relay response:', response);
+                
+                if (response[0] === 'OK') {
+                    if (response[2] === true) {
+                        console.log('Event published successfully:', response[1]);
+                        ws.close();
+                        resolve(response[1]);
+                    } else {
+                        ws.close();
+                        reject(new Error(response[3] || 'Relay rejected event'));
+                    }
+                }
+            } catch (err) {
+                console.error('Error parsing relay response:', err);
+            }
+        };
+        
+        ws.onerror = (err) => {
+            console.error('Relay connection error:', err);
+            reject(new Error('Failed to connect to relay'));
+        };
+        
+        // Timeout after 5 seconds
+        setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.close();
+                reject(new Error('Relay publish timeout'));
+            }
+        }, 5000);
+    });
+}
+
+/**
+ * Subscribe to relay for enrollment completion events
+ */
+function subscribeToEnrollmentCompletion() {
+    // Could subscribe for kind 28201 (enrollment complete) here
+    // For now, we just show success when app completes enrollment
+    // The app will fetch witness and show success locally
+}
+
+/**
+ * Stop enrollment QR refresh
+ */
+function stopEnrollmentRefresh() {
+    if (enrollmentInterval) {
+        clearInterval(enrollmentInterval);
+        enrollmentInterval = null;
+    }
+}
+
+// ============================================================================
+// LOGIN FLOW (existing)
+// ============================================================================
+
+/**
  * Start SignedByMe login flow
  */
 async function startSignedByLogin() {
     try {
+        currentMode = 'login';
         signedByBtn.disabled = true;
         signedByBtn.textContent = 'Starting...';
         
@@ -74,7 +380,10 @@ async function startSignedByLogin() {
         console.log('Generated nonce:', currentNonce);
         
         // Update UI
-        rewardAmount.textContent = AMOUNT_SATS;
+        if (qrTitle) qrTitle.textContent = 'Scan with SignedByMe';
+        if (qrSubtitle) qrSubtitle.textContent = 'Open the SignedByMe app and scan this code';
+        if (rewardInfo) rewardInfo.classList.remove('hidden');
+        if (rewardAmount) rewardAmount.textContent = AMOUNT_SATS;
         
         // Generate QR code with deep link: signedby://{client_id}/{nonce}/{amount_sats}
         const qrData = `signedby://${CLIENT_ID}/${currentNonce}/${AMOUNT_SATS}`;
@@ -97,6 +406,9 @@ async function startSignedByLogin() {
         // Subscribe to NOSTR relay for proof events
         subscribeToRelay(currentNonce);
         
+        // Start 5-minute timer
+        startExpiryTimer(300);
+        
     } catch (error) {
         console.error('Error starting login:', error);
         alert('Failed to start login: ' + error.message);
@@ -113,6 +425,35 @@ async function startSignedByLogin() {
 }
 
 /**
+ * Start expiry countdown timer
+ */
+function startExpiryTimer(seconds) {
+    const expireTimer = document.getElementById('expire-timer');
+    if (!expireTimer) return;
+    
+    let remaining = seconds;
+    
+    const updateTimer = () => {
+        const mins = Math.floor(remaining / 60);
+        const secs = remaining % 60;
+        expireTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        
+        if (remaining <= 0) {
+            if (currentMode === 'login') {
+                statusText.textContent = 'Session expired. Please try again.';
+                spinner.style.display = 'none';
+            }
+            // For enrollment, the interval will regenerate
+        } else {
+            remaining--;
+            setTimeout(updateTimer, 1000);
+        }
+    };
+    
+    updateTimer();
+}
+
+/**
  * Subscribe to NOSTR relay for proof events
  */
 function subscribeToRelay(nonce) {
@@ -123,13 +464,13 @@ function subscribeToRelay(nonce) {
     
     relayWs.onopen = () => {
         console.log('Relay connected, subscribing to nonce:', nonce);
-        // Subscribe to kind 28101 events tagged with our nonce via #n tag
+        // Subscribe to kind 28101 events tagged with our nonce
         const subRequest = JSON.stringify([
             "REQ", 
             "login-sub", 
             { 
                 kinds: [28101],
-                "#n": [nonce]
+                "#nonce": [nonce]
             }
         ]);
         relayWs.send(subRequest);
@@ -159,7 +500,7 @@ function subscribeToRelay(nonce) {
         statusText.textContent = 'Connection error. Retrying...';
         // Retry after 3 seconds
         setTimeout(() => {
-            if (currentNonce) {
+            if (currentNonce && currentMode === 'login') {
                 subscribeToRelay(currentNonce);
             }
         }, 3000);
@@ -192,10 +533,10 @@ async function handleProofEvent(event) {
         const content = JSON.parse(event.content);
         
         // Extract fields per Bible spec
-        const npub = content.public_outputs.npub;
-        const merkle_root = content.public_outputs.merkle_root;
-        const userInvoice = content.invoices.user_invoice;
-        const operatorInvoice = content.invoices.operator_invoice;
+        const npub = content.public_outputs?.npub || content.npub;
+        const merkle_root = content.public_outputs?.merkle_root || content.merkle_root;
+        const userInvoice = content.invoices?.user_invoice || content.user_invoice;
+        const operatorInvoice = content.invoices?.operator_invoice || content.operator_invoice;
         const proof = content.proof;
         
         if (!userInvoice || !operatorInvoice) {
@@ -305,7 +646,6 @@ async function payInvoiceViaStrike(bolt11) {
     console.log('Strike payment response:', payment);
     
     // Extract preimage (hex) - check common field names
-    // Strike API may return 'preimage' or 'paymentPreimage'
     const preimage = payment.preimage || payment.paymentPreimage || payment.result?.preimage;
     
     if (!preimage) {
@@ -317,19 +657,7 @@ async function payInvoiceViaStrike(bolt11) {
 }
 
 /**
- * Cancel login and go back
- */
-function cancelLogin() {
-    closeRelay();
-    currentNonce = null;
-    
-    qrView.classList.add('hidden');
-    loginView.classList.remove('hidden');
-}
-
-/**
  * Show success view with id_token contents
- * This is the investor demo moment - display all the good stuff
  */
 function showSuccess(result) {
     // Decode id_token (JWT) to show claims
@@ -337,7 +665,6 @@ function showSuccess(result) {
     let claims = {};
     
     try {
-        // Decode JWT payload (middle part)
         const parts = idToken.split('.');
         if (parts.length === 3) {
             const payload = JSON.parse(atob(parts[1]));
@@ -348,44 +675,35 @@ function showSuccess(result) {
         console.error('Error decoding JWT:', e);
     }
     
-    // Display token claims - sub is the npub (bech32)
-    tokenSub.textContent = claims.sub || 'Unknown';
-    tokenIss.textContent = claims.iss || API_BASE;
-    tokenAud.textContent = claims.aud || CLIENT_ID;
+    // Display token claims
+    if (tokenSub) tokenSub.textContent = claims.sub || 'Unknown';
+    if (tokenIss) tokenIss.textContent = claims.iss || API_BASE;
+    if (tokenAud) tokenAud.textContent = claims.aud || CLIENT_ID;
     
-    // Membership claims (merkle_root proves group membership)
-    if (claims.membership_root) {
+    // Membership claims
+    if (claims.membership_root && membershipField) {
         tokenMembership.textContent = `Root: ${claims.membership_root.substring(0, 16)}...`;
         membershipField.classList.remove('hidden');
-    } else {
+    } else if (membershipField) {
         membershipField.classList.add('hidden');
     }
     
-    // Payment proof (preimage or payment_hash)
-    if (claims.payment_hash) {
-        tokenPayment.textContent = claims.payment_hash.substring(0, 32) + '...';
-    } else if (claims.preimage) {
-        tokenPayment.textContent = claims.preimage.substring(0, 32) + '...';
-    } else {
-        tokenPayment.textContent = 'Verified ✓';
-    }
-    
-    // AMR (Authentication Methods Reference) - shows what factors were used
-    const tokenAmr = document.getElementById('token-amr');
-    const amrField = document.getElementById('amr-field');
-    if (tokenAmr && claims.amr && Array.isArray(claims.amr)) {
-        tokenAmr.textContent = claims.amr.join(', ');
-        if (amrField) amrField.classList.remove('hidden');
-    } else if (amrField) {
-        amrField.classList.add('hidden');
+    // Payment proof
+    if (tokenPayment) {
+        if (claims.payment_hash) {
+            tokenPayment.textContent = claims.payment_hash.substring(0, 32) + '...';
+        } else if (claims.preimage) {
+            tokenPayment.textContent = claims.preimage.substring(0, 32) + '...';
+        } else {
+            tokenPayment.textContent = 'Verified ✓';
+        }
     }
     
     // Handle payout display
-    payoutAmount.textContent = AMOUNT_SATS;
-    payoutInfo.classList.remove('hidden');
-    payoutError.classList.add('hidden');
+    if (payoutAmount) payoutAmount.textContent = AMOUNT_SATS;
+    if (payoutInfo) payoutInfo.classList.remove('hidden');
+    if (payoutError) payoutError.classList.add('hidden');
     
-    // Log full token for debugging
     console.log('Login successful! id_token:', idToken);
     
     // Show success view
@@ -393,13 +711,10 @@ function showSuccess(result) {
     successView.classList.remove('hidden');
 }
 
-// Handle page visibility (pause/resume relay)
+// Handle page visibility
 document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        // Could pause relay here if needed
-    } else if (currentNonce && !qrView.classList.contains('hidden')) {
-        // Reconnect if disconnected
-        if (!relayWs || relayWs.readyState !== WebSocket.OPEN) {
+    if (!document.hidden && currentNonce && !qrView.classList.contains('hidden')) {
+        if (currentMode === 'login' && (!relayWs || relayWs.readyState !== WebSocket.OPEN)) {
             subscribeToRelay(currentNonce);
         }
     }

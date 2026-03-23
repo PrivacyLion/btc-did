@@ -6,6 +6,51 @@
     <title>Acme Corp - Employee Portal</title>
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- noble-secp256k1 for Schnorr signing (BIP-340) -->
+    <script src="https://unpkg.com/@noble/secp256k1@2.1.0/lib/index.js" type="module"></script>
+    <!-- nostr-tools for event signing -->
+    <script type="module">
+        import * as secp from 'https://unpkg.com/@noble/secp256k1@2.1.0/index.js';
+        import { bytesToHex, hexToBytes } from 'https://unpkg.com/@noble/hashes@1.4.0/utils.js';
+        import { sha256 } from 'https://unpkg.com/@noble/hashes@1.4.0/sha256.js';
+        
+        // Make secp256k1 available globally for app.js
+        window.secp256k1 = secp;
+        window.nobleHashes = { sha256, bytesToHex, hexToBytes };
+        
+        // Override finalizeEvent with noble implementation
+        window.finalizeEvent = async function(eventTemplate, privateKeyHex) {
+            const privKeyBytes = hexToBytes(privateKeyHex);
+            const pubKeyBytes = secp.getPublicKey(privKeyBytes);
+            const pubKeyHex = bytesToHex(pubKeyBytes).slice(2); // Remove 02/03 prefix for x-only
+            
+            const event = {
+                ...eventTemplate,
+                pubkey: pubKeyHex,
+                created_at: eventTemplate.created_at || Math.floor(Date.now() / 1000)
+            };
+            
+            // Compute event ID (NIP-01)
+            const serialized = JSON.stringify([
+                0,
+                event.pubkey,
+                event.created_at,
+                event.kind,
+                event.tags,
+                event.content
+            ]);
+            const idBytes = sha256(new TextEncoder().encode(serialized));
+            event.id = bytesToHex(idBytes);
+            
+            // Sign with Schnorr (BIP-340)
+            const sig = await secp.schnorr.sign(idBytes, privKeyBytes);
+            event.sig = bytesToHex(sig);
+            
+            return event;
+        };
+        
+        console.log('NOSTR signing ready (noble-secp256k1)');
+    </script>
 </head>
 <body>
     <div class="container">
@@ -42,6 +87,14 @@
                         <span class="reward-badge">GET PAID TO LOG IN</span>
                     </div>
                 </button>
+                
+                <button class="oauth-btn enroll" id="enroll-btn">
+                    <span class="icon">📝</span>
+                    <div class="btn-text">
+                        Enroll with SignedByMe
+                        <span class="reward-badge">BECOME A MEMBER</span>
+                    </div>
+                </button>
             </div>
             
             <p class="footer-text">
@@ -53,12 +106,12 @@
         <div id="qr-view" class="card hidden">
             <button class="back-btn" id="back-btn">← Back</button>
             
-            <h2>Scan with SignedByMe</h2>
-            <p class="qr-subtitle">Open the SignedByMe app and scan this code</p>
+            <h2 id="qr-title">Scan with SignedByMe</h2>
+            <p class="qr-subtitle" id="qr-subtitle">Open the SignedByMe app and scan this code</p>
             
             <div id="qr-container"></div>
             
-            <div class="reward-info">
+            <div class="reward-info" id="reward-info">
                 <span class="lightning-icon">⚡</span>
                 <span>You'll receive <strong id="reward-amount">100</strong> sats</span>
             </div>
@@ -68,7 +121,7 @@
                 <p id="status-text">Waiting for scan...</p>
             </div>
             
-            <p class="expire-text">Session expires in <span id="expire-timer">5:00</span></p>
+            <p class="expire-text">Expires in <span id="expire-timer">5:00</span></p>
         </div>
         
         <!-- Success View -->
@@ -90,7 +143,7 @@
                     <label>Client</label>
                     <div class="value" id="token-aud"></div>
                 </div>
-                <div class="token-field" id="membership-field">
+                <div class="token-field hidden" id="membership-field">
                     <label>Membership</label>
                     <div class="value" id="token-membership"></div>
                 </div>
