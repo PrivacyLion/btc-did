@@ -313,6 +313,51 @@ class NostrManager(private val context: Context) {
     }
 
     // =============================================================================
+    // Phase 26.9: Enrollment Authorization Event Polling
+    // =============================================================================
+
+    /**
+     * Poll for kind 28200 (enrollment_authorization) event tagged with nonce.
+     * Used in enrollment flow - enterprise publishes this event.
+     * 
+     * @param nonce Enrollment session nonce
+     * @return The complete NOSTR event as JSONObject if found, null otherwise
+     */
+    suspend fun pollForEnrollmentAuthEvent(nonce: String): JSONObject? = withContext(Dispatchers.IO) {
+        if (!isConnected()) {
+            Log.d(TAG, "Not connected - cannot poll for enrollment auth event")
+            return@withContext null
+        }
+        
+        try {
+            // Poll via Rust nostr-sdk for kind 28200 tagged with nonce
+            val result = NativeBridge.nostrPollForEvent(
+                kind = 28200,
+                tagName = "nonce",
+                tagValue = nonce
+            )
+            
+            if (result.isEmpty() || result.startsWith("error:")) {
+                Log.d(TAG, "No enrollment auth event found for nonce: ${nonce.take(8)}...")
+                null
+            } else {
+                try {
+                    // The result is the event content - but we need the whole event
+                    // The content contains client_id and expires_at
+                    Log.i(TAG, "Found enrollment auth event for nonce: ${nonce.take(8)}...")
+                    JSONObject(result)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse enrollment auth event: ${e.message}")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception polling for enrollment auth event: ${e.message}")
+            null
+        }
+    }
+
+    // =============================================================================
     // Phase 26.5: KYC Enrollment Event Polling
     // =============================================================================
 
