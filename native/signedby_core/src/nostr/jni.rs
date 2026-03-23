@@ -460,6 +460,147 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPublishLoginCompl
 }
 
 // ============================================================================
+// NOSTR Event Polling (Phase 26.5 / 26.7)
+// ============================================================================
+
+/// Poll for a NOSTR event matching kind and tag.
+/// Used for:
+/// - KYC verification events (kind 28201) - App polls for kyc_verification tagged with nonce
+/// - M2M login events (kind 28200) - App polls for enrollment_authorization tagged with npub
+/// 
+/// Returns: Event content JSON if found, empty string if not found, "error:..." on failure
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPollForEvent(
+    mut env: JNIEnv,
+    _clazz: JClass,
+    kind: jni::sys::jint,
+    tag_name: JString,
+    tag_value: JString,
+) -> jstring {
+    use nostr_sdk::prelude::*;
+    use std::time::Duration;
+    
+    // Extract tag parameters
+    let tag_name_str = match env.get_string(&tag_name) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_tag_name").unwrap().into_raw(),
+    };
+    let tag_value_str = match env.get_string(&tag_value) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_tag_value").unwrap().into_raw(),
+    };
+    
+    // Clone the inner client while holding the lock, then release lock
+    let inner_client = {
+        let guard = match NOSTR_CLIENT.lock() {
+            Ok(g) => g,
+            Err(_) => return env.new_string("error:client_lock_failed").unwrap().into_raw(),
+        };
+        
+        let client = match guard.as_ref() {
+            Some(c) => c,
+            None => return env.new_string("error:client_not_initialized").unwrap().into_raw(),
+        };
+        
+        if !client.is_connected() {
+            return env.new_string("error:not_connected").unwrap().into_raw();
+        }
+        
+        // Clone the inner client so we can release the lock
+        client.inner_client().clone()
+    };
+    // Guard is dropped here, lock released
+    
+    // Poll for event with timeout
+    let result = RUNTIME.block_on(async {
+        let kind_u16 = kind as u16;
+        
+        // Build base filter for the specified kind
+        let mut filter = Filter::new()
+            .kind(Kind::Custom(kind_u16))
+            .limit(10); // Fetch a few to filter client-side
+        
+        // Add tag filter based on tag type
+        match tag_name_str.as_str() {
+            "p" => {
+                // "p" tag expects a pubkey - could be hex or npub
+                let pubkey = if tag_value_str.starts_with("npub") {
+                    match PublicKey::from_bech32(&tag_value_str) {
+                        Ok(pk) => pk,
+                        Err(e) => return Err(anyhow::anyhow!("Invalid npub: {}", e)),
+                    }
+                } else {
+                    match PublicKey::from_hex(&tag_value_str) {
+                        Ok(pk) => pk,
+                        Err(e) => return Err(anyhow::anyhow!("Invalid pubkey hex: {}", e)),
+                    }
+                };
+                filter = filter.pubkey(pubkey);
+            }
+            "e" => {
+                // "e" tag for event reference
+                let event_id = match EventId::from_hex(&tag_value_str) {
+                    Ok(id) => id,
+                    Err(e) => return Err(anyhow::anyhow!("Invalid event id: {}", e)),
+                };
+                filter = filter.event(event_id);
+            }
+            // For other tags, we filter client-side after fetching by kind
+            _ => {}
+        }
+        
+        // Fetch events with timeout using get_events_of
+        let timeout = Duration::from_secs(5);
+        let events: Vec<Event> = match inner_client.get_events_of(vec![filter], EventSource::both(Some(timeout))).await {
+            Ok(evts) => evts,
+            Err(e) => return Err(anyhow::anyhow!("Fetch failed: {}", e)),
+        };
+        
+        // Filter events by custom tag if needed (for tags like "nonce", "client_id")
+        for event in events.iter() {
+            // Check if event has the tag we're looking for
+            let has_matching_tag = event.tags.iter().any(|tag| {
+                // Get tag as string slice
+                if let Some(tag_kind) = tag.kind().to_string().strip_prefix("#") {
+                    // For standard single-letter tags
+                    if tag_kind == tag_name_str {
+                        if let Some(value) = tag.content() {
+                            return value == tag_value_str;
+                        }
+                    }
+                }
+                // For custom tags, check the tag structure directly
+                let tag_as_vec = tag.as_slice();
+                if tag_as_vec.len() >= 2 {
+                    tag_as_vec[0] == tag_name_str && tag_as_vec[1] == tag_value_str
+                } else {
+                    false
+                }
+            });
+            
+            if has_matching_tag {
+                return Ok(Some(event.content.clone()));
+            }
+        }
+        
+        // For standard tags (p, e) that were filtered server-side, return first match
+        if matches!(tag_name_str.as_str(), "p" | "e") {
+            if let Some(event) = events.first() {
+                return Ok(Some(event.content.clone()));
+            }
+        }
+        
+        Ok(None)
+    });
+    
+    match result {
+        Ok(Some(content)) => env.new_string(content).unwrap().into_raw(),
+        Ok(None) => env.new_string("").unwrap().into_raw(),
+        Err(e) => env.new_string(format!("error:{}", e)).unwrap().into_raw(),
+    }
+}
+
+// ============================================================================
 // Helper Functions
 // ============================================================================
 

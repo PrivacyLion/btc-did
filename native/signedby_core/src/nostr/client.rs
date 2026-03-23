@@ -87,6 +87,12 @@ impl NostrClient {
         self.keys.public_key().to_bech32().unwrap_or_default()
     }
     
+    /// Get a clone of the inner nostr-sdk client (for advanced operations like polling)
+    /// Returns a clone so the caller can use it without holding the NostrClient lock.
+    pub fn inner_client(&self) -> Client {
+        self.client.clone()
+    }
+    
     /// Publish proof_event (kind 28101) to all connected relays
     /// 
     /// Contains: proof bytes, merkle_root, npub, both BOLT11 invoices
