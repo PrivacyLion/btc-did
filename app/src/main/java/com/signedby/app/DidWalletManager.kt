@@ -1778,64 +1778,71 @@ class DidWalletManager(private val context: Context) {
             // Step 2: Connect to NOSTR and poll for kind 28200 event tagged with nonce
             android.util.Log.i("SignedByMe", "Step 2: Polling NOSTR for kind 28200 with nonce...")
             
-            // Initialize NOSTR if we have a nostrManager and leaf_secret
-            var authEventContent: org.json.JSONObject? = null
-            
-            if (nostrManager != null) {
-                val leafSecret = loadLeafSecret()
-                if (leafSecret != null) {
-                    nostrManager.initializeIdentity(leafSecret)
-                    java.util.Arrays.fill(leafSecret, 0.toByte())
-                    
-                    // Connect to relays (blocking wait)
-                    val connectionLatch = java.util.concurrent.CountDownLatch(1)
-                    var connected = false
-                    
-                    nostrManager.connectToRelays(
-                        scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO),
-                        onConnected = { connected = true; connectionLatch.countDown() },
-                        onFailed = { connectionLatch.countDown() }
-                    )
-                    
-                    connectionLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)
-                    
-                    if (connected || nostrManager.isConnected()) {
-                        // Poll for enrollment authorization event (max 30 seconds, poll every 2 seconds)
-                        var pollAttempts = 0
-                        val maxAttempts = 15
-                        
-                        while (pollAttempts < maxAttempts && authEventContent == null) {
-                            authEventContent = nostrManager.pollForEnrollmentAuthEvent(nonce)
-                            if (authEventContent != null) {
-                                android.util.Log.i("SignedByMe", "Found kind 28200 event!")
-                                break
-                            }
-                            pollAttempts++
-                            android.util.Log.d("SignedByMe", "Poll attempt $pollAttempts/$maxAttempts - no event yet")
-                            kotlinx.coroutines.delay(2000)
-                        }
-                    } else {
-                        android.util.Log.w("SignedByMe", "NOSTR relay connection failed")
-                    }
-                }
+            // Step 2: Connect to NOSTR and poll for kind 28200 event
+            // The kind 28200 event IS the authorization proof - no fallback
+            if (nostrManager == null) {
+                android.util.Log.e("SignedByMe", "Enrollment failed: NostrManager required for Phase 26 enrollment")
+                return@withContext null
             }
             
-            // If we found the auth event, we can verify NIP-05 (Step 3)
-            // For now, we'll proceed with commit even without the event for backwards compatibility
-            // The server will verify the event signature if provided
+            val leafSecret = loadLeafSecret()
+            if (leafSecret == null) {
+                android.util.Log.e("SignedByMe", "Enrollment failed: No leaf_secret - generate one first")
+                return@withContext null
+            }
             
-            if (authEventContent != null) {
-                android.util.Log.i("SignedByMe", "Step 3: Verifying NIP-05 for $enterpriseDomain...")
-                val nip05Pubkey = fetchNip05Pubkey(enterpriseDomain)
-                if (nip05Pubkey != null) {
-                    android.util.Log.i("SignedByMe", "NIP-05 pubkey verified: ${nip05Pubkey.take(16)}...")
-                    // TODO: Verify Schnorr signature on event matches NIP-05 pubkey
-                    // For now, server does this verification
-                } else {
-                    android.util.Log.w("SignedByMe", "NIP-05 lookup failed, server will verify")
+            nostrManager.initializeIdentity(leafSecret)
+            java.util.Arrays.fill(leafSecret, 0.toByte())
+            
+            // Connect to relays (blocking wait)
+            val connectionLatch = java.util.concurrent.CountDownLatch(1)
+            var connected = false
+            
+            nostrManager.connectToRelays(
+                scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO),
+                onConnected = { connected = true; connectionLatch.countDown() },
+                onFailed = { connectionLatch.countDown() }
+            )
+            
+            connectionLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            
+            if (!connected && !nostrManager.isConnected()) {
+                android.util.Log.e("SignedByMe", "Enrollment failed: Could not connect to NOSTR relays")
+                return@withContext null
+            }
+            
+            // Poll for enrollment authorization event (max 30 seconds, poll every 2 seconds)
+            var authEventContent: org.json.JSONObject? = null
+            var pollAttempts = 0
+            val maxAttempts = 15
+            
+            while (pollAttempts < maxAttempts && authEventContent == null) {
+                authEventContent = nostrManager.pollForEnrollmentAuthEvent(nonce)
+                if (authEventContent != null) {
+                    android.util.Log.i("SignedByMe", "Found kind 28200 event!")
+                    break
                 }
+                pollAttempts++
+                android.util.Log.d("SignedByMe", "Poll attempt $pollAttempts/$maxAttempts - no event yet")
+                kotlinx.coroutines.delay(2000)
+            }
+            
+            // Kind 28200 event IS the authorization proof - fail if not found
+            if (authEventContent == null) {
+                android.util.Log.e("SignedByMe", "Enrollment failed: No kind 28200 authorization event found within timeout")
+                android.util.Log.e("SignedByMe", "Enterprise must publish kind 28200 event to relay before enrollment can proceed")
+                return@withContext null
+            }
+            
+            // Step 3: Verify NIP-05 
+            android.util.Log.i("SignedByMe", "Step 3: Verifying NIP-05 for $enterpriseDomain...")
+            val nip05Pubkey = fetchNip05Pubkey(enterpriseDomain)
+            if (nip05Pubkey != null) {
+                android.util.Log.i("SignedByMe", "NIP-05 pubkey verified: ${nip05Pubkey.take(16)}...")
+                // TODO: Verify Schnorr signature on event matches NIP-05 pubkey
+                // For now, server does this verification
             } else {
-                android.util.Log.w("SignedByMe", "No kind 28200 event found, proceeding with nonce-only commit")
+                android.util.Log.w("SignedByMe", "NIP-05 lookup failed - server will verify signature")
             }
 
             // Step 4: Get leaf commitment and call POST /v1/membership/enroll/commit
@@ -1851,20 +1858,17 @@ class DidWalletManager(private val context: Context) {
             // { "leaf_commitment": "0x...", "authorization_event": { <complete kind 28200 event> } }
             val commitBody = org.json.JSONObject().apply {
                 put("leaf_commitment", "0x$leafCommitment")
-                put("nonce", nonce) // Include nonce for backwards compatibility
-                if (authEventContent != null) {
-                    // Wrap the event content in the expected authorization_event structure
-                    put("authorization_event", org.json.JSONObject().apply {
-                        put("kind", 28200)
-                        put("content", authEventContent.toString())
-                        put("tags", org.json.JSONArray().apply {
-                            put(org.json.JSONArray().apply { put("nonce"); put(nonce) })
-                            put(org.json.JSONArray().apply { put("c"); put(clientId) })
-                        })
-                        // Note: Full event with id, pubkey, sig would come from raw NOSTR event
-                        // For now we're passing the content; server will verify via relay lookup
+                // Authorization event is REQUIRED - no fallback path
+                put("authorization_event", org.json.JSONObject().apply {
+                    put("kind", 28200)
+                    put("content", authEventContent.toString())
+                    put("tags", org.json.JSONArray().apply {
+                        put(org.json.JSONArray().apply { put("nonce"); put(nonce) })
+                        put(org.json.JSONArray().apply { put("c"); put(clientId) })
                     })
-                }
+                    // Note: Full event with id, pubkey, sig would come from raw NOSTR event
+                    // For now we're passing the content; server will verify via relay lookup
+                })
             }
             
             val commitUrl = java.net.URL("$apiBaseUrl/v1/membership/enroll/commit")
