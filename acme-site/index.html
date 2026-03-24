@@ -6,52 +6,12 @@
     <title>Acme Corp - Employee Portal</title>
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- noble-secp256k1 for Schnorr signing (BIP-340) -->
-    <script src="https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.1.0/lib/index.js" type="module"></script>
-    <!-- nostr-tools for event signing + nip19 decoding -->
     <script type="module">
-        import * as secp from 'https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.1.0/+esm';
-        import { bytesToHex, hexToBytes } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@1.4.0/utils.js';
-        import { sha256 } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@1.4.0/sha256.js';
-        import * as nip19 from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/+esm';
-        
-        // Make secp256k1 available globally for app.js
-        window.secp256k1 = secp;
-        window.nobleHashes = { sha256, bytesToHex, hexToBytes };
-        window.nip19 = nip19;
-        
-        // Override finalizeEvent with noble implementation
-        window.finalizeEvent = async function(eventTemplate, privateKeyHex) {
-            const privKeyBytes = hexToBytes(privateKeyHex);
-            const pubKeyBytes = secp.getPublicKey(privKeyBytes);
-            const pubKeyHex = bytesToHex(pubKeyBytes).slice(2); // Remove 02/03 prefix for x-only
-            
-            const event = {
-                ...eventTemplate,
-                pubkey: pubKeyHex,
-                created_at: eventTemplate.created_at || Math.floor(Date.now() / 1000)
-            };
-            
-            // Compute event ID (NIP-01)
-            const serialized = JSON.stringify([
-                0,
-                event.pubkey,
-                event.created_at,
-                event.kind,
-                event.tags,
-                event.content
-            ]);
-            const idBytes = sha256(new TextEncoder().encode(serialized));
-            event.id = bytesToHex(idBytes);
-            
-            // Sign with Schnorr (BIP-340)
-            const sig = await secp.schnorr.sign(idBytes, privKeyBytes);
-            event.sig = bytesToHex(sig);
-            
-            return event;
-        };
-        
-        console.log('NOSTR signing ready (noble-secp256k1)');
+        import { finalizeEvent } from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/+esm';
+        import { decode } from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/nip19/+esm';
+        window.nostrFinalizeEvent = finalizeEvent;
+        window.nip19 = { decode };
+        console.log('nostr-tools ready');
     </script>
 </head>
 <body>

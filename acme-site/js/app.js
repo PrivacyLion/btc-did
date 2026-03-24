@@ -141,19 +141,15 @@ async function schnorrSign(messageHash, privateKeyHex) {
 
 /**
  * Finalize and sign a NOSTR event
- * Uses the global finalizeEvent from index.html module script
  * @param eventTemplate - Unsigned event object
  * @param privateKeyNsec - Private key in nsec (bech32) format
  */
 async function signNostrEvent(eventTemplate, privateKeyNsec) {
-    // Use global finalizeEvent from noble-secp256k1 module (defined in index.html)
-    if (typeof window.finalizeEvent !== 'function') {
-        throw new Error('Signing library not loaded. Check that noble-secp256k1 module is included.');
+    if (typeof window.nostrFinalizeEvent !== 'function') {
+        throw new Error('nostr-tools not loaded');
     }
-    
-    // Decode nsec to hex using nostr-tools nip19
     if (!window.nip19?.decode) {
-        throw new Error('nip19 decoder not loaded. Check that nostr-tools module is included.');
+        throw new Error('nip19 decoder not loaded');
     }
     
     const decoded = window.nip19.decode(privateKeyNsec);
@@ -161,10 +157,7 @@ async function signNostrEvent(eventTemplate, privateKeyNsec) {
         throw new Error(`Expected nsec, got ${decoded.type}`);
     }
     
-    // decoded.data is Uint8Array, convert to hex
-    const privateKeyHex = window.nobleHashes.bytesToHex(decoded.data);
-    
-    return await window.finalizeEvent(eventTemplate, privateKeyHex);
+    return window.nostrFinalizeEvent(eventTemplate, decoded.data);
 }
 
 // ============================================================================
