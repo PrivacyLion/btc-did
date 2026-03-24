@@ -354,9 +354,61 @@ async function publishToRelay(event) {
  * Subscribe to relay for enrollment completion events
  */
 function subscribeToEnrollmentCompletion() {
-    // Could subscribe for kind 28201 (enrollment complete) here
-    // For now, we just show success when app completes enrollment
-    // The app will fetch witness and show success locally
+    closeRelay();
+    
+    console.log('Connecting to relay for enrollment:', RELAY_URL);
+    relayWs = new WebSocket(RELAY_URL);
+    
+    relayWs.onopen = () => {
+        console.log('Relay connected, subscribing to enrollment events');
+        const subRequest = JSON.stringify([
+            "REQ",
+            "enroll-sub",
+            {
+                kinds: [28200],
+                authors: [ACME_PUBKEY_HEX]
+            }
+        ]);
+        relayWs.send(subRequest);
+    };
+    
+    relayWs.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+            console.log('Relay message:', msg);
+            
+            if (msg[0] === 'EVENT' && msg[1] === 'enroll-sub') {
+                const nostrEvent = msg[2];
+                if (nostrEvent.kind === 28200) {
+                    // Verify nonce tag matches current enrollment
+                    const nonceTag = nostrEvent.tags.find(t => t[0] === 'nonce');
+                    if (!nonceTag || nonceTag[1] !== currentNonce) return;
+                    
+                    handleEnrollmentEvent(nostrEvent);
+                }
+            } else if (msg[0] === 'EOSE') {
+                console.log('End of stored events');
+            }
+        } catch (error) {
+            console.error('Error parsing relay message:', error);
+        }
+    };
+    
+    relayWs.onerror = (error) => {
+        console.error('Relay error:', error);
+    };
+    
+    relayWs.onclose = () => {
+        console.log('Relay connection closed');
+    };
+}
+
+/**
+ * Handle enrollment event from relay
+ */
+function handleEnrollmentEvent(event) {
+    console.log('Enrollment event received:', event);
+    // TODO: Handle enrollment completion
 }
 
 /**
