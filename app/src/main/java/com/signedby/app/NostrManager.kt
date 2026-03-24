@@ -317,22 +317,27 @@ class NostrManager(private val context: Context) {
     // =============================================================================
 
     /**
-     * Poll for kind 28200 (enrollment_authorization) event tagged with nonce.
+     * Poll for kind 28200 (enrollment_authorization) event by author, match nonce client-side.
      * Used in enrollment flow - enterprise publishes this event.
      * 
+     * strfry relay doesn't index multi-character tags, so we filter by author
+     * and match the nonce tag client-side.
+     * 
      * @param nonce Enrollment session nonce
+     * @param enterprisePubkeyHex Enterprise pubkey in hex format (from NIP-05)
      * @return The complete NOSTR event as JSONObject if found, null otherwise
      */
-    suspend fun pollForEnrollmentAuthEvent(nonce: String): JSONObject? = withContext(Dispatchers.IO) {
+    suspend fun pollForEnrollmentAuthEvent(nonce: String, enterprisePubkeyHex: String): JSONObject? = withContext(Dispatchers.IO) {
         if (!isConnected()) {
             Log.d(TAG, "Not connected - cannot poll for enrollment auth event")
             return@withContext null
         }
         
         try {
-            // Poll via Rust nostr-sdk for kind 28200 tagged with nonce
-            val result = NativeBridge.nostrPollForEvent(
+            // Poll via Rust nostr-sdk for kind 28200 by author, match nonce client-side
+            val result = NativeBridge.nostrPollForEventByAuthor(
                 kind = 28200,
+                authorHex = enterprisePubkeyHex,
                 tagName = "nonce",
                 tagValue = nonce
             )
@@ -342,8 +347,6 @@ class NostrManager(private val context: Context) {
                 null
             } else {
                 try {
-                    // The result is the event content - but we need the whole event
-                    // The content contains client_id and expires_at
                     Log.i(TAG, "Found enrollment auth event for nonce: ${nonce.take(8)}...")
                     JSONObject(result)
                 } catch (e: Exception) {
@@ -399,16 +402,20 @@ class NostrManager(private val context: Context) {
     }
 
     // =============================================================================
-    // Phase 26.7: Mobile-to-Mobile Login (Poll for kind 28200 by npub)
+    // Phase 26.7: Mobile-to-Mobile Login (Poll for kind 28200 by author, match npub)
     // =============================================================================
 
     /**
-     * Poll for kind 28200 (enrollment_authorization) event tagged with user's npub.
+     * Poll for kind 28200 (enrollment_authorization) event by author, match npub client-side.
      * Used for mobile-to-mobile login - enterprise publishes event addressed to user.
      * 
-     * @return JSONObject with event content if found (includes nonce), null otherwise
+     * strfry relay doesn't index multi-character tags, so we filter by author
+     * and match the npub tag client-side against the user's derived npub.
+     * 
+     * @param enterprisePubkeyHex Enterprise pubkey in hex format (from NIP-05)
+     * @return JSONObject with full event if found (includes nonce), null otherwise
      */
-    suspend fun pollForM2MLoginEvent(): JSONObject? = withContext(Dispatchers.IO) {
+    suspend fun pollForM2MLoginEvent(enterprisePubkeyHex: String): JSONObject? = withContext(Dispatchers.IO) {
         if (!isConnected()) {
             Log.d(TAG, "Not connected - cannot poll for M2M event")
             return@withContext null
@@ -428,10 +435,11 @@ class NostrManager(private val context: Context) {
         }
         
         try {
-            // Poll via Rust nostr-sdk for kind 28200 tagged with "p" (user pubkey)
-            val result = NativeBridge.nostrPollForEvent(
+            // Poll via Rust nostr-sdk for kind 28200 by author, match npub client-side
+            val result = NativeBridge.nostrPollForEventByAuthor(
                 kind = 28200,
-                tagName = "p",
+                authorHex = enterprisePubkeyHex,
+                tagName = "npub",
                 tagValue = pubkeyHex
             )
             

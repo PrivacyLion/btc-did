@@ -1811,13 +1811,20 @@ class DidWalletManager(private val context: Context) {
                 return@withContext null
             }
             
+            // Fetch enterprise pubkey from NIP-05 for relay filter
+            val enterprisePubkeyHex = fetchNip05Pubkey(enterpriseDomain)
+            if (enterprisePubkeyHex == null) {
+                android.util.Log.e("SignedByMe", "Enrollment failed: Could not fetch enterprise pubkey from NIP-05")
+                return@withContext null
+            }
+            
             // Poll for enrollment authorization event (max 30 seconds, poll every 2 seconds)
             var authEventContent: org.json.JSONObject? = null
             var pollAttempts = 0
             val maxAttempts = 15
             
             while (pollAttempts < maxAttempts && authEventContent == null) {
-                authEventContent = nostrManager.pollForEnrollmentAuthEvent(nonce)
+                authEventContent = nostrManager.pollForEnrollmentAuthEvent(nonce, enterprisePubkeyHex)
                 if (authEventContent != null) {
                     android.util.Log.i("SignedByMe", "Found kind 28200 event!")
                     break

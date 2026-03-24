@@ -639,4 +639,21 @@ object NativeBridge {
         tagValue: String
     ): String
 
+    /**
+     * Poll for a NOSTR event by author, then match tag client-side.
+     * Used when relay doesn't support multi-character tag filters (e.g., strfry).
+     * 
+     * @param kind Event kind to filter for
+     * @param authorHex Author pubkey in hex format
+     * @param tagName Tag name to match client-side (e.g., "nonce", "npub")
+     * @param tagValue Tag value to match client-side
+     * @return Full event JSON if found, empty string if not found, "error:..." on failure
+     */
+    @JvmStatic external fun nostrPollForEventByAuthor(
+        kind: Int,
+        authorHex: String,
+        tagName: String,
+        tagValue: String
+    ): String
+
 }

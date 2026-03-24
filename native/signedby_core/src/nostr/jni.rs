@@ -600,6 +600,114 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPollForEvent(
     }
 }
 
+/// Poll for a NOSTR event by author (kind + authors filter), then match tag client-side.
+/// Used when relay doesn't support multi-character tag filters (e.g., strfry).
+/// 
+/// Returns: Full event JSON if found, empty string if not found, "error:..." on failure
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_signedby_app_NativeBridge_nostrPollForEventByAuthor(
+    mut env: JNIEnv,
+    _clazz: JClass,
+    kind: jni::sys::jint,
+    author_hex: JString,
+    tag_name: JString,
+    tag_value: JString,
+) -> jstring {
+    use nostr_sdk::prelude::*;
+    use std::time::Duration;
+    
+    // Extract parameters
+    let author_str = match env.get_string(&author_hex) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_author").unwrap().into_raw(),
+    };
+    let tag_name_str = match env.get_string(&tag_name) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_tag_name").unwrap().into_raw(),
+    };
+    let tag_value_str = match env.get_string(&tag_value) {
+        Ok(s) => s.to_string_lossy().into_owned(),
+        Err(_) => return env.new_string("error:invalid_tag_value").unwrap().into_raw(),
+    };
+    
+    // Parse author pubkey
+    let author_pubkey = match PublicKey::from_hex(&author_str) {
+        Ok(pk) => pk,
+        Err(e) => return env.new_string(format!("error:invalid_author_hex:{}", e)).unwrap().into_raw(),
+    };
+    
+    // Clone the inner client while holding the lock, then release lock
+    let inner_client = {
+        let guard = match NOSTR_CLIENT.lock() {
+            Ok(g) => g,
+            Err(_) => return env.new_string("error:client_lock_failed").unwrap().into_raw(),
+        };
+        
+        let client = match guard.as_ref() {
+            Some(c) => c,
+            None => return env.new_string("error:client_not_initialized").unwrap().into_raw(),
+        };
+        
+        if !client.is_connected() {
+            return env.new_string("error:not_connected").unwrap().into_raw();
+        }
+        
+        client.inner_client().clone()
+    };
+    
+    // Poll for event with timeout
+    let result = RUNTIME.block_on(async {
+        let kind_u16 = kind as u16;
+        
+        // Build filter: kind + author only (no tag filter to relay)
+        let filter = Filter::new()
+            .kind(Kind::Custom(kind_u16))
+            .author(author_pubkey)
+            .limit(20);
+        
+        // Fetch events with timeout
+        let timeout = Duration::from_secs(5);
+        let events: Vec<Event> = match inner_client.get_events_of(vec![filter], EventSource::both(Some(timeout))).await {
+            Ok(evts) => evts,
+            Err(e) => return Err(anyhow::anyhow!("Fetch failed: {}", e)),
+        };
+        
+        // Filter events by tag client-side
+        for event in events.iter() {
+            let has_matching_tag = event.tags.iter().any(|tag| {
+                let tag_as_vec = tag.as_slice();
+                if tag_as_vec.len() >= 2 {
+                    tag_as_vec[0] == tag_name_str && tag_as_vec[1] == tag_value_str
+                } else {
+                    false
+                }
+            });
+            
+            if has_matching_tag {
+                // Return full event as JSON
+                let event_json = serde_json::json!({
+                    "id": event.id.to_hex(),
+                    "pubkey": event.pubkey.to_hex(),
+                    "created_at": event.created_at.as_u64(),
+                    "kind": event.kind.as_u16(),
+                    "tags": event.tags.iter().map(|t| t.as_slice().to_vec()).collect::<Vec<_>>(),
+                    "content": event.content,
+                    "sig": event.sig.to_string()
+                });
+                return Ok(Some(event_json.to_string()));
+            }
+        }
+        
+        Ok(None)
+    });
+    
+    match result {
+        Ok(Some(json)) => env.new_string(json).unwrap().into_raw(),
+        Ok(None) => env.new_string("").unwrap().into_raw(),
+        Err(e) => env.new_string(format!("error:{}", e)).unwrap().into_raw(),
+    }
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
