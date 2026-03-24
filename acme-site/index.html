@@ -7,13 +7,13 @@
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <!-- noble-secp256k1 for Schnorr signing (BIP-340) -->
-    <script src="https://unpkg.com/@noble/secp256k1@2.1.0/lib/index.js" type="module"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.1.0/lib/index.js" type="module"></script>
     <!-- nostr-tools for event signing + nip19 decoding -->
     <script type="module">
-        import * as secp from 'https://unpkg.com/@noble/secp256k1@2.1.0/index.js';
-        import { bytesToHex, hexToBytes } from 'https://unpkg.com/@noble/hashes@1.4.0/utils.js';
-        import { sha256 } from 'https://unpkg.com/@noble/hashes@1.4.0/sha256.js';
-        import * as nip19 from 'https://unpkg.com/nostr-tools@2.7.0/nip19.js';
+        import * as secp from 'https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.1.0/+esm';
+        import { bytesToHex, hexToBytes } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@1.4.0/utils.js';
+        import { sha256 } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@1.4.0/sha256.js';
+        import * as nip19 from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/+esm';
         
         // Make secp256k1 available globally for app.js
         window.secp256k1 = secp;
