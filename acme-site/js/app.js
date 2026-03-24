@@ -26,9 +26,8 @@ const AMOUNT_SATS = 100;
 // Acme Enterprise NOSTR Keys (Phase 26.9)
 // Public key published at https://acme.beta.privacy-lion.com/.well-known/nostr.json
 const ACME_PUBKEY_HEX = 'f1ff989f13592f68206bc42b9b67fae5c5390e77858afc0e369dfd6d2b2cb7d7';
-// Private key - hex format (64 chars). Retrieved from Bitwarden "Acme Enterprise NOSTR Private Key"
-// To convert nsec to hex: use `nak decode <nsec>` or online converter
-const ACME_PRIVKEY_HEX = '%%ACME_PRIVKEY_HEX%%'; // TODO: Scott to fill in
+// Private key - nsec (bech32 format). Retrieved from Bitwarden "Acme Enterprise NOSTR Private Key"
+const ACME_PRIVKEY_NSEC = '%%ACME_PRIVKEY_NSEC%%'; // TODO: Scott to fill in
 
 // Strike API - signedby-demo key (dev/test only - temporary scaffolding)
 const STRIKE_API_KEY = '4F683B6BDAD5E8ED8A345B47AA3674060B49412A51352BB183B55ABDBCAC92BC';
@@ -143,14 +142,29 @@ async function schnorrSign(messageHash, privateKeyHex) {
 /**
  * Finalize and sign a NOSTR event
  * Uses the global finalizeEvent from index.html module script
+ * @param eventTemplate - Unsigned event object
+ * @param privateKeyNsec - Private key in nsec (bech32) format
  */
-async function signNostrEvent(eventTemplate, privateKeyHex) {
+async function signNostrEvent(eventTemplate, privateKeyNsec) {
     // Use global finalizeEvent from noble-secp256k1 module (defined in index.html)
-    if (typeof window.finalizeEvent === 'function') {
-        return await window.finalizeEvent(eventTemplate, privateKeyHex);
+    if (typeof window.finalizeEvent !== 'function') {
+        throw new Error('Signing library not loaded. Check that noble-secp256k1 module is included.');
     }
     
-    throw new Error('Signing library not loaded. Check that noble-secp256k1 module is included.');
+    // Decode nsec to hex using nostr-tools nip19
+    if (!window.nip19?.decode) {
+        throw new Error('nip19 decoder not loaded. Check that nostr-tools module is included.');
+    }
+    
+    const decoded = window.nip19.decode(privateKeyNsec);
+    if (decoded.type !== 'nsec') {
+        throw new Error(`Expected nsec, got ${decoded.type}`);
+    }
+    
+    // decoded.data is Uint8Array, convert to hex
+    const privateKeyHex = window.nobleHashes.bytesToHex(decoded.data);
+    
+    return await window.finalizeEvent(eventTemplate, privateKeyHex);
 }
 
 // ============================================================================
@@ -193,7 +207,7 @@ function cancelFlow() {
  * 4. Regenerate every 90 seconds
  */
 async function startEnrollment() {
-    if (ACME_PRIVKEY_HEX === '%%ACME_PRIVKEY_HEX%%') {
+    if (ACME_PRIVKEY_NSEC === '%%ACME_PRIVKEY_NSEC%%') {
         alert('Enrollment not configured. Acme enterprise private key not set.');
         return;
     }
@@ -269,7 +283,7 @@ async function generateEnrollmentQR() {
     };
     
     // Sign and finalize the event
-    const signedEvent = await signNostrEvent(eventTemplate, ACME_PRIVKEY_HEX);
+    const signedEvent = await signNostrEvent(eventTemplate, ACME_PRIVKEY_NSEC);
     console.log('Signed enrollment event:', signedEvent);
     
     // Publish to relay
