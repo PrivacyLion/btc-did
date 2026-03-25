@@ -46,7 +46,6 @@ const loginView = document.getElementById('login-view');
 const qrView = document.getElementById('qr-view');
 const successView = document.getElementById('success-view');
 const signedByBtn = document.getElementById('signedby-btn');
-const enrollBtn = document.getElementById('enroll-btn');
 const backBtn = document.getElementById('back-btn');
 const rewardAmount = document.getElementById('reward-amount');
 const rewardInfo = document.getElementById('reward-info');
@@ -54,6 +53,11 @@ const statusText = document.getElementById('status-text');
 const spinner = document.getElementById('spinner');
 const qrTitle = document.getElementById('qr-title');
 const qrSubtitle = document.getElementById('qr-subtitle');
+
+// Enrollment section elements (auto-displayed on page load)
+const enrollQrContainer = document.getElementById('enroll-qr-container');
+const enrollStatus = document.getElementById('enroll-status');
+const enrollTimer = document.getElementById('enroll-timer');
 
 // Success view elements
 const tokenSub = document.getElementById('token-sub');
@@ -69,8 +73,10 @@ const payoutErrorMsg = document.getElementById('payout-error-msg');
 
 // Event Listeners
 if (signedByBtn) signedByBtn.addEventListener('click', startSignedByLogin);
-if (enrollBtn) enrollBtn.addEventListener('click', startEnrollment);
 if (backBtn) backBtn.addEventListener('click', cancelFlow);
+
+// Auto-start enrollment QR on page load
+document.addEventListener('DOMContentLoaded', initEnrollmentQR);
 
 // ============================================================================
 // NOSTR Cryptographic Functions (subset of nostr-tools for signing)
@@ -189,40 +195,26 @@ function cancelFlow() {
 }
 
 // ============================================================================
-// ENROLLMENT FLOW (Phase 26.9)
+// ENROLLMENT FLOW (Phase 26.9) - Auto-displayed on page load
 // ============================================================================
 
 /**
- * Start enrollment flow
- * 1. Generate nonce
- * 2. Publish kind 28200 event
- * 3. Show enrollment QR
- * 4. Regenerate every 90 seconds
+ * Initialize enrollment QR on page load
+ * Automatically generates nonce, publishes kind 28200, shows QR
+ * Regenerates every 90 seconds
  */
-async function startEnrollment() {
+async function initEnrollmentQR() {
     if (ACME_PRIVKEY_NSEC === '%%ACME_PRIVKEY_NSEC%%') {
-        alert('Enrollment not configured. Acme enterprise private key not set.');
+        if (enrollStatus) enrollStatus.textContent = 'Enrollment not configured';
+        console.warn('Enrollment not configured - Acme enterprise private key not set');
         return;
     }
     
     try {
         currentMode = 'enroll';
-        if (enrollBtn) {
-            enrollBtn.disabled = true;
-            enrollBtn.textContent = 'Starting...';
-        }
         
         // Generate and publish first enrollment event
         await generateEnrollmentQR();
-        
-        // Show QR view with enrollment-specific UI
-        if (qrTitle) qrTitle.textContent = 'Scan to Enroll';
-        if (qrSubtitle) qrSubtitle.textContent = 'Open SignedByMe app and scan this code to join Acme';
-        if (rewardInfo) rewardInfo.classList.add('hidden');
-        statusText.textContent = 'Waiting for enrollment...';
-        
-        loginView.classList.add('hidden');
-        qrView.classList.remove('hidden');
         
         // Set up 90-second refresh
         enrollmentInterval = setInterval(async () => {
@@ -234,19 +226,8 @@ async function startEnrollment() {
         subscribeToEnrollmentCompletion();
         
     } catch (error) {
-        console.error('Error starting enrollment:', error);
-        alert('Failed to start enrollment: ' + error.message);
-    } finally {
-        if (enrollBtn) {
-            enrollBtn.disabled = false;
-            enrollBtn.innerHTML = `
-                <span class="icon">📝</span>
-                <div class="btn-text">
-                    Enroll with SignedByMe
-                    <span class="reward-badge">BECOME A MEMBER</span>
-                </div>
-            `;
-        }
+        console.error('Error initializing enrollment:', error);
+        if (enrollStatus) enrollStatus.textContent = 'Error: ' + error.message;
     }
 }
 
@@ -287,19 +268,23 @@ async function generateEnrollmentQR() {
     const qrData = `signedby://enroll/${CLIENT_ID}/${currentNonce}?exp=${qrExpiry}`;
     console.log('Enrollment QR data:', qrData);
     
-    // Render QR
-    const qrContainer = document.getElementById('qr-container');
-    qrContainer.innerHTML = '';
-    new QRCode(qrContainer, {
-        text: qrData,
-        width: 250,
-        height: 250,
-        colorDark: '#059669', // Green for enrollment
-        colorLight: '#ffffff'
-    });
+    // Render QR in the enrollment section (on login view)
+    if (enrollQrContainer) {
+        enrollQrContainer.innerHTML = '';
+        new QRCode(enrollQrContainer, {
+            text: qrData,
+            width: 180,
+            height: 180,
+            colorDark: '#059669', // Green for enrollment
+            colorLight: '#ffffff'
+        });
+    }
     
-    // Update expiry timer
-    startExpiryTimer(90);
+    // Update enrollment status
+    if (enrollStatus) enrollStatus.textContent = 'Scan to become a member';
+    
+    // Start enrollment timer countdown
+    startEnrollmentTimer(90);
 }
 
 /**
@@ -419,6 +404,32 @@ function stopEnrollmentRefresh() {
         clearInterval(enrollmentInterval);
         enrollmentInterval = null;
     }
+}
+
+/**
+ * Start enrollment countdown timer (displayed in login view)
+ */
+let enrollmentTimerInterval = null;
+function startEnrollmentTimer(seconds) {
+    if (enrollmentTimerInterval) {
+        clearInterval(enrollmentTimerInterval);
+    }
+    
+    let remaining = seconds;
+    
+    const updateTimer = () => {
+        if (enrollTimer) enrollTimer.textContent = remaining;
+        
+        if (remaining <= 0) {
+            // Timer hit zero - will be regenerated by enrollmentInterval
+            if (enrollTimer) enrollTimer.textContent = '...';
+        } else {
+            remaining--;
+        }
+    };
+    
+    updateTimer();
+    enrollmentTimerInterval = setInterval(updateTimer, 1000);
 }
 
 // ============================================================================

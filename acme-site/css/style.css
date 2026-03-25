@@ -400,6 +400,50 @@ body {
     white-space: nowrap;
 }
 
+/* Enrollment Section (auto-displayed on page load) */
+.enroll-section {
+    margin-top: 24px;
+    padding-top: 8px;
+}
+
+.enroll-title {
+    text-align: center;
+    font-size: 16px;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.enroll-subtitle {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.enroll-qr {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+
+.enroll-qr img {
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+.enroll-status {
+    text-align: center;
+    font-size: 13px;
+    color: var(--success-green);
+    margin-bottom: 4px;
+}
+
+.enroll-expire {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
 /* Responsive */
 @media (max-width: 480px) {
     .card {
@@ -408,5 +452,10 @@ body {
     
     .logo h1 {
         font-size: 24px;
+    }
+    
+    .enroll-qr img {
+        width: 150px !important;
+        height: 150px !important;
     }
 }
