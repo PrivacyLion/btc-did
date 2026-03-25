@@ -643,10 +643,64 @@ def reject_enrollment(enrollment_id: str) -> None:
     update_enrollment(enrollment_id, status="rejected", rejected_at=int(time.time()))
 
 
-# Legacy functions that may still be imported
-def create_enrollment_token(*args, **kwargs): pass
-def get_enrollment_token(*args, **kwargs): return None
-def consume_enrollment_token(*args, **kwargs): pass
+# Enrollment nonce functions (for /start -> /commit flow)
+def create_enrollment_token(token: str, enrollment_id: str, client_id: str, purpose: str, expires_at: int) -> None:
+    """Create enrollment nonce for /start -> /commit validation."""
+    import time
+    conn = get_connection()
+    try:
+        conn.execute("""
+            INSERT INTO enrollment_nonces (nonce, client_id, purpose, expires_at)
+            VALUES (?, ?, ?, ?)
+        """, (token, client_id, purpose, expires_at))
+        conn.commit()
+    except sqlite3.OperationalError:
+        # Table might not exist yet - create it
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS enrollment_nonces (
+                nonce TEXT PRIMARY KEY,
+                client_id TEXT NOT NULL,
+                purpose TEXT NOT NULL DEFAULT 'allowlist',
+                expires_at INTEGER NOT NULL,
+                consumed INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER DEFAULT (strftime('%s', 'now'))
+            )
+        """)
+        conn.execute("""
+            INSERT INTO enrollment_nonces (nonce, client_id, purpose, expires_at)
+            VALUES (?, ?, ?, ?)
+        """, (token, client_id, purpose, expires_at))
+        conn.commit()
+
+
+def get_enrollment_token(token: str) -> Optional[Dict[str, Any]]:
+    """Get enrollment nonce if valid and not expired."""
+    import time
+    conn = get_connection()
+    try:
+        row = conn.execute("""
+            SELECT nonce, client_id, purpose, expires_at, consumed
+            FROM enrollment_nonces
+            WHERE nonce = ? AND consumed = 0 AND expires_at > ?
+        """, (token, int(time.time()))).fetchone()
+        if row:
+            return dict(row)
+        return None
+    except sqlite3.OperationalError:
+        return None
+
+
+def consume_enrollment_token(token: str) -> None:
+    """Mark enrollment nonce as consumed."""
+    conn = get_connection()
+    try:
+        conn.execute("UPDATE enrollment_nonces SET consumed = 1 WHERE nonce = ?", (token,))
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+
+# Legacy stub functions (deprecated in Phase 26)
 def create_enrollment_session(*args, **kwargs): pass
 def get_enrollment_session(*args, **kwargs): return None
 def mark_session_verified(*args, **kwargs): return False

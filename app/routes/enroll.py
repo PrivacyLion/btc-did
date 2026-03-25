@@ -225,20 +225,14 @@ def get_or_create_tree(client_id: str, purpose: str) -> str:
 # =============================================================================
 
 class EnrollStartRequest(BaseModel):
-    """Start enrollment request."""
-    leaf_commitment: str = Field(..., description="Hex-encoded leaf commitment (32 bytes)")
-    email: Optional[str] = Field(None, description="Email for verification (optional)")
+    """Start enrollment request. Per Bible: accepts client_id only (from header)."""
     purpose: str = Field("allowlist", description="Purpose: allowlist, issuer_batch, revocation")
 
 
 class EnrollStartResponse(BaseModel):
-    """Start enrollment response."""
-    enrollment_id: str
-    verify_token: str
-    verify_token_expires_at: int
-    status: str  # pending_verification, auto_approved
-    verify_url: Optional[str] = None  # URL to verify (if email provided)
-    message: str
+    """Start enrollment response. Per Bible: returns nonce + expires_at."""
+    nonce: str
+    expires_at: str  # ISO timestamp
 
 
 class EnrollVerifyRequest(BaseModel):
@@ -258,9 +252,9 @@ class EnrollVerifyResponse(BaseModel):
 
 
 class EnrollCommitRequest(BaseModel):
-    """Commit enrollment to tree."""
-    enrollment_id: str
-    commit_token: str
+    """Commit enrollment to tree. Per Bible: leaf_commitment submitted here."""
+    nonce: str = Field(..., description="Nonce from /start")
+    leaf_commitment: str = Field(..., description="Hex-encoded leaf commitment (32 bytes)")
 
 
 class EnrollCommitResponse(BaseModel):
@@ -340,69 +334,35 @@ def enroll_start(
     """
     Step 1: Start enrollment.
     
-    Creates enrollment record, returns verification token.
-    If client has auto_approve policy, skips to verified status.
+    Per Bible: accepts client_id only (from API key header).
+    Returns nonce + expires_at. No leaf_commitment here.
     """
     client_id, config = validate_enterprise_key(x_api_key)
     
-    # Validate commitment
-    try:
-        commitment_hex = body.leaf_commitment.replace("0x", "")
-        if len(bytes.fromhex(commitment_hex)) != 32:
-            raise ValueError("Must be 32 bytes")
-    except Exception as e:
-        raise HTTPException(400, f"Invalid leaf_commitment: {e}")
+    # Generate nonce (16 bytes hex = 32 chars)
+    nonce = secrets.token_hex(16)
     
-    # Check for duplicate
-    existing = list_enrollments(client_id=client_id)
-    for e in existing:
-        if e.get("leaf_commitment") == body.leaf_commitment:
-            raise HTTPException(409, "Commitment already enrolled")
+    # Expires in 10 minutes
+    expires_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 600))
     
-    # Create enrollment
-    enrollment_id = "enr_" + secrets.token_urlsafe(16)
-    email_hash = hashlib.sha256(body.email.encode()).hexdigest() if body.email else None
-    
-    # Check auto-approve policy
-    policy = config.get("membership_policy", {})
-    auto_approve = policy.get("auto_approve", False)
-    
-    initial_status = "approved" if auto_approve else "pending"
-    
-    create_enrollment(
-        enrollment_id=enrollment_id,
+    # Store nonce for later validation in /commit
+    # Using enrollment_tokens table with empty enrollment_id for now
+    from ..db import create_enrollment_token
+    create_enrollment_token(
+        token=nonce,
+        enrollment_id="",  # No enrollment yet
         client_id=client_id,
         purpose=body.purpose,
-        leaf_commitment=body.leaf_commitment,
-        email_hash=email_hash,
-        status=initial_status,
+        expires_at=int(time.time()) + 600
     )
     
-    # Create verification token
-    verify_token, verify_expires = create_verify_token(enrollment_id)
-    
-    # For auto-approve, status is already approved
-    if auto_approve:
-        status = "auto_approved"
-        message = "Auto-approved. Use token to commit to tree."
-        verify_url = None
-    else:
-        status = "pending_verification"
-        message = "Verification required. Check email or use callback endpoint."
-        # In production, send verification email here
-        verify_url = f"https://api.beta.privacy-lion.com/v1/enroll/verify-callback?enrollment_id={enrollment_id}&token={verify_token}"
-    
     audit_log("enroll_start", client_id=client_id, details={
-        "enrollment_id": enrollment_id, "status": status, "purpose": body.purpose
+        "nonce": nonce[:8] + "...", "purpose": body.purpose
     })
     
     return EnrollStartResponse(
-        enrollment_id=enrollment_id,
-        verify_token=verify_token,
-        verify_token_expires_at=verify_expires,
-        status=status,
-        verify_url=verify_url,
-        message=message,
+        nonce=nonce,
+        expires_at=expires_at,
     )
 
 
@@ -461,35 +421,54 @@ def enroll_commit(
     x_api_key: str = Header(None, alias="X-API-Key")
 ):
     """
-    Step 3: Commit enrollment to Merkle tree.
+    Step 2: Commit enrollment to Merkle tree.
     
-    Inserts leaf into incremental tree, returns witness.
+    Per Bible: accepts nonce + leaf_commitment.
+    Validates nonce from /start, inserts leaf, returns witness.
     """
     client_id, _ = validate_enterprise_key(x_api_key)
     
-    # Get enrollment
-    enrollment = get_enrollment(body.enrollment_id)
-    if not enrollment:
-        raise HTTPException(404, "Enrollment not found")
+    # Validate nonce
+    from ..db import get_enrollment_token, consume_enrollment_token
+    token_data = get_enrollment_token(body.nonce)
+    if not token_data:
+        raise HTTPException(401, "Invalid or expired nonce")
+    if token_data.get("client_id") != client_id:
+        raise HTTPException(403, "Nonce belongs to different client")
     
-    if enrollment["client_id"] != client_id:
-        raise HTTPException(403, "Enrollment belongs to different client")
+    purpose = token_data.get("purpose", "allowlist")
     
-    # Validate token
-    if not validate_verify_token(body.commit_token, body.enrollment_id):
-        raise HTTPException(401, "Invalid or expired commit token")
+    # Validate leaf_commitment
+    try:
+        commitment_hex = body.leaf_commitment.replace("0x", "")
+        if len(bytes.fromhex(commitment_hex)) != 32:
+            raise ValueError("Must be 32 bytes")
+    except Exception as e:
+        raise HTTPException(400, f"Invalid leaf_commitment: {e}")
     
-    # Check status - must be approved
-    if enrollment["status"] == "pending":
-        raise HTTPException(400, "Enrollment not yet verified")
-    if enrollment["status"] == "in_tree":
-        raise HTTPException(400, "Enrollment already committed")
+    # Check for duplicate commitment
+    existing = list_enrollments(client_id=client_id)
+    for e in existing:
+        if e.get("leaf_commitment") == body.leaf_commitment:
+            raise HTTPException(409, "Commitment already enrolled")
+    
+    # Create enrollment record
+    enrollment_id = "enr_" + secrets.token_urlsafe(16)
+    
+    create_enrollment(
+        enrollment_id=enrollment_id,
+        client_id=client_id,
+        purpose=purpose,
+        leaf_commitment=body.leaf_commitment,
+        email_hash=None,
+        status="approved",
+    )
     
     # Get or create tree
-    tree_id = get_or_create_tree(client_id, enrollment["purpose"])
+    tree_id = get_or_create_tree(client_id, purpose)
     
     # Insert leaf into tree
-    leaf_hash = enrollment["leaf_commitment"].replace("0x", "")
+    leaf_hash = body.leaf_commitment.replace("0x", "")
     new_root, leaf_index, siblings = insert_leaf(tree_id, leaf_hash)
     
     # Compute path bits from leaf index
@@ -501,7 +480,7 @@ def enroll_commit(
     
     # Save witness
     save_witness(
-        enrollment_id=body.enrollment_id,
+        enrollment_id=enrollment_id,
         root_id=tree_id,
         siblings=siblings,
         path_bits=path_bits,
@@ -510,24 +489,25 @@ def enroll_commit(
     
     # Update enrollment status
     update_enrollment(
-        body.enrollment_id,
+        enrollment_id,
         status="in_tree",
         tree_id=tree_id,
         leaf_index=leaf_index,
         tree_built_at=int(time.time()),
     )
     
-    consume_verify_token(body.commit_token)
+    # Consume the nonce
+    consume_enrollment_token(body.nonce)
     
     audit_log("enroll_committed", client_id=client_id, details={
-        "enrollment_id": body.enrollment_id,
+        "enrollment_id": enrollment_id,
         "tree_id": tree_id,
         "leaf_index": leaf_index,
         "root": new_root[:16] + "...",
     })
     
     return EnrollCommitResponse(
-        enrollment_id=body.enrollment_id,
+        enrollment_id=enrollment_id,
         status="committed",
         tree_id=tree_id,
         root=new_root,

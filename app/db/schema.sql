@@ -129,6 +129,20 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 
 -- ============================================================================
+-- ENROLLMENT NONCES
+-- Temporary storage for /start -> /commit flow
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS enrollment_nonces (
+    nonce TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    purpose TEXT NOT NULL DEFAULT 'allowlist',
+    expires_at INTEGER NOT NULL,
+    consumed INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER DEFAULT (strftime('%s', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_nonces_expires ON enrollment_nonces(expires_at);
+
+-- ============================================================================
 -- MIGRATION: Phase 26
 -- If upgrading from Phase 10, run these to migrate data:
 -- 
