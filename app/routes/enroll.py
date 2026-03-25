@@ -60,9 +60,6 @@ DATA_DIR = Path(__file__).resolve().parents[2]
 TREE_DEPTH = 20  # Fixed depth for all trees (2^20 = 1M leaves max)
 VALID_ROOTS_WINDOW = 30  # Last 30 roots are valid
 
-# Verification token TTL
-VERIFY_TOKEN_TTL = 30 * 60  # 30 minutes
-
 # Poseidon hash binary
 POSEIDON_HASH_BIN = os.getenv(
     "POSEIDON_HASH_BIN",
@@ -445,39 +442,8 @@ class DirectEnrollResponse(BaseModel):
 #   pending_verification -> verified -> committed
 #   (auto_approved)      -> committed  (direct path)
 #
-# Fields stored in enrollments:
-#   - email_hash: SHA256(email) or DID
-#   - leaf_commitment: The commitment
-#   - status: pending, approved, in_tree (we'll use these)
-#   - Extra data stored in a separate table or JSON field
-
-def create_verify_token(enrollment_id: str) -> tuple[str, int]:
-    """Create verification token."""
-    token = "vtk_" + secrets.token_urlsafe(32)
-    expires_at = int(time.time()) + VERIFY_TOKEN_TTL
-    # Store in enrollment_tokens table
-    from ..db import create_enrollment_token
-    create_enrollment_token(token, enrollment_id, "", "", expires_at)
-    return token, expires_at
-
-
-def validate_verify_token(token: str, enrollment_id: str) -> bool:
-    """Validate verification token (legacy 3-step flow)."""
-    from ..db import get_enrollment_token
-    t = get_enrollment_token(token)
-    # Note: Phase 26 nonces don't track enrollment_id, just client_id
-    # This function is for legacy 3-step flow compatibility
-    return t is not None
-
-
-def consume_verify_token(token: str):
-    """Consume verification token."""
-    from ..db import consume_enrollment_token
-    consume_enrollment_token(token)
-
-
 # =============================================================================
-# Endpoints: 3-Step Flow
+# Endpoints: Phase 26 Enrollment
 # =============================================================================
 
 @router.post("/start", response_model=EnrollStartResponse)
@@ -518,55 +484,6 @@ def enroll_start(body: EnrollStartRequest):
     return EnrollStartResponse(
         nonce=nonce,
         expires_at=expires_at,
-    )
-
-
-@router.post("/verify-callback", response_model=EnrollVerifyResponse)
-def enroll_verify_callback(
-    body: EnrollVerifyRequest,
-    x_api_key: str = Header(None, alias="X-API-Key")
-):
-    """
-    Step 2: Verify enrollment (callback from email/SMS).
-    
-    Validates token, marks enrollment as verified.
-    Returns commit token for final step.
-    """
-    client_id, _ = validate_enterprise_key(x_api_key)
-    
-    # Get enrollment
-    enrollment = get_enrollment(body.enrollment_id)
-    if not enrollment:
-        raise HTTPException(404, "Enrollment not found")
-    
-    if enrollment["client_id"] != client_id:
-        raise HTTPException(403, "Enrollment belongs to different client")
-    
-    # Validate token
-    if not validate_verify_token(body.verify_token, body.enrollment_id):
-        raise HTTPException(401, "Invalid or expired verification token")
-    
-    # Check status
-    if enrollment["status"] == "in_tree":
-        raise HTTPException(400, "Enrollment already committed")
-    
-    # Mark as approved (verified)
-    db_approve(body.enrollment_id)
-    consume_verify_token(body.verify_token)
-    
-    # Create commit token
-    commit_token, commit_expires = create_verify_token(body.enrollment_id)
-    
-    audit_log("enroll_verified", client_id=client_id, details={
-        "enrollment_id": body.enrollment_id
-    })
-    
-    return EnrollVerifyResponse(
-        enrollment_id=body.enrollment_id,
-        status="verified",
-        commit_token=commit_token,
-        commit_token_expires_at=commit_expires,
-        message="Verified. Use commit_token to add to Merkle tree.",
     )
 
 
