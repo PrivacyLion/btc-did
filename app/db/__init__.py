@@ -700,6 +700,48 @@ def consume_enrollment_token(token: str) -> None:
         pass
 
 
+# Used event IDs (replay protection for enterprise-generated kind 28200 events)
+def is_event_id_used(event_id: str) -> bool:
+    """Check if an authorization event ID has already been used."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM used_event_ids WHERE event_id = ?",
+            (event_id,)
+        ).fetchone()
+        return row is not None
+    except sqlite3.OperationalError:
+        return False
+
+
+def mark_event_id_used(event_id: str, client_id: str) -> None:
+    """Mark an authorization event ID as used."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO used_event_ids (event_id, client_id) VALUES (?, ?)",
+            (event_id, client_id)
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        # Table might not exist yet - create it
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS used_event_ids (
+                event_id TEXT PRIMARY KEY,
+                client_id TEXT NOT NULL,
+                used_at INTEGER DEFAULT (strftime('%s', 'now'))
+            )
+        """)
+        conn.execute(
+            "INSERT INTO used_event_ids (event_id, client_id) VALUES (?, ?)",
+            (event_id, client_id)
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        # Already exists - that's fine
+        pass
+
+
 # Legacy stub functions (deprecated in Phase 26)
 def create_enrollment_session(*args, **kwargs): pass
 def get_enrollment_session(*args, **kwargs): return None

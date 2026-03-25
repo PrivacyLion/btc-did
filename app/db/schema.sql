@@ -130,7 +130,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 
 -- ============================================================================
 -- ENROLLMENT NONCES
--- Temporary storage for /start -> /commit flow
+-- Temporary storage for /start -> /commit flow (server-generated nonces)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS enrollment_nonces (
     nonce TEXT PRIMARY KEY,
@@ -141,6 +141,17 @@ CREATE TABLE IF NOT EXISTS enrollment_nonces (
     created_at INTEGER DEFAULT (strftime('%s', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_nonces_expires ON enrollment_nonces(expires_at);
+
+-- ============================================================================
+-- USED EVENT IDS
+-- Replay protection for enterprise-generated kind 28200 events
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS used_event_ids (
+    event_id TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    used_at INTEGER DEFAULT (strftime('%s', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_used_events_client ON used_event_ids(client_id);
 
 -- ============================================================================
 -- MIGRATION: Phase 26
