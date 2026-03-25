@@ -52,6 +52,33 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         conn.executescript(schema_sql)
         conn.commit()
         logger.info(f"Database initialized at {DB_PATH}")
+    
+    # Run migrations
+    _run_migrations(conn)
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Run ALTER TABLE migrations for schema updates. Never wipes data."""
+    
+    # Migration: Add tree_id column to merkle_witnesses if it doesn't exist
+    # (Live DB has root_id, new schema uses tree_id)
+    try:
+        # Check if tree_id column exists
+        cursor = conn.execute("PRAGMA table_info(merkle_witnesses)")
+        columns = [row[1] for row in cursor.fetchall()]
+        
+        if "tree_id" not in columns and "merkle_witnesses" in _get_tables(conn):
+            conn.execute("ALTER TABLE merkle_witnesses ADD COLUMN tree_id TEXT")
+            conn.commit()
+            logger.info("Migration: Added tree_id column to merkle_witnesses")
+    except sqlite3.OperationalError as e:
+        logger.warning(f"Migration check failed (table may not exist yet): {e}")
+
+
+def _get_tables(conn: sqlite3.Connection) -> List[str]:
+    """Get list of existing tables."""
+    cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    return [row[0] for row in cursor.fetchall()]
 
 
 @contextmanager
