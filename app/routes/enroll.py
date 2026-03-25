@@ -49,7 +49,7 @@ from ..db import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/v1/enroll", tags=["enrollment"])
+router = APIRouter(prefix="/v1/membership/enroll", tags=["enrollment"])
 
 # =============================================================================
 # Config
