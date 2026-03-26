@@ -46,33 +46,135 @@ def get_connection() -> sqlite3.Connection:
 
 
 def _init_schema(conn: sqlite3.Connection) -> None:
-    """Initialize database schema if needed."""
+    """Initialize database schema if needed (safe for existing tables)."""
     if SCHEMA_PATH.exists():
         schema_sql = SCHEMA_PATH.read_text()
-        conn.executescript(schema_sql)
+        # Execute each statement separately to handle partial failures gracefully
+        # CREATE TABLE IF NOT EXISTS and CREATE INDEX IF NOT EXISTS are safe
+        for statement in schema_sql.split(';'):
+            statement = statement.strip()
+            if statement and not statement.startswith('--'):
+                try:
+                    conn.execute(statement)
+                except sqlite3.OperationalError as e:
+                    # Log but continue - table/index may already exist with different schema
+                    if "already exists" not in str(e).lower():
+                        logger.debug(f"Schema statement skipped: {e}")
         conn.commit()
-        logger.info(f"Database initialized at {DB_PATH}")
+        logger.info(f"Database schema checked at {DB_PATH}")
     
-    # Run migrations
+    # Run migrations for columns added after initial deployment
     _run_migrations(conn)
 
 
 def _run_migrations(conn: sqlite3.Connection) -> None:
-    """Run ALTER TABLE migrations for schema updates. Never wipes data."""
+    """
+    Run migrations to add missing columns to existing tables.
     
-    # Migration: Add tree_id column to merkle_witnesses if it doesn't exist
-    # (Live DB has root_id, new schema uses tree_id)
-    try:
-        # Check if tree_id column exists
-        cursor = conn.execute("PRAGMA table_info(merkle_witnesses)")
-        columns = [row[1] for row in cursor.fetchall()]
+    Uses ALTER TABLE ADD COLUMN for each missing column.
+    SQLite doesn't support IF NOT EXISTS for ADD COLUMN, so we check first.
+    Never wipes data - additive only.
+    """
+    # Define expected columns per table: {table: [(column_name, column_def), ...]}
+    # column_def includes type and DEFAULT if any (constraints stripped for ALTER)
+    expected_columns = {
+        "schema_version": [
+            ("version", "INTEGER"),
+            ("applied_at", "TEXT DEFAULT (datetime('now'))"),
+        ],
+        "merkle_leaves": [
+            ("id", "INTEGER"),
+            ("tree_id", "TEXT"),
+            ("leaf_index", "INTEGER"),
+            ("leaf_commitment", "TEXT"),
+            ("authorization_event_id", "TEXT"),
+            ("authorization_pubkey", "TEXT"),
+            ("created_at", "INTEGER DEFAULT (strftime('%s', 'now'))"),
+        ],
+        "merkle_roots": [
+            ("id", "INTEGER"),
+            ("tree_id", "TEXT"),
+            ("root_hash", "TEXT"),
+            ("leaf_index", "INTEGER"),
+            ("created_at", "INTEGER DEFAULT (strftime('%s', 'now'))"),
+        ],
+        "login_verifications": [
+            ("id", "INTEGER"),
+            ("npub", "TEXT"),
+            ("client_id", "TEXT"),
+            ("merkle_root", "TEXT"),
+            ("login_event_id", "TEXT"),
+            ("payment_hash_user", "TEXT"),
+            ("payment_hash_operator", "TEXT"),
+            ("verified_at", "INTEGER"),
+        ],
+        "merkle_trees": [
+            ("id", "TEXT"),
+            ("client_id", "TEXT"),
+            ("purpose", "TEXT"),
+            ("depth", "INTEGER DEFAULT 20"),
+            ("next_leaf_index", "INTEGER DEFAULT 0"),
+            ("state_json", "TEXT DEFAULT '[]'"),
+            ("created_at", "INTEGER DEFAULT (strftime('%s', 'now'))"),
+            ("updated_at", "INTEGER DEFAULT (strftime('%s', 'now'))"),
+        ],
+        "merkle_witnesses": [
+            ("leaf_id", "INTEGER"),
+            ("tree_id", "TEXT"),
+            ("siblings_json", "TEXT"),
+            ("path_bits_json", "TEXT"),
+            ("leaf_index", "INTEGER"),
+            ("root_hash", "TEXT"),
+        ],
+        "audit_log": [
+            ("id", "INTEGER"),
+            ("event_type", "TEXT"),
+            ("client_id", "TEXT"),
+            ("session_id", "TEXT"),
+            ("details_json", "TEXT"),
+            ("created_at", "INTEGER DEFAULT (strftime('%s', 'now'))"),
+        ],
+        "enrollment_nonces": [
+            ("nonce", "TEXT"),
+            ("client_id", "TEXT"),
+            ("purpose", "TEXT DEFAULT 'allowlist'"),
+            ("expires_at", "INTEGER"),
+            ("consumed", "INTEGER DEFAULT 0"),
+            ("created_at", "INTEGER DEFAULT (strftime('%s', 'now'))"),
+        ],
+        "used_event_ids": [
+            ("event_id", "TEXT"),
+            ("client_id", "TEXT"),
+            ("used_at", "INTEGER DEFAULT (strftime('%s', 'now'))"),
+        ],
+    }
+    
+    migrations_run = 0
+    existing_tables = _get_tables(conn)
+    
+    for table, columns in expected_columns.items():
+        if table not in existing_tables:
+            # Table doesn't exist - _init_schema CREATE TABLE handles it
+            continue
         
-        if "tree_id" not in columns and "merkle_witnesses" in _get_tables(conn):
-            conn.execute("ALTER TABLE merkle_witnesses ADD COLUMN tree_id TEXT")
-            conn.commit()
-            logger.info("Migration: Added tree_id column to merkle_witnesses")
-    except sqlite3.OperationalError as e:
-        logger.warning(f"Migration check failed (table may not exist yet): {e}")
+        # Get existing columns
+        existing_cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        
+        # Add missing columns
+        for col_name, col_def in columns:
+            if col_name not in existing_cols:
+                try:
+                    alter_sql = f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}"
+                    conn.execute(alter_sql)
+                    logger.info(f"Migration: Added column {table}.{col_name}")
+                    migrations_run += 1
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        logger.warning(f"Migration failed for {table}.{col_name}: {e}")
+    
+    if migrations_run > 0:
+        conn.commit()
+        logger.info(f"Database migrations complete: {migrations_run} columns added")
 
 
 def _get_tables(conn: sqlite3.Connection) -> List[str]:
