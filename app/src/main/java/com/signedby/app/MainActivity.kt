@@ -662,11 +662,55 @@ fun SignedByMeApp(
     LaunchedEffect(onboardingComplete) {
         if (onboardingComplete && !showLoginScreen) {
             // Start enrollment in background - MUST complete before proof generation
+            // Phase 26: Initialize NostrManager first, then enroll
             launch(Dispatchers.IO) {
                 try {
+                    // Step 1: Load leaf_secret and initialize NOSTR identity
+                    val leafSecret = didMgr.loadLeafSecret()
+                    if (leafSecret == null) {
+                        android.util.Log.e("SignedByMe", "Background enrollment failed: no leaf_secret")
+                        return@launch
+                    }
+                    
+                    val npub = nostrMgr.initializeIdentity(leafSecret)
+                    java.util.Arrays.fill(leafSecret, 0.toByte())
+                    
+                    if (npub == null) {
+                        android.util.Log.e("SignedByMe", "Background enrollment failed: NOSTR identity init failed")
+                        return@launch
+                    }
+                    android.util.Log.i("SignedByMe", "NOSTR identity initialized for enrollment: ${npub.take(20)}...")
+                    
+                    // Step 2: Connect to relays and wait for connection
+                    val connectionLatch = java.util.concurrent.CountDownLatch(1)
+                    var connected = false
+                    
+                    nostrMgr.connectToRelays(
+                        scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO),
+                        onConnected = { 
+                            connected = true
+                            connectionLatch.countDown()
+                            android.util.Log.i("SignedByMe", "NOSTR relays connected for enrollment")
+                        },
+                        onFailed = { 
+                            connectionLatch.countDown()
+                            android.util.Log.w("SignedByMe", "NOSTR relay connection failed")
+                        }
+                    )
+                    
+                    // Wait up to 10 seconds for relay connection
+                    connectionLatch.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                    
+                    if (!connected && !nostrMgr.isConnected()) {
+                        android.util.Log.e("SignedByMe", "Background enrollment failed: could not connect to NOSTR relays")
+                        return@launch
+                    }
+                    
+                    // Step 3: Perform enrollment with NostrManager
                     val success = didMgr.performEnrollment(
                         apiBaseUrl = API_BASE_URL,
-                        apiKey = "acme-test-key-2026"
+                        apiKey = "acme-test-key-2026",
+                        nostrManager = nostrMgr
                     )
                     if (success) {
                         android.util.Log.i("SignedByMe", "Background enrollment succeeded - proof generation now allowed")
