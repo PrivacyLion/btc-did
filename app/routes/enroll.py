@@ -47,6 +47,8 @@ from ..db import (
     get_witness,
     audit_log,
     get_connection,
+    add_merkle_leaf,
+    leaf_commitment_exists,
 )
 
 logger = logging.getLogger(__name__)
@@ -546,10 +548,9 @@ def enroll_commit(body: EnrollCommitRequest):
         raise HTTPException(400, f"Invalid leaf_commitment: {e}")
     
     # 6. Check for duplicate commitment
-    existing = list_enrollments(client_id=client_id)
-    for e in existing:
-        if e.get("leaf_commitment") == body.leaf_commitment:
-            raise HTTPException(409, "Commitment already enrolled")
+    tree_id = f"{client_id}-{purpose}"
+    if leaf_commitment_exists(tree_id, body.leaf_commitment):
+        raise HTTPException(409, "Commitment already enrolled")
     
     # 7. Create enrollment record
     enrollment_id = "enr_" + secrets.token_urlsafe(16)
@@ -570,23 +571,33 @@ def enroll_commit(body: EnrollCommitRequest):
     leaf_hash = body.leaf_commitment.replace("0x", "")
     new_root, leaf_index, siblings = insert_leaf(tree_id, leaf_hash)
     
-    # 10. Compute path bits from leaf index
+    # 10. Create merkle_leaf record (Phase 26: authorization is the NOSTR event)
+    leaf_id = add_merkle_leaf(
+        tree_id=tree_id,
+        leaf_index=leaf_index,
+        leaf_commitment=body.leaf_commitment,
+        authorization_event_id=event["id"],
+        authorization_pubkey=event["pubkey"],
+    )
+    
+    # 11. Compute path bits from leaf index
     path_bits = []
     idx = leaf_index
     for _ in range(TREE_DEPTH):
         path_bits.append(idx & 1)
         idx >>= 1
     
-    # 11. Save witness
+    # 12. Save witness
     save_witness(
-        enrollment_id=enrollment_id,
-        root_id=tree_id,
+        leaf_id=leaf_id,
+        tree_id=tree_id,
         siblings=siblings,
         path_bits=path_bits,
         leaf_index=leaf_index,
+        root_hash=new_root,
     )
     
-    # 12. Update enrollment status
+    # 13. Update enrollment status
     update_enrollment(
         enrollment_id,
         status="in_tree",
@@ -595,7 +606,7 @@ def enroll_commit(body: EnrollCommitRequest):
         tree_built_at=int(time.time()),
     )
     
-    # 13. Mark nonce/event as used (prevent replay)
+    # 14. Mark nonce/event as used (prevent replay)
     if token_data:
         # Server-generated nonce: mark in enrollment_nonces table
         consume_enrollment_token(nonce)
@@ -655,13 +666,14 @@ def direct_enroll(
     except Exception as e:
         raise HTTPException(400, f"Invalid leaf_commitment: {e}")
     
-    # Check for duplicate
-    existing = list_enrollments(client_id=client_id)
-    for e in existing:
-        if e.get("leaf_commitment") == body.leaf_commitment:
-            raise HTTPException(409, "Commitment already enrolled")
+    # Get or create tree
+    tree_id = get_or_create_tree(client_id, body.purpose)
     
-    # Create enrollment
+    # Check for duplicate
+    if leaf_commitment_exists(tree_id, body.leaf_commitment):
+        raise HTTPException(409, "Commitment already enrolled")
+    
+    # Create enrollment (legacy record)
     enrollment_id = "enr_" + secrets.token_urlsafe(16)
     
     create_enrollment(
@@ -673,12 +685,18 @@ def direct_enroll(
         status="approved",
     )
     
-    # Get or create tree
-    tree_id = get_or_create_tree(client_id, body.purpose)
-    
     # Insert leaf
     leaf_hash = body.leaf_commitment.replace("0x", "")
     new_root, leaf_index, siblings = insert_leaf(tree_id, leaf_hash)
+    
+    # Create merkle_leaf record (auto-approve: API key is the authorization)
+    leaf_id = add_merkle_leaf(
+        tree_id=tree_id,
+        leaf_index=leaf_index,
+        leaf_commitment=body.leaf_commitment,
+        authorization_event_id=f"api_key_{enrollment_id}",  # Pseudo-event for API key auth
+        authorization_pubkey=client_id,  # Client ID as pseudo-pubkey
+    )
     
     # Compute path bits
     path_bits = []
@@ -689,11 +707,12 @@ def direct_enroll(
     
     # Save witness
     save_witness(
-        enrollment_id=enrollment_id,
-        root_id=tree_id,
+        leaf_id=leaf_id,
+        tree_id=tree_id,
         siblings=siblings,
         path_bits=path_bits,
         leaf_index=leaf_index,
+        root_hash=new_root,
     )
     
     # Update enrollment
