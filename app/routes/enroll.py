@@ -780,41 +780,6 @@ def get_tree_roots(
     }
 
 
-@router.get("/witness/{enrollment_id}")
-def get_enrollment_witness(
-    enrollment_id: str,
-    x_api_key: str = Header(None, alias="X-API-Key")
-):
-    """Get witness for an enrollment."""
-    client_id, _ = validate_enterprise_key(x_api_key)
-    
-    enrollment = get_enrollment(enrollment_id)
-    if not enrollment:
-        raise HTTPException(404, "Enrollment not found")
-    if enrollment["client_id"] != client_id:
-        raise HTTPException(403, "Enrollment belongs to different client")
-    if enrollment["status"] != "in_tree":
-        raise HTTPException(400, "Enrollment not yet committed to tree")
-    
-    witness = get_witness(enrollment_id)
-    if not witness:
-        raise HTTPException(404, "Witness not found")
-    
-    tree_id = enrollment.get("tree_id")
-    current_root = get_current_root(tree_id) if tree_id else None
-    valid_roots = get_valid_roots(tree_id, VALID_ROOTS_WINDOW) if tree_id else []
-    
-    return {
-        "enrollment_id": enrollment_id,
-        "tree_id": tree_id,
-        "leaf_index": witness["leaf_index"],
-        "siblings": witness["siblings"],
-        "path_bits": witness["path_bits"],
-        "current_root": current_root,
-        "valid_roots": valid_roots,
-    }
-
-
 @router.post("/validate-root")
 def validate_root(
     tree_id: str = Query(...),
