@@ -375,16 +375,9 @@ def get_or_create_tree(client_id: str, purpose: str) -> str:
 # Models
 # =============================================================================
 
-class EnrollStartRequest(BaseModel):
-    """Start enrollment request. Per Bible: accepts client_id from body."""
-    client_id: str = Field(..., description="Enterprise client ID (e.g., 'acme')")
-    purpose: str = Field("allowlist", description="Purpose: allowlist, issuer_batch, revocation")
-
-
-class EnrollStartResponse(BaseModel):
-    """Start enrollment response. Per Bible: returns nonce + expires_at."""
-    nonce: str
-    expires_at: str  # ISO timestamp
+# EnrollStartRequest and EnrollStartResponse REMOVED — Phase 26
+# Nonce eliminated. No server-generated secrets.
+# Enrollment is a single enroll/commit call authorized by NOSTR event signatures.
 
 
 class AuthorizationEvent(BaseModel):
@@ -448,45 +441,9 @@ class DirectEnrollResponse(BaseModel):
 # Endpoints: Phase 26 Enrollment
 # =============================================================================
 
-@router.post("/start", response_model=EnrollStartResponse)
-def enroll_start(body: EnrollStartRequest):
-    """
-    Step 1: Start enrollment.
-    
-    Per Bible: accepts client_id from request body.
-    Returns nonce + expires_at. No leaf_commitment here.
-    """
-    client_id = body.client_id
-    
-    # Validate client_id exists in config
-    config = get_client_config(client_id)
-    if not config:
-        raise HTTPException(404, f"Unknown client_id: {client_id}")
-    
-    # Generate nonce (16 bytes hex = 32 chars)
-    nonce = secrets.token_hex(16)
-    
-    # Expires in 10 minutes
-    expires_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 600))
-    
-    # Store nonce for later validation in /commit
-    from ..db import create_enrollment_token
-    create_enrollment_token(
-        token=nonce,
-        enrollment_id="",  # No enrollment yet
-        client_id=client_id,
-        purpose=body.purpose,
-        expires_at=int(time.time()) + 600
-    )
-    
-    audit_log("enroll_start", client_id=client_id, details={
-        "nonce": nonce[:8] + "...", "purpose": body.purpose
-    })
-    
-    return EnrollStartResponse(
-        nonce=nonce,
-        expires_at=expires_at,
-    )
+# /start endpoint DELETED — Phase 26
+# Nonce eliminated. No server-generated secrets.
+# Enrollment is a single enroll/commit call authorized by NOSTR event signatures.
 
 
 @router.post("/commit", response_model=EnrollCommitResponse)
@@ -503,7 +460,8 @@ def enroll_commit(body: EnrollCommitRequest):
     - Appends leaf to tree
     - Marks nonce used (if server-generated) or records event ID (if enterprise-generated)
     """
-    from ..db import get_enrollment_token, consume_enrollment_token
+    # Phase 26: No server-generated nonces. Authorization via kind 28200 NOSTR event signature.
+    from ..db import is_event_id_used, mark_event_id_used
     
     # Convert authorization_event to dict for verification
     event = body.authorization_event.model_dump()
@@ -518,26 +476,16 @@ def enroll_commit(body: EnrollCommitRequest):
     if not is_valid:
         raise HTTPException(401, f"Authorization event verification failed: {error_msg}")
     
-    # 3. Extract nonce from event tags
-    nonce = extract_nonce_from_event(event)
-    if not nonce:
-        raise HTTPException(400, "Missing nonce tag in authorization event")
+    # 3. Check that this event ID hasn't been used before (replay protection)
+    if is_event_id_used(event["id"]):
+        raise HTTPException(409, "Authorization event already used")
     
-    # 4. Check if nonce was registered via /start (server-generated) or enterprise-generated
-    token_data = get_enrollment_token(nonce)
-    if token_data:
-        # Server-generated nonce: validate client_id matches
-        if token_data.get("client_id") != client_id:
-            raise HTTPException(403, f"Nonce client_id mismatch: expected {token_data.get('client_id')}, got {client_id}")
-        purpose = token_data.get("purpose", "allowlist")
-    else:
-        # Enterprise-generated nonce: nonce not in SQLite, that's OK
-        # The kind 28200 signature is the authorization
-        # Check that this event ID hasn't been used before (replay protection)
-        from ..db import is_event_id_used, mark_event_id_used
-        if is_event_id_used(event["id"]):
-            raise HTTPException(409, "Authorization event already used")
-        purpose = "allowlist"  # Default purpose for enterprise-generated nonces
+    # 4. Extract purpose from event tags (default: allowlist)
+    purpose = "allowlist"
+    for tag in event.get("tags", []):
+        if tag[0] == "purpose" and len(tag) > 1:
+            purpose = tag[1]
+            break
     
     # 5. Validate leaf_commitment
     try:
@@ -606,14 +554,8 @@ def enroll_commit(body: EnrollCommitRequest):
         tree_built_at=int(time.time()),
     )
     
-    # 14. Mark nonce/event as used (prevent replay)
-    if token_data:
-        # Server-generated nonce: mark in enrollment_nonces table
-        consume_enrollment_token(nonce)
-    else:
-        # Enterprise-generated nonce: mark event ID as used
-        from ..db import mark_event_id_used
-        mark_event_id_used(event["id"], client_id)
+    # 13. Mark event ID as used (prevent replay)
+    mark_event_id_used(event["id"], client_id)
     
     audit_log("enroll_committed", client_id=client_id, details={
         "enrollment_id": enrollment_id,

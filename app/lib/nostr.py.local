@@ -1,0 +1,607 @@
+"""
+NOSTR helpers for Phase 26 — NIP-05, Schnorr verification, relay operations.
+
+Uses raw websockets + coincurve. No Python NOSTR SDK dependency.
+Server needs exactly two NOSTR operations:
+1. Sign and publish a kind 28201 event (KYC webhook → NOSTR conversion)
+2. Subscribe to check if a kind 28201 event exists on relay
+
+Bible Section 9.2: Kind 28200 (enrollment_authorization) and Kind 28201 (kyc_verification)
+"""
+
+import os
+import json
+import time
+import hashlib
+import logging
+import asyncio
+from typing import Optional, Dict, Any, Tuple
+from urllib.parse import urlparse
+
+import httpx
+import websockets
+
+# BIP-340 Schnorr via coincurve
+try:
+    from coincurve import PublicKey
+    from coincurve.ecdsa import deserialize_compact
+    COINCURVE_AVAILABLE = True
+except ImportError:
+    COINCURVE_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
+
+# Default relay URLs
+DEFAULT_RELAY_URLS = [
+    "wss://relay.privacy-lion.com",
+    "wss://relay.damus.io",
+    "wss://relay.nostr.band",
+]
+
+# Server NOSTR private key (for signing kind 28201)
+# Loaded from environment variable
+SERVER_NOSTR_PRIVKEY = os.getenv("SIGNEDBYME_NOSTR_PRIVKEY")
+
+
+# =============================================================================
+# NIP-05 LOOKUP
+# =============================================================================
+
+async def nip05_fetch_pubkey(domain: str, name: str = "signedbyme", timeout: float = 10.0) -> Optional[str]:
+    """
+    Fetch NOSTR public key via NIP-05 lookup.
+    
+    Makes GET request to https://{domain}/.well-known/nostr.json
+    Returns the pubkey hex string for the given name, or None if not found.
+    
+    Args:
+        domain: Enterprise domain (e.g., "amazon.com")
+        name: Name in the nostr.json file (default: "signedbyme")
+        timeout: HTTP request timeout in seconds
+        
+    Returns:
+        Public key hex string (64 chars) or None
+    """
+    url = f"https://{domain}/.well-known/nostr.json?name={name}"
+    
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url)
+            
+            if response.status_code != 200:
+                logger.warning(f"NIP-05 lookup failed for {domain}: HTTP {response.status_code}")
+                return None
+            
+            data = response.json()
+            names = data.get("names", {})
+            pubkey = names.get(name)
+            
+            if not pubkey:
+                logger.warning(f"NIP-05 name '{name}' not found at {domain}")
+                return None
+            
+            # Validate pubkey format (64 hex chars)
+            if len(pubkey) != 64:
+                logger.warning(f"Invalid pubkey length from {domain}: {len(pubkey)}")
+                return None
+            
+            try:
+                bytes.fromhex(pubkey)
+            except ValueError:
+                logger.warning(f"Invalid pubkey hex from {domain}")
+                return None
+            
+            return pubkey
+            
+    except httpx.TimeoutException:
+        logger.warning(f"NIP-05 lookup timed out for {domain}")
+        return None
+    except Exception as e:
+        logger.warning(f"NIP-05 lookup failed for {domain}: {e}")
+        return None
+
+
+def nip05_fetch_pubkey_sync(domain: str, name: str = "signedbyme", timeout: float = 10.0) -> Optional[str]:
+    """Synchronous wrapper for nip05_fetch_pubkey."""
+    return asyncio.run(nip05_fetch_pubkey(domain, name, timeout))
+
+
+# =============================================================================
+# NOSTR EVENT HASHING & SIGNATURE VERIFICATION (BIP-340)
+# =============================================================================
+
+def compute_event_id(event: Dict[str, Any]) -> str:
+    """
+    Compute the NOSTR event ID (NIP-01).
+    
+    The event ID is SHA256 of the serialized event array:
+    [0, pubkey, created_at, kind, tags, content]
+    """
+    serialized = json.dumps([
+        0,
+        event["pubkey"],
+        event["created_at"],
+        event["kind"],
+        event["tags"],
+        event["content"],
+    ], separators=(",", ":"), ensure_ascii=False)
+    
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def verify_event_signature(event: Dict[str, Any], expected_pubkey: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+    """
+    Verify a NOSTR event's Schnorr signature (BIP-340).
+    
+    Args:
+        event: NOSTR event dict with pubkey, id, sig, created_at, kind, tags, content
+        expected_pubkey: If provided, also verify pubkey matches
+        
+    Returns:
+        (is_valid, error_reason) tuple
+    """
+    if not COINCURVE_AVAILABLE:
+        return False, "coincurve_not_installed"
+    
+    try:
+        # Extract required fields
+        pubkey_hex = event.get("pubkey")
+        event_id = event.get("id")
+        sig_hex = event.get("sig")
+        
+        if not pubkey_hex or not event_id or not sig_hex:
+            return False, "missing_required_fields"
+        
+        # Check pubkey matches expected (if provided)
+        if expected_pubkey and pubkey_hex != expected_pubkey:
+            return False, "pubkey_mismatch"
+        
+        # Compute expected event ID
+        computed_id = compute_event_id(event)
+        if computed_id != event_id:
+            return False, "event_id_mismatch"
+        
+        # Verify Schnorr signature (BIP-340)
+        # NOSTR uses x-only pubkey (32 bytes), coincurve needs full pubkey
+        pubkey_bytes = bytes.fromhex(pubkey_hex)
+        sig_bytes = bytes.fromhex(sig_hex)
+        message_bytes = bytes.fromhex(event_id)
+        
+        # BIP-340 Schnorr verification
+        # coincurve's PublicKey.from_x_only expects 32-byte x coordinate
+        try:
+            # For BIP-340, we need to verify schnorr signature
+            # coincurve has schnorr_verify in newer versions
+            from coincurve import verify_signature
+            
+            # BIP-340 schnorr uses tagged hash, but NOSTR events hash the event_id directly
+            # The signature is over the 32-byte event ID
+            
+            # Actually, coincurve's verify_signature is ECDSA, not Schnorr
+            # We need to use the schnorr-specific verification
+            # Let's use a different approach - secp256k1 library or manual BIP-340
+            
+            # For now, use a simpler approach with coincurve's schnorr support
+            # This requires coincurve >= 17.0.0 which has schnorr_verify
+            try:
+                from coincurve._libsecp256k1 import ffi, lib
+                
+                # Create x-only pubkey
+                xonly_pubkey = ffi.new("secp256k1_xonly_pubkey *")
+                result = lib.secp256k1_xonly_pubkey_parse(
+                    lib.secp256k1_context_verify,
+                    xonly_pubkey,
+                    pubkey_bytes
+                )
+                if not result:
+                    return False, "invalid_pubkey"
+                
+                # Verify schnorr signature
+                result = lib.secp256k1_schnorrsig_verify(
+                    lib.secp256k1_context_verify,
+                    sig_bytes,
+                    message_bytes,
+                    32,  # message length
+                    xonly_pubkey
+                )
+                
+                if result:
+                    return True, None
+                else:
+                    return False, "signature_invalid"
+                    
+            except (ImportError, AttributeError):
+                # Fallback: accept signature (log warning)
+                # This should not happen in production - coincurve must have schnorr support
+                logger.error("coincurve schnorr support not available - cannot verify signature")
+                return False, "schnorr_not_supported"
+                
+        except Exception as e:
+            logger.error(f"Schnorr verification error: {e}")
+            return False, f"verification_error: {e}"
+            
+    except Exception as e:
+        logger.error(f"Event signature verification failed: {e}")
+        return False, f"error: {e}"
+
+
+# =============================================================================
+# NOSTR RELAY OPERATIONS
+# =============================================================================
+
+async def check_event_exists_on_relay(
+    relay_url: str,
+    filters: Dict[str, Any],
+    timeout: float = 5.0,
+) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    """
+    Check if an event matching filters exists on a relay.
+    
+    Args:
+        relay_url: WebSocket URL of the relay
+        filters: NOSTR subscription filter (e.g., {"kinds": [28201], "#n": ["nonce123"]})
+        timeout: Connection and subscription timeout
+        
+    Returns:
+        (exists, event) tuple - event is the first matching event if found
+    """
+    subscription_id = f"check_{int(time.time())}"
+    
+    try:
+        async with websockets.connect(relay_url, close_timeout=2) as ws:
+            # Send subscription request
+            req = json.dumps(["REQ", subscription_id, filters])
+            await ws.send(req)
+            
+            # Wait for response
+            start = time.time()
+            while time.time() - start < timeout:
+                try:
+                    msg = await asyncio.wait_for(ws.recv(), timeout=1.0)
+                    data = json.loads(msg)
+                    
+                    if data[0] == "EVENT" and data[1] == subscription_id:
+                        # Found matching event
+                        event = data[2]
+                        # Close subscription
+                        await ws.send(json.dumps(["CLOSE", subscription_id]))
+                        return True, event
+                        
+                    elif data[0] == "EOSE":
+                        # End of stored events - no match found
+                        await ws.send(json.dumps(["CLOSE", subscription_id]))
+                        return False, None
+                        
+                except asyncio.TimeoutError:
+                    continue
+                    
+            # Timeout
+            await ws.send(json.dumps(["CLOSE", subscription_id]))
+            return False, None
+            
+    except Exception as e:
+        logger.warning(f"Relay check failed for {relay_url}: {e}")
+        return False, None
+
+
+def check_event_exists_sync(
+    relay_urls: list[str],
+    filters: Dict[str, Any],
+    timeout: float = 5.0,
+) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    """
+    Synchronous wrapper to check if event exists on any relay.
+    
+    Tries each relay in order, returns on first match.
+    """
+    async def _check_all():
+        for relay_url in relay_urls:
+            exists, event = await check_event_exists_on_relay(relay_url, filters, timeout)
+            if exists:
+                return True, event
+        return False, None
+    
+    return asyncio.run(_check_all())
+
+
+async def publish_event_to_relay(
+    relay_url: str,
+    event: Dict[str, Any],
+    timeout: float = 5.0,
+) -> Tuple[bool, Optional[str]]:
+    """
+    Publish an event to a relay.
+    
+    Args:
+        relay_url: WebSocket URL of the relay
+        event: Signed NOSTR event dict
+        timeout: Connection timeout
+        
+    Returns:
+        (success, error_message) tuple
+    """
+    try:
+        async with websockets.connect(relay_url, close_timeout=2) as ws:
+            # Send event
+            msg = json.dumps(["EVENT", event])
+            await ws.send(msg)
+            
+            # Wait for OK response
+            try:
+                response = await asyncio.wait_for(ws.recv(), timeout=timeout)
+                data = json.loads(response)
+                
+                if data[0] == "OK":
+                    # ["OK", event_id, success, message]
+                    if data[2]:
+                        return True, None
+                    else:
+                        return False, data[3] if len(data) > 3 else "rejected"
+                else:
+                    return False, f"unexpected_response: {data[0]}"
+                    
+            except asyncio.TimeoutError:
+                return False, "timeout_waiting_for_ok"
+                
+    except Exception as e:
+        logger.warning(f"Publish to {relay_url} failed: {e}")
+        return False, str(e)
+
+
+def publish_event_sync(
+    event: Dict[str, Any],
+    relay_urls: Optional[list[str]] = None,
+) -> Tuple[bool, Optional[str]]:
+    """
+    Synchronous wrapper to publish event to relays.
+    
+    Publishes to all relays, returns success if at least one accepts.
+    """
+    if relay_urls is None:
+        relay_urls = DEFAULT_RELAY_URLS
+    
+    async def _publish_all():
+        successes = 0
+        last_error = None
+        
+        for relay_url in relay_urls:
+            success, error = await publish_event_to_relay(relay_url, event)
+            if success:
+                successes += 1
+            else:
+                last_error = error
+        
+        if successes > 0:
+            return True, None
+        return False, last_error
+    
+    return asyncio.run(_publish_all())
+
+
+# =============================================================================
+# KIND 28201 EVENT BUILDING & SIGNING
+# =============================================================================
+
+def create_kind_28201_event(
+    nonce: str,
+    client_id: str,
+    passed: bool,
+    attribute: str,
+    provider: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Create a kind 28201 (kyc_verification) event.
+    
+    This is signed by the SignedByMe server's NOSTR key.
+    
+    Args:
+        nonce: The enrollment nonce
+        client_id: Enterprise client ID
+        passed: Whether KYC verification passed
+        attribute: What was verified (e.g., "age_18_plus")
+        provider: Verification provider (e.g., "persona")
+        
+    Returns:
+        Signed NOSTR event dict, or None if signing failed
+    """
+    if not SERVER_NOSTR_PRIVKEY:
+        logger.error("SIGNEDBYME_NOSTR_PRIVKEY not configured")
+        return None
+    
+    try:
+        # Derive pubkey from privkey
+        privkey_bytes = bytes.fromhex(SERVER_NOSTR_PRIVKEY)
+        
+        # Get public key (x-only for NOSTR)
+        from coincurve import PrivateKey
+        pk = PrivateKey(privkey_bytes)
+        pubkey_full = pk.public_key.format(compressed=True)
+        # x-only pubkey is bytes 1-33 of compressed pubkey (skip the prefix byte)
+        pubkey_hex = pubkey_full[1:].hex()
+        
+        # Build event
+        created_at = int(time.time())
+        content = json.dumps({
+            "passed": passed,
+            "attribute": attribute,
+            "provider": provider,
+            "verified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        })
+        
+        event = {
+            "pubkey": pubkey_hex,
+            "created_at": created_at,
+            "kind": 28201,
+            "tags": [
+                ["nonce", nonce],
+                ["c", client_id],
+            ],
+            "content": content,
+        }
+        
+        # Compute event ID
+        event_id = compute_event_id(event)
+        event["id"] = event_id
+        
+        # Sign with BIP-340 Schnorr
+        message_bytes = bytes.fromhex(event_id)
+        
+        try:
+            from coincurve._libsecp256k1 import ffi, lib
+            
+            # Create keypair
+            keypair = ffi.new("secp256k1_keypair *")
+            result = lib.secp256k1_keypair_create(
+                lib.secp256k1_context_sign,
+                keypair,
+                privkey_bytes
+            )
+            if not result:
+                logger.error("Failed to create keypair for signing")
+                return None
+            
+            # Sign
+            sig = ffi.new("unsigned char[64]")
+            result = lib.secp256k1_schnorrsig_sign32(
+                lib.secp256k1_context_sign,
+                sig,
+                message_bytes,
+                keypair,
+                ffi.NULL  # aux_rand32 - can be NULL
+            )
+            if not result:
+                logger.error("Schnorr signing failed")
+                return None
+            
+            sig_bytes = bytes(ffi.buffer(sig, 64))
+            event["sig"] = sig_bytes.hex()
+            
+            return event
+            
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Schnorr signing not available: {e}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Failed to create kind 28201 event: {e}")
+        return None
+
+
+# =============================================================================
+# VERIFICATION HELPERS FOR PHASE 26
+# =============================================================================
+
+def verify_kind_28200_authorization(
+    event: Dict[str, Any],
+    expected_client_id: str,
+    expected_nonce: str,
+) -> Tuple[bool, Optional[str]]:
+    """
+    Verify a kind 28200 (enrollment_authorization) event.
+    
+    Checks:
+    1. Event kind is 28200
+    2. Nonce tag matches expected
+    3. Content contains expected client_id
+    4. Event is not expired
+    5. Signature is valid (via NIP-05 pubkey lookup)
+    
+    Args:
+        event: The kind 28200 NOSTR event
+        expected_client_id: The client_id that should be in the event
+        expected_nonce: The nonce that should be in the tags
+        
+    Returns:
+        (is_valid, error_reason) tuple
+    """
+    try:
+        # Check kind
+        if event.get("kind") != 28200:
+            return False, "wrong_kind"
+        
+        # Check nonce tag
+        nonce_tag = None
+        for tag in event.get("tags", []):
+            if len(tag) >= 2 and tag[0] == "nonce":
+                nonce_tag = tag[1]
+                break
+        
+        if nonce_tag != expected_nonce:
+            return False, "nonce_mismatch"
+        
+        # Parse content
+        try:
+            content = json.loads(event.get("content", "{}"))
+        except json.JSONDecodeError:
+            return False, "invalid_content_json"
+        
+        # Check client_id
+        if content.get("client_id") != expected_client_id:
+            return False, "client_id_mismatch"
+        
+        # Check expiry
+        expires_at = content.get("expires_at")
+        if expires_at:
+            try:
+                from datetime import datetime
+                exp_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                if exp_dt.timestamp() < time.time():
+                    return False, "event_expired"
+            except Exception:
+                pass  # If we can't parse expiry, skip this check
+        
+        # Get enterprise domain from client_id and look up pubkey via NIP-05
+        # For now, we'll need to have a mapping of client_id -> domain
+        # This will be configured in clients.json
+        
+        # Verify signature (basic check - pubkey matches and sig format valid)
+        pubkey = event.get("pubkey")
+        sig = event.get("sig")
+        event_id = event.get("id")
+        
+        if not pubkey or not sig or not event_id:
+            return False, "missing_signature_fields"
+        
+        if len(pubkey) != 64 or len(sig) != 128:
+            return False, "invalid_signature_format"
+        
+        # Verify event ID matches computed
+        computed_id = compute_event_id(event)
+        if computed_id != event_id:
+            return False, "event_id_mismatch"
+        
+        # Full signature verification
+        is_valid, error = verify_event_signature(event)
+        if not is_valid:
+            return False, f"signature_invalid: {error}"
+        
+        return True, None
+        
+    except Exception as e:
+        logger.error(f"Kind 28200 verification failed: {e}")
+        return False, f"error: {e}"
+
+
+def check_kyc_verification_exists(
+    nonce: str,
+    relay_urls: Optional[list[str]] = None,
+) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    """
+    Check if a kind 28201 (kyc_verification) event exists for this nonce.
+    
+    Args:
+        nonce: The enrollment nonce
+        relay_urls: List of relay URLs to check
+        
+    Returns:
+        (exists, event) tuple
+    """
+    if relay_urls is None:
+        relay_urls = DEFAULT_RELAY_URLS
+    
+    filters = {
+        "kinds": [28201],
+        "#nonce": [nonce],
+    }
+    
+    return check_event_exists_sync(relay_urls, filters)

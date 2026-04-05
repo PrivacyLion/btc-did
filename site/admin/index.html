@@ -370,24 +370,36 @@
                 </div>
             </div>
             
-            <!-- NOSTR Relay Health -->
+            <!-- Live NOSTR Event Feed (Section 6.5) -->
             <div class="card">
                 <div class="card-header">
-                    <h2>📡 NOSTR Relay Health</h2>
+                    <h2>📡 Live NOSTR Event Feed</h2>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span id="relay-status" class="status-badge">Connecting...</span>
+                        <button class="refresh-btn" onclick="reconnectRelay()">
+                            🔌 Reconnect
+                        </button>
+                    </div>
                 </div>
-                <div id="relay-container">
-                    <table>
-                        <tr>
-                            <th>Relay URL</th>
-                            <th>Status</th>
-                            <th>Last Login Event</th>
-                        </tr>
-                        <tr>
-                            <td class="npub-cell">wss://relay.privacy-lion.com</td>
-                            <td><span class="status-badge success">Configured</span></td>
-                            <td class="time-cell" id="last-login-time">--</td>
-                        </tr>
+                <div id="nostr-feed-container" style="max-height: 400px; overflow-y: auto;">
+                    <table id="nostr-events-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Kind</th>
+                                <th>Type</th>
+                                <th>Author</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="nostr-events-body">
+                            <tr><td colspan="5" class="empty-state">Waiting for events...</td></tr>
+                        </tbody>
                     </table>
+                </div>
+                <div style="padding: 12px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted);">
+                    Relay: <code>wss://relay.privacy-lion.com</code> | 
+                    Kinds: 28101-28103 (proofs), 28200 (enrollment auth), 28250-28251 (subscriptions)
                 </div>
             </div>
             
@@ -646,6 +658,205 @@
                 console.error('Config error:', e);
             }
         }
+        
+        // =====================================================================
+        // NOSTR Event Feed (Section 6.5)
+        // WebSocket subscription to relay for live SignedByMe events
+        // =====================================================================
+        
+        const RELAY_URL = 'wss://relay.privacy-lion.com';
+        const SIGNEDBY_KINDS = [28101, 28102, 28103, 28200, 28250, 28251];
+        const MAX_EVENTS = 100;  // Keep last 100 events in feed
+        
+        let nostrSocket = null;
+        let nostrEvents = [];
+        let isFirstEvent = true;
+        
+        const KIND_LABELS = {
+            28101: ['Login Proof', '🔐'],
+            28102: ['Membership Proof', '🌳'],
+            28103: ['Payment Proof', '⚡'],
+            28200: ['Enrollment Auth', '📝'],
+            28250: ['Subscription', '💳'],
+            28251: ['Subscription Renewal', '🔄']
+        };
+        
+        function connectNostrRelay() {
+            if (nostrSocket && nostrSocket.readyState === WebSocket.OPEN) {
+                return;
+            }
+            
+            updateRelayStatus('connecting');
+            
+            try {
+                nostrSocket = new WebSocket(RELAY_URL);
+                
+                nostrSocket.onopen = () => {
+                    console.log('NOSTR relay connected');
+                    updateRelayStatus('connected');
+                    
+                    // Subscribe to SignedByMe event kinds
+                    const subId = 'sbm-admin-' + Date.now();
+                    const filter = {
+                        kinds: SIGNEDBY_KINDS,
+                        limit: 50  // Get last 50 events on connect
+                    };
+                    
+                    nostrSocket.send(JSON.stringify(['REQ', subId, filter]));
+                };
+                
+                nostrSocket.onmessage = (msg) => {
+                    try {
+                        const data = JSON.parse(msg.data);
+                        
+                        if (data[0] === 'EVENT') {
+                            const event = data[2];
+                            handleNostrEvent(event);
+                        } else if (data[0] === 'EOSE') {
+                            console.log('End of stored events');
+                            if (isFirstEvent && nostrEvents.length === 0) {
+                                // No stored events, show waiting message
+                                document.getElementById('nostr-events-body').innerHTML = 
+                                    '<tr><td colspan="5" class="empty-state">No recent events. Waiting for live events...</td></tr>';
+                            }
+                            isFirstEvent = false;
+                        }
+                    } catch (e) {
+                        console.error('NOSTR message parse error:', e);
+                    }
+                };
+                
+                nostrSocket.onclose = () => {
+                    console.log('NOSTR relay disconnected');
+                    updateRelayStatus('disconnected');
+                    
+                    // Auto-reconnect after 5 seconds
+                    setTimeout(connectNostrRelay, 5000);
+                };
+                
+                nostrSocket.onerror = (err) => {
+                    console.error('NOSTR relay error:', err);
+                    updateRelayStatus('error');
+                };
+                
+            } catch (e) {
+                console.error('Failed to connect to NOSTR relay:', e);
+                updateRelayStatus('error');
+            }
+        }
+        
+        function updateRelayStatus(status) {
+            const el = document.getElementById('relay-status');
+            const statusMap = {
+                'connecting': ['Connecting...', ''],
+                'connected': ['Connected', 'success'],
+                'disconnected': ['Disconnected', 'failed'],
+                'error': ['Error', 'failed']
+            };
+            
+            const [text, cls] = statusMap[status] || ['Unknown', ''];
+            el.textContent = text;
+            el.className = 'status-badge ' + cls;
+        }
+        
+        function handleNostrEvent(event) {
+            // Parse and add to events array
+            const parsed = parseNostrEvent(event);
+            nostrEvents.unshift(parsed);
+            
+            // Keep only last MAX_EVENTS
+            if (nostrEvents.length > MAX_EVENTS) {
+                nostrEvents.pop();
+            }
+            
+            // Update UI
+            renderNostrEvents();
+        }
+        
+        function parseNostrEvent(event) {
+            const kind = event.kind;
+            const [label, emoji] = KIND_LABELS[kind] || ['Unknown', '❓'];
+            
+            // Extract details from tags
+            let clientId = '--';
+            let sessionId = '--';
+            let details = '';
+            
+            for (const tag of (event.tags || [])) {
+                if (tag[0] === 'client_id') clientId = tag[1];
+                if (tag[0] === 'session_id') sessionId = tag[1]?.substring(0, 8) + '...';
+                if (tag[0] === 'd') details = tag[1];  // NIP-33 identifier
+            }
+            
+            // Build details string based on kind
+            switch (kind) {
+                case 28101:
+                case 28102:
+                    details = `client: ${clientId}`;
+                    break;
+                case 28103:
+                    details = `payment verified`;
+                    break;
+                case 28200:
+                    details = `enrollment for ${clientId}`;
+                    break;
+                case 28250:
+                case 28251:
+                    details = `subscription event`;
+                    break;
+            }
+            
+            return {
+                id: event.id,
+                kind: kind,
+                label: label,
+                emoji: emoji,
+                pubkey: event.pubkey,
+                created_at: event.created_at,
+                details: details
+            };
+        }
+        
+        function renderNostrEvents() {
+            const tbody = document.getElementById('nostr-events-body');
+            
+            if (nostrEvents.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Waiting for events...</td></tr>';
+                return;
+            }
+            
+            let html = '';
+            for (const ev of nostrEvents) {
+                const time = new Date(ev.created_at * 1000).toLocaleString();
+                const npub = ev.pubkey.substring(0, 8) + '...' + ev.pubkey.slice(-4);
+                
+                html += `<tr>
+                    <td class="time-cell">${time}</td>
+                    <td><code>${ev.kind}</code></td>
+                    <td>${ev.emoji} ${ev.label}</td>
+                    <td class="npub-cell" title="${ev.pubkey}">${npub}</td>
+                    <td>${ev.details}</td>
+                </tr>`;
+            }
+            
+            tbody.innerHTML = html;
+        }
+        
+        function reconnectRelay() {
+            if (nostrSocket) {
+                nostrSocket.close();
+            }
+            nostrEvents = [];
+            isFirstEvent = true;
+            connectNostrRelay();
+        }
+        
+        // Connect to relay when main content is shown
+        const origShowMain = showMain;
+        showMain = function() {
+            origShowMain();
+            connectNostrRelay();
+        };
     </script>
 </body>
 </html>

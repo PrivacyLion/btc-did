@@ -129,20 +129,6 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 
 -- ============================================================================
--- ENROLLMENT NONCES
--- Temporary storage for /start -> /commit flow (server-generated nonces)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS enrollment_nonces (
-    nonce TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    purpose TEXT NOT NULL DEFAULT 'allowlist',
-    expires_at INTEGER NOT NULL,
-    consumed INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER DEFAULT (strftime('%s', 'now'))
-);
-CREATE INDEX IF NOT EXISTS idx_nonces_expires ON enrollment_nonces(expires_at);
-
--- ============================================================================
 -- USED EVENT IDS
 -- Replay protection for enterprise-generated kind 28200 events
 -- ============================================================================
@@ -152,6 +138,26 @@ CREATE TABLE IF NOT EXISTS used_event_ids (
     used_at INTEGER DEFAULT (strftime('%s', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_used_events_client ON used_event_ids(client_id);
+
+-- ============================================================================
+-- PAYOUT LOG
+-- Append-only log of monthly revenue share payouts (Section 7.2)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS payout_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    month TEXT NOT NULL,                    -- YYYY-MM format
+    recipient_type TEXT NOT NULL,           -- 'enterprise' or 'agent'
+    recipient_id TEXT NOT NULL,             -- client_id (enterprise) or npub (agent)
+    amount_sats INTEGER NOT NULL,
+    lightning_address TEXT,                 -- lud16 used for payment
+    status TEXT NOT NULL,                   -- 'paid', 'failed', 'carried_forward'
+    failure_count INTEGER DEFAULT 0,        -- Consecutive failures
+    paid_at INTEGER,                        -- Unix timestamp when paid (NULL if not paid)
+    created_at INTEGER DEFAULT (strftime('%s', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_payout_month ON payout_log(month);
+CREATE INDEX IF NOT EXISTS idx_payout_recipient ON payout_log(recipient_id);
+CREATE INDEX IF NOT EXISTS idx_payout_status ON payout_log(status);
 
 -- ============================================================================
 -- MIGRATION: Phase 26
