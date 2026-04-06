@@ -93,10 +93,11 @@ def load_clients() -> dict:
 def validate_api_key(api_key: Optional[str]) -> tuple[str, dict]:
     """Validate enterprise API key, return (client_id, config)."""
     if not api_key:
-        raise HTTPException(401, "Missing X-API-Key header")
+        raise HTTPException(401, "Missing Authorization header")
     clients = load_clients()
+    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
     for client_id, config in clients.items():
-        if config.get("api_key") == api_key:
+        if api_key_hash == config.get("api_key_hash"):
             return client_id, config
     raise HTTPException(401, "Invalid API key")
 
@@ -271,7 +272,7 @@ class WitnessResponse(BaseModel):
 @router.post("/enroll", response_model=EnrollResponse)
 async def enroll(
     body: EnrollRequest,
-    x_api_key: str = Header(..., alias="X-API-Key")
+    authorization: str = Header(..., alias="Authorization")
 ):
     """
     Enroll a user in the membership tree (Phase 26).
@@ -287,8 +288,13 @@ async def enroll(
     5. Insert leaf into Merkle tree
     6. Return witness
     """
+    # Extract Bearer token
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Authorization header must be: Bearer <token>")
+    api_key = authorization[7:]
+    
     # Validate API key
-    client_id, config = validate_api_key(x_api_key)
+    client_id, config = validate_api_key(api_key)
     
     # Convert model to NostrEvent
     event = NostrEvent(
@@ -409,14 +415,17 @@ async def enroll(
 def get_membership_witness(
     leaf_commitment: str = Query(..., description="Leaf commitment (hex)"),
     tree_id: Optional[str] = Query(None, description="Tree ID (optional, derived from client)"),
-    x_api_key: str = Header(..., alias="X-API-Key")
+    authorization: str = Header(..., alias="Authorization")
 ):
     """
     Get witness for a leaf commitment.
     
     Returns the Merkle proof needed for Groth16 membership proof.
     """
-    client_id, _ = validate_api_key(x_api_key)
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Authorization header must be: Bearer <token>")
+    api_key = authorization[7:]
+    client_id, _ = validate_api_key(api_key)
     
     # Normalize commitment
     commitment_hex = leaf_commitment.replace("0x", "").lower()
@@ -457,10 +466,13 @@ def get_membership_witness(
 def get_tree_roots(
     tree_id: str,
     limit: int = Query(30, ge=1, le=100),
-    x_api_key: str = Header(..., alias="X-API-Key")
+    authorization: str = Header(..., alias="Authorization")
 ):
     """Get valid roots for a tree."""
-    client_id, _ = validate_api_key(x_api_key)
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Authorization header must be: Bearer <token>")
+    api_key = authorization[7:]
+    client_id, _ = validate_api_key(api_key)
     
     tree = get_merkle_tree(tree_id)
     if not tree:
@@ -484,10 +496,13 @@ def get_tree_roots(
 def validate_root(
     tree_id: str = Query(...),
     root: str = Query(...),
-    x_api_key: str = Header(..., alias="X-API-Key")
+    authorization: str = Header(..., alias="Authorization")
 ):
     """Check if a root is in the valid window."""
-    client_id, _ = validate_api_key(x_api_key)
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Authorization header must be: Bearer <token>")
+    api_key = authorization[7:]
+    client_id, _ = validate_api_key(api_key)
     
     tree = get_merkle_tree(tree_id)
     if not tree:
@@ -510,9 +525,12 @@ def validate_root(
 # =============================================================================
 
 @router.get("/stats")
-def membership_stats(x_api_key: str = Header(..., alias="X-API-Key")):
+def membership_stats(authorization: str = Header(..., alias="Authorization")):
     """Get membership statistics."""
-    client_id, _ = validate_api_key(x_api_key)
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Authorization header must be: Bearer <token>")
+    api_key = authorization[7:]
+    client_id, _ = validate_api_key(api_key)
     
     trees = list_merkle_trees(client_id)
     

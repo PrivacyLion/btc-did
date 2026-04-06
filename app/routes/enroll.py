@@ -1,13 +1,18 @@
 """
-Enrollment API (Phase 10)
+Enrollment API (Phase 26)
 
-3-step enrollment flow:
-1. POST /v1/enroll/start - Start enrollment, get verification token
-2. POST /v1/enroll/verify-callback - Email/SMS verification callback
-3. POST /v1/enroll/commit - Commit to Merkle tree
+Single-step enrollment authorized by NOSTR event signatures:
+- POST /v1/membership/enroll/commit - Commit to Merkle tree
 
-Direct enrollment (for auto-approve clients):
-- POST /v1/enroll - One-step enrollment + commit
+Per Bible Section 6.1, enrollment requires:
+1. Kind 28200 authorization event (enterprise-signed)
+2. Kind 28250 delegation event (human-signed)
+3. agent_npub must match in both events
+4. authorization_event_id replay check
+5. Leaf added to tree with authorization_event_id recorded
+
+Direct enrollment (auto-approve clients with API key):
+- POST /v1/membership/enroll - One-step enrollment
 
 Incremental Merkle Tree:
 - New root computed on each insert (O(log n) updates)
@@ -80,10 +85,11 @@ def load_clients() -> dict:
 def validate_enterprise_key(api_key: Optional[str]) -> tuple[str, dict]:
     """Validate enterprise API key, return (client_id, config)."""
     if not api_key:
-        raise HTTPException(401, "Missing X-API-Key header")
+        raise HTTPException(401, "Missing Authorization header")
     clients = load_clients()
+    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
     for client_id, config in clients.items():
-        if config.get("api_key") == api_key:
+        if api_key_hash == config.get("api_key_hash"):
             return client_id, config
     raise HTTPException(401, "Invalid API key")
 
@@ -688,7 +694,7 @@ def enroll_commit(body: EnrollCommitRequest):
 @router.post("", response_model=DirectEnrollResponse)
 def direct_enroll(
     body: DirectEnrollRequest,
-    x_api_key: str = Header(None, alias="X-API-Key")
+    authorization: str = Header(..., alias="Authorization")
 ):
     """
     Direct enrollment (one-step).
@@ -696,12 +702,17 @@ def direct_enroll(
     For clients with auto_approve policy.
     Creates enrollment and immediately commits to tree.
     """
-    client_id, config = validate_enterprise_key(x_api_key)
+    # Extract Bearer token
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Authorization header must be: Bearer <token>")
+    api_key = authorization[7:]  # Strip "Bearer "
+    
+    client_id, config = validate_enterprise_key(api_key)
     
     # Check auto-approve policy
     policy = config.get("membership_policy", {})
     if not policy.get("auto_approve", False):
-        raise HTTPException(403, "Direct enrollment requires auto_approve policy. Use /start flow instead.")
+        raise HTTPException(403, "Direct enrollment requires auto_approve policy. Use /commit endpoint with NOSTR events.")
     
     # Validate commitment
     try:
@@ -801,10 +812,13 @@ def direct_enroll(
 def get_tree_roots(
     tree_id: str,
     limit: int = Query(30, ge=1, le=100),
-    x_api_key: str = Header(None, alias="X-API-Key")
+    authorization: str = Header(..., alias="Authorization")
 ):
     """Get valid roots for a tree."""
-    client_id, _ = validate_enterprise_key(x_api_key)
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Authorization header must be: Bearer <token>")
+    api_key = authorization[7:]
+    client_id, _ = validate_enterprise_key(api_key)
     
     # Verify tree belongs to client
     tree = get_merkle_tree(tree_id)
@@ -829,10 +843,13 @@ def get_tree_roots(
 def validate_root(
     tree_id: str = Query(...),
     root: str = Query(...),
-    x_api_key: str = Header(None, alias="X-API-Key")
+    authorization: str = Header(..., alias="Authorization")
 ):
     """Check if a root is in the valid window."""
-    client_id, _ = validate_enterprise_key(x_api_key)
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Authorization header must be: Bearer <token>")
+    api_key = authorization[7:]
+    client_id, _ = validate_enterprise_key(api_key)
     
     tree = get_merkle_tree(tree_id)
     if not tree:
