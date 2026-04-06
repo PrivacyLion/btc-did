@@ -24,7 +24,6 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
-from urllib.parse import urlparse
 
 # Configure logging
 logging.basicConfig(
@@ -176,9 +175,11 @@ def get_strike_revenue(month: str) -> int:
 def get_agent_lightning_address(npub: str) -> Optional[str]:
     """
     Get agent's lud16 Lightning address from NOSTR kind 0 profile.
-    Queries the relay via HTTP (NIP-50 search or REQ over WebSocket).
+    Queries the relay via WebSocket REQ message.
     """
     try:
+        import websocket
+        
         # Convert npub to hex if needed
         if npub.startswith('npub'):
             import bech32
@@ -190,24 +191,31 @@ def get_agent_lightning_address(npub: str) -> Optional[str]:
         else:
             hex_pubkey = npub
         
-        # Query relay for kind 0 (use HTTP endpoint if available, else skip)
-        # For simplicity, we use the common pattern of relay HTTP API
-        relay_http = RELAY_URL.replace('wss://', 'https://').replace('ws://', 'http://')
-        
-        resp = requests.post(
-            relay_http,
-            json=['REQ', 'profile', {'kinds': [0], 'authors': [hex_pubkey], 'limit': 1}],
-            timeout=10
-        )
-        
-        if resp.status_code == 200:
-            events = resp.json()
-            for event in events:
-                if event[0] == 'EVENT' and event[2].get('kind') == 0:
-                    content = json.loads(event[2].get('content', '{}'))
-                    return content.get('lud16')
-        
-        return None
+        # Query relay for kind 0 via WebSocket
+        ws = websocket.create_connection(RELAY_URL, timeout=10)
+        try:
+            # Send REQ for kind 0 (profile) by author
+            req = json.dumps(['REQ', 'profile', {'kinds': [0], 'authors': [hex_pubkey], 'limit': 1}])
+            ws.send(req)
+            
+            # Read responses until EOSE
+            while True:
+                msg = ws.recv()
+                data = json.loads(msg)
+                
+                if data[0] == 'EVENT' and data[1] == 'profile':
+                    event = data[2]
+                    if event.get('kind') == 0:
+                        content = json.loads(event.get('content', '{}'))
+                        lud16 = content.get('lud16')
+                        if lud16:
+                            return lud16
+                elif data[0] == 'EOSE':
+                    break
+            
+            return None
+        finally:
+            ws.close()
         
     except Exception as e:
         logger.warning(f"Failed to get Lightning address for {npub[:16]}...: {e}")
@@ -225,13 +233,6 @@ def get_enterprise_lightning_address(client_id: str) -> Optional[str]:
         
         client_config = clients.get(client_id, {})
         domain = client_config.get('domain')
-        
-        if not domain:
-            # Try to extract from redirect_uris
-            redirect_uris = client_config.get('redirect_uris', [])
-            if redirect_uris:
-                parsed = urlparse(redirect_uris[0])
-                domain = parsed.netloc
         
         if not domain:
             logger.warning(f"No domain found for client {client_id}")
