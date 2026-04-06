@@ -171,10 +171,8 @@ def verify_schnorr_signature(event: dict) -> bool:
         except ImportError:
             pass
         
-        # If no verification method available, log warning and accept
-        # (In production, this should fail)
-        logger.warning("No Schnorr verification method available - accepting signature")
-        return True
+        # If no verification method available, fail closed
+        raise RuntimeError("No Schnorr verification method available")
         
     except Exception as e:
         logger.error(f"Schnorr verification error: {e}")

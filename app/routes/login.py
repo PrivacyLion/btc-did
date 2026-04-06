@@ -48,12 +48,15 @@ def load_clients() -> dict:
 
 def validate_api_key(api_key: str) -> tuple[str, dict]:
     """Validate API key and return (client_id, client_config)."""
+    from hashlib import sha256
+    
     if not api_key:
         raise HTTPException(401, "Missing API key")
     
     clients = load_clients()
+    api_key_hash = sha256(api_key.encode()).hexdigest()
     for client_id, config in clients.items():
-        if config.get("api_key") == api_key:
+        if api_key_hash == config.get("api_key_hash"):
             return client_id, config
     
     raise HTTPException(401, "Invalid API key")
@@ -134,8 +137,12 @@ class LoginVerifyError(BaseModel):
 )
 def verify_login(
     body: LoginVerifyRequest,
-    x_api_key: str = Header(..., alias="X-API-Key")
+    authorization: str = Header(..., alias="Authorization")
 ):
+    # Extract Bearer token
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Authorization header must be: Bearer <token>")
+    api_key = authorization[7:]  # Strip "Bearer "
     """
     Verify login and return OIDC id_token.
     
@@ -150,7 +157,7 @@ def verify_login(
     Fail → 400 error
     """
     # Validate API key
-    client_id, client_config = validate_api_key(x_api_key)
+    client_id, client_config = validate_api_key(api_key)
     
     # Verify client_id matches
     if body.client_id != client_id:
