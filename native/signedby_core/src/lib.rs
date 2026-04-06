@@ -17,6 +17,7 @@ pub mod membership; // Groth16 membership proofs
 pub mod groth16;    // Native Groth16 prover for mobile
 pub mod ffi_c;      // C-ABI exports for iOS
 pub mod nostr;      // NOSTR client (Phase 9)
+pub mod sdk;        // Agent SDK Core (Phase 9A)
 
 use key_manager::ManagedKey;
 use dlc_builder::{DlcContract, OracleInfo, PayoutSplit};
