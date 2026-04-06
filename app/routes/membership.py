@@ -358,34 +358,10 @@ async def enroll_commit(
         raise HTTPException(400, f"Wrong delegation event kind: {deleg_event.kind}, expected 28250")
     
     # Verify Schnorr signature on kind 28250
+    # Human's identity established by enterprise in gate 1; server only verifies signature
     valid, error = verify_event(deleg_event)
     if not valid:
         raise HTTPException(400, f"Human signature verification failed: {error}")
-    
-    # Verify human pubkey via NIP-05 — FAIL CLOSED (Bible Section 6.1 check 2)
-    # Extract NIP-05 identifier from delegation event content
-    human_nip05 = None
-    try:
-        deleg_content = json.loads(deleg_event.content)
-        human_nip05 = deleg_content.get("nip05")
-    except Exception:
-        pass
-    
-    # Also check tags for NIP-05 identifier
-    if not human_nip05:
-        for tag in deleg_event.tags:
-            if len(tag) >= 2 and tag[0] == "nip05":
-                human_nip05 = tag[1]
-                break
-    
-    if not human_nip05:
-        raise HTTPException(422, "Missing nip05 identifier in delegation event (kind 28250) — required for human NIP-05 verification")
-    
-    # Import verify_nip05 for human verification
-    from ..lib.nostr import verify_nip05
-    human_nip05_result = await verify_nip05(human_nip05, expected_pubkey=deleg_event.pubkey)
-    if not human_nip05_result.valid:
-        raise HTTPException(422, f"Human NIP-05 verification failed: {human_nip05_result.error}")
     
     # === CHECK 3: Confirm agent_npub in kind 28200 matches agent_npub in kind 28250 ===
     
