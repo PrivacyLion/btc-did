@@ -499,31 +499,8 @@ class EnrollCommitResponse(BaseModel):
     message: str
 
 
-class DirectEnrollRequest(BaseModel):
-    """Direct enrollment (one-step for auto-approve clients)."""
-    leaf_commitment: str = Field(..., description="Hex-encoded leaf commitment (32 bytes)")
-    purpose: str = Field("allowlist", description="Purpose")
-
-
-class DirectEnrollResponse(BaseModel):
-    """Direct enrollment response."""
-    enrollment_id: str
-    status: str  # committed
-    tree_id: str
-    root: str
-    leaf_index: int
-    witness: dict
-    valid_roots: List[str]  # Last 30 valid roots
-    message: str
-
-
 # =============================================================================
-# Enrollment State (stored in enrollments table)
-# =============================================================================
-# Status flow:
-#   pending_verification -> verified -> committed
-#   (auto_approved)      -> committed  (direct path)
-#
+# Endpoints: Phase 26 Enrollment
 # =============================================================================
 # Endpoints: Phase 26 Enrollment
 # =============================================================================
@@ -534,7 +511,10 @@ class DirectEnrollResponse(BaseModel):
 
 
 @router.post("/commit", response_model=EnrollCommitResponse)
-def enroll_commit(body: EnrollCommitRequest):
+def enroll_commit(
+    body: EnrollCommitRequest,
+    authorization: str = Header(..., alias="Authorization")
+):
     """
     Commit enrollment to Merkle tree.
     
@@ -546,6 +526,11 @@ def enroll_commit(body: EnrollCommitRequest):
     5. Check authorization_event_id not already in merkle_leaves (replay prevention)
     6. Append leaf to tree and record authorization_event_id
     """
+    # Validate Authorization header
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Authorization header must be: Bearer <token>")
+    api_key = authorization[7:]
+    client_id, _ = validate_enterprise_key(api_key)
     # Convert events to dicts
     auth_event = body.authorization_event.model_dump()
     deleg_event = body.delegation_event.model_dump()
@@ -684,123 +669,6 @@ def enroll_commit(body: EnrollCommitRequest):
             "path_bits": path_bits,
         },
         message="Successfully added to Merkle tree.",
-    )
-
-
-# =============================================================================
-# Direct Enrollment (one-step for auto-approve clients)
-# =============================================================================
-
-@router.post("", response_model=DirectEnrollResponse)
-def direct_enroll(
-    body: DirectEnrollRequest,
-    authorization: str = Header(..., alias="Authorization")
-):
-    """
-    Direct enrollment (one-step).
-    
-    For clients with auto_approve policy.
-    Creates enrollment and immediately commits to tree.
-    """
-    # Extract Bearer token
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Authorization header must be: Bearer <token>")
-    api_key = authorization[7:]  # Strip "Bearer "
-    
-    client_id, config = validate_enterprise_key(api_key)
-    
-    # Check auto-approve policy
-    policy = config.get("membership_policy", {})
-    if not policy.get("auto_approve", False):
-        raise HTTPException(403, "Direct enrollment requires auto_approve policy. Use /commit endpoint with NOSTR events.")
-    
-    # Validate commitment
-    try:
-        commitment_hex = body.leaf_commitment.replace("0x", "")
-        if len(bytes.fromhex(commitment_hex)) != 32:
-            raise ValueError("Must be 32 bytes")
-    except Exception as e:
-        raise HTTPException(400, f"Invalid leaf_commitment: {e}")
-    
-    # Get or create tree
-    tree_id = get_or_create_tree(client_id, body.purpose)
-    
-    # Check for duplicate
-    if leaf_commitment_exists(tree_id, body.leaf_commitment):
-        raise HTTPException(409, "Commitment already enrolled")
-    
-    # Create enrollment (legacy record)
-    enrollment_id = "enr_" + secrets.token_urlsafe(16)
-    
-    create_enrollment(
-        enrollment_id=enrollment_id,
-        client_id=client_id,
-        purpose=body.purpose,
-        leaf_commitment=body.leaf_commitment,
-        email_hash=None,
-        status="approved",
-    )
-    
-    # Insert leaf
-    leaf_hash = body.leaf_commitment.replace("0x", "")
-    new_root, leaf_index, siblings = insert_leaf(tree_id, leaf_hash)
-    
-    # Create merkle_leaf record (auto-approve: API key is the authorization)
-    leaf_id = add_merkle_leaf(
-        tree_id=tree_id,
-        leaf_index=leaf_index,
-        leaf_commitment=body.leaf_commitment,
-        authorization_event_id=f"api_key_{enrollment_id}",  # Pseudo-event for API key auth
-        authorization_pubkey=client_id,  # Client ID as pseudo-pubkey
-    )
-    
-    # Compute path bits
-    path_bits = []
-    idx = leaf_index
-    for _ in range(TREE_DEPTH):
-        path_bits.append(idx & 1)
-        idx >>= 1
-    
-    # Save witness
-    save_witness(
-        leaf_id=leaf_id,
-        tree_id=tree_id,
-        siblings=siblings,
-        path_bits=path_bits,
-        leaf_index=leaf_index,
-        root_hash=new_root,
-    )
-    
-    # Update enrollment
-    update_enrollment(
-        enrollment_id,
-        status="in_tree",
-        tree_id=tree_id,
-        leaf_index=leaf_index,
-        tree_built_at=int(time.time()),
-    )
-    
-    # Get valid roots
-    valid_roots = get_valid_roots(tree_id, VALID_ROOTS_WINDOW)
-    
-    audit_log("direct_enroll", client_id=client_id, details={
-        "enrollment_id": enrollment_id,
-        "tree_id": tree_id,
-        "leaf_index": leaf_index,
-    })
-    
-    return DirectEnrollResponse(
-        enrollment_id=enrollment_id,
-        status="committed",
-        tree_id=tree_id,
-        root=new_root,
-        leaf_index=leaf_index,
-        witness={
-            "siblings": siblings,
-            "path_bits": path_bits,
-        },
-        valid_roots=valid_roots,
-        message="Enrolled and committed to Merkle tree.",
     )
 
 
