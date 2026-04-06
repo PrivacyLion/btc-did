@@ -1,50 +1,10 @@
 {
   "acme": {
-    "name": "Acme Corp",
     "domain": "acme.beta.privacy-lion.com",
-    "api_key": "acme-test-key-2026",
-    "redirect_uris": [
-      "https://acme.beta.privacy-lion.com/callback",
-      "http://localhost:3000/callback"
-    ],
-    "require_membership": true,
-    "default_root_id": "acme-allowlist-1771011349",
-    "membership_policy": {
-      "auto_approve": true,
-      "auto_build_interval_hours": 24,
-      "auto_build_threshold": 10
-    },
-    "enrollment_policy": {
-      "verification_required": false,
-      "verification_provider": "none",
-      "verification_type": "none"
-    },
-    "payment_model": {
-      "amount_sats": 100
-    }
+    "api_key_hash": "c6b97b904962e8e86634ec3ac0ac6f6ce03ab9ec318a092aa4a04c01b59f8ac4"
   },
   "ageverify": {
-    "name": "Age Verify Demo",
     "domain": "ageverify.beta.privacy-lion.com",
-    "api_key": "ageverify-test-key-2026",
-    "redirect_uris": [
-      "https://ageverify.beta.privacy-lion.com/callback",
-      "http://localhost:3001/callback"
-    ],
-    "require_membership": true,
-    "default_root_id": "ageverify-allowlist",
-    "membership_policy": {
-      "auto_approve": false,
-      "auto_build_interval_hours": 24,
-      "auto_build_threshold": 10
-    },
-    "enrollment_policy": {
-      "verification_required": true,
-      "verification_provider": "persona",
-      "verification_type": "age_18_plus"
-    },
-    "payment_model": {
-      "amount_sats": 50
-    }
+    "api_key_hash": "b5bf3417757fbfe0a6bec70e017e7426c1a7bda1c86e2c5808f4475de5ad21a7"
   }
 }
