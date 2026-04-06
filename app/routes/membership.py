@@ -1,22 +1,17 @@
 """
 Membership Enrollment API (Phase 26)
 
-NOSTR-native enrollment using kind 28200 authorization events.
+NOSTR-native enrollment using kind 28200 + 28250 authorization events.
 
-ENROLLMENT FLOW:
+ENROLLMENT FLOW (Bible Section 6.1):
 1. Enterprise publishes kind 28200 event (enrollment_authorization)
 2. Human publishes kind 28250 event (delegation_grant)
-3. App submits leaf_commitment + both events to /v1/membership/enroll
-4. Server verifies signatures via NIP-05, adds leaf to tree
+3. App submits leaf_commitment + both events to /v1/membership/enroll/commit
+4. Server verifies both signatures via NIP-05 (fail closed), adds leaf to tree
 5. Server returns witness for proving membership
 
-MOBILE-TO-MOBILE LOGIN:
-- Enterprise publishes kind 28200 tagged with user's npub
-- App subscribes to kind 28200 by npub
-- "Press to log in" button (no QR needed)
-
 Storage: SQLite (persistent across restarts)
-Authorization: Kind 28200 + 28250 NOSTR event signatures
+Authorization: Kind 28200 + 28250 NOSTR event signatures (both NIP-05 verified)
 """
 
 import os
@@ -367,8 +362,30 @@ async def enroll_commit(
     if not valid:
         raise HTTPException(400, f"Human signature verification failed: {error}")
     
-    # Note: Human NIP-05 verification is optional per Bible — only enterprise NIP-05 is mandatory
-    # The human's Schnorr signature proves they hold the private key
+    # Verify human pubkey via NIP-05 — FAIL CLOSED (Bible Section 6.1 check 2)
+    # Extract NIP-05 identifier from delegation event content
+    human_nip05 = None
+    try:
+        deleg_content = json.loads(deleg_event.content)
+        human_nip05 = deleg_content.get("nip05")
+    except Exception:
+        pass
+    
+    # Also check tags for NIP-05 identifier
+    if not human_nip05:
+        for tag in deleg_event.tags:
+            if len(tag) >= 2 and tag[0] == "nip05":
+                human_nip05 = tag[1]
+                break
+    
+    if not human_nip05:
+        raise HTTPException(422, "Missing nip05 identifier in delegation event (kind 28250) — required for human NIP-05 verification")
+    
+    # Import verify_nip05 for human verification
+    from ..lib.nostr import verify_nip05
+    human_nip05_result = await verify_nip05(human_nip05, expected_pubkey=deleg_event.pubkey)
+    if not human_nip05_result.valid:
+        raise HTTPException(422, f"Human NIP-05 verification failed: {human_nip05_result.error}")
     
     # === CHECK 3: Confirm agent_npub in kind 28200 matches agent_npub in kind 28250 ===
     
