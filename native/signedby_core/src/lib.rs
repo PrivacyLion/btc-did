@@ -1,26 +1,24 @@
 // lib.rs - SignedByMe Core Library
-// Implements KeyManager, DLC Builder, Lightning payments, and Groth16 membership proofs
+// Implements KeyManager, Lightning payments, and Groth16 membership proofs
+//
+// Note: DLC modules (dlc_builder, dlc_oracle) and mobile FFI (ffi_c) removed per Bible Section 13.15 & 16.
+// Those were superseded by the agent SDK architecture.
 
-// anyhow removed - unused in JNI functions
 use jni::objects::{JByteArray, JClass, JString};
-use jni::sys::{jbyteArray, jstring, jlong, jboolean};
+use jni::sys::{jbyteArray, jstring, jlong};
 use jni::JNIEnv;
 
 use sha2::{Digest, Sha256};
 
 // Module declarations
 pub mod key_manager;
-pub mod dlc_builder;
 pub mod lightning;
-pub mod dlc_oracle;
 pub mod membership; // Groth16 membership proofs
 pub mod groth16;    // Native Groth16 prover for mobile
-pub mod ffi_c;      // C-ABI exports for iOS
 pub mod nostr;      // NOSTR client (Phase 9)
 pub mod sdk;        // Agent SDK Core (Phase 9A)
 
 use key_manager::ManagedKey;
-use dlc_builder::{DlcContract, OracleInfo, PayoutSplit};
 use lightning::{Preimage, PaymentRequestPackage, verify_payment};
 
 // ============================================================================
@@ -119,141 +117,6 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_signMessageDerHex(
         Ok(sig) => env.new_string(sig).unwrap().into_raw(),
         Err(e) => env.new_string(format!("error:{}", e)).unwrap().into_raw(),
     }
-}
-
-// ============================================================================
-// DLC BUILDER JNI FUNCTIONS
-// ============================================================================
-
-/// Create a DLC contract
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_com_signedby_app_NativeBridge_createDlcContract(
-    mut env: JNIEnv,
-    _clazz: JClass,
-    outcome: JString,
-    payouts_json: JString,
-    oracle_json: JString,
-) -> jstring {
-    let _outcome = env.get_string(&outcome)
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let payouts = env.get_string(&payouts_json)
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let oracle = env.get_string(&oracle_json)
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-
-    let oracle_info = match serde_json::from_str::<OracleInfo>(&oracle) {
-        Ok(o) => o,
-        Err(_) => OracleInfo {
-            name: "local_oracle".to_string(),
-            pubkey_hex: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798".to_string(),
-            x_only_pubkey: None,
-        },
-    };
-
-    let split = match serde_json::from_str::<PayoutSplit>(&payouts) {
-        Ok(s) => s,
-        Err(_) => PayoutSplit::default(),
-    };
-
-    let user_key = match ManagedKey::generate() {
-        Ok(k) => k,
-        Err(e) => {
-            let error_json = format!(r#"{{"status":"error","error":"{}"}}"#, e);
-            return env.new_string(error_json).unwrap().into_raw();
-        }
-    };
-
-    match DlcContract::new(&user_key, oracle_info, 0, split) {
-        Ok(contract) => {
-            let json = contract.to_json().unwrap_or_else(|_| "{}".to_string());
-            env.new_string(json).unwrap().into_raw()
-        }
-        Err(e) => {
-            let error_json = format!(r#"{{"status":"error","error":"{}"}}"#, e);
-            env.new_string(error_json).unwrap().into_raw()
-        }
-    }
-}
-
-/// Sign a DLC outcome with real Schnorr signature
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_com_signedby_app_NativeBridge_signDlcOutcome(
-    mut env: JNIEnv,
-    _clazz: JClass,
-    outcome: JString,
-) -> jstring {
-    let outcome_str = env.get_string(&outcome)
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-
-    let json = dlc_oracle::oracle_sign_outcome(&outcome_str);
-    env.new_string(json).unwrap().into_raw()
-}
-
-/// Get oracle x-only public key (BIP340 format)
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_com_signedby_app_NativeBridge_oraclePubkeyHex(
-    env: JNIEnv,
-    _clazz: JClass,
-) -> jstring {
-    env.new_string(dlc_oracle::oracle_pubkey_hex())
-        .unwrap()
-        .into_raw()
-}
-
-/// Oracle sign outcome (alias for signDlcOutcome)
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleSignOutcome(
-    env: JNIEnv,
-    _clazz: JClass,
-    outcome: JString,
-) -> jstring {
-    Java_com_signedby_app_NativeBridge_signDlcOutcome(env, _clazz, outcome)
-}
-
-/// Acknowledge oracle signing policy for a contract
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleAcknowledgePolicy(
-    mut env: JNIEnv,
-    _clazz: JClass,
-    outcome: JString,
-    contract_id: JString,
-) -> jstring {
-    let outcome_str = env.get_string(&outcome)
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let contract_str = env.get_string(&contract_id)
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-
-    let json = dlc_oracle::oracle_acknowledge_policy(&outcome_str, &contract_str);
-    env.new_string(json).unwrap().into_raw()
-}
-
-/// Verify an oracle attestation signature
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_com_signedby_app_NativeBridge_oracleVerifyAttestation(
-    mut env: JNIEnv,
-    _clazz: JClass,
-    outcome: JString,
-    signature_hex: JString,
-    pubkey_hex: JString,
-) -> jboolean {
-    let outcome_str = env.get_string(&outcome)
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let sig_str = env.get_string(&signature_hex)
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let pubkey_str = env.get_string(&pubkey_hex)
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-
-    let is_valid = dlc_oracle::oracle_verify_attestation(&outcome_str, &sig_str, &pubkey_str);
-    if is_valid { 1 } else { 0 }
 }
 
 // ============================================================================
@@ -368,7 +231,7 @@ pub extern "system" fn Java_com_signedby_app_NativeBridge_createPrp(
     }
 }
 
-/// Sign a message with Schnorr (for Taproot/DLC)
+/// Sign a message with Schnorr (for Taproot)
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_signedby_app_NativeBridge_signSchnorr(
     mut env: JNIEnv,

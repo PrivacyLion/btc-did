@@ -9,9 +9,8 @@
 // Actual TEE implementation depends on target:
 // - Android: Android Keystore with StrongBox
 // - iOS: Secure Enclave
-// - Desktop/Server: Encrypted file storage with OS keyring
+// - Desktop/Server: Encrypted file storage with OS keyring (macOS Keychain, Windows DPAPI, Linux Secret Service)
 
-use anyhow::{Result, anyhow};
 use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
 
@@ -32,6 +31,9 @@ pub enum StorageError {
     
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+    
+    #[error("Keyring error: {0}")]
+    KeyringError(String),
 }
 
 /// Storage keys for SDK secrets
@@ -39,6 +41,9 @@ pub const KEY_DID_PRIVATE: &str = "signedby_did_private_key";
 pub const KEY_LEAF_SECRET: &str = "signedby_leaf_secret";
 pub const KEY_HUMAN_NSEC: &str = "signedby_human_nsec";
 pub const KEY_HUMAN_NSEC_CONSENT: &str = "signedby_human_nsec_consent";
+
+/// Keyring service name for SignedByMe storage encryption keys
+const KEYRING_SERVICE: &str = "com.signedby.sdk";
 
 /// Human nsec consent record
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,16 +72,14 @@ pub trait SecureStorage: Send + Sync {
 }
 
 /// Encrypted file storage (for desktop/server environments)
-/// Uses ChaCha20-Poly1305 with a key derived from OS keyring
+/// Uses ChaCha20-Poly1305 with a key from OS keyring (macOS Keychain, Windows DPAPI, Linux Secret Service)
 pub struct EncryptedFileStorage {
     storage_dir: PathBuf,
-    // In production, encryption key comes from OS keyring
-    // For now, this is a placeholder implementation
 }
 
 impl EncryptedFileStorage {
     /// Create new encrypted file storage
-    pub fn new(storage_dir: PathBuf) -> Result<Self> {
+    pub fn new(storage_dir: PathBuf) -> Result<Self, StorageError> {
         std::fs::create_dir_all(&storage_dir)?;
         Ok(Self { storage_dir })
     }
@@ -85,6 +88,70 @@ impl EncryptedFileStorage {
         // Sanitize key name for filesystem
         let safe_key = key.replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
         self.storage_dir.join(format!("{}.enc", safe_key))
+    }
+    
+    /// Get or create the master encryption key from OS keyring
+    /// This key is stored in:
+    /// - macOS: Keychain
+    /// - Windows: Credential Manager (DPAPI)
+    /// - Linux: Secret Service (GNOME Keyring, KWallet, etc.)
+    fn get_or_create_master_key() -> Result<[u8; 32], StorageError> {
+        use keyring::Entry;
+        use chacha20poly1305::aead::rand_core::{OsRng, RngCore};
+        
+        let entry = Entry::new(KEYRING_SERVICE, "master_encryption_key")
+            .map_err(|e| StorageError::KeyringError(format!("Failed to access keyring: {}", e)))?;
+        
+        // Try to get existing key
+        match entry.get_password() {
+            Ok(key_hex) => {
+                // Decode hex to bytes
+                let key_bytes = hex::decode(&key_hex)
+                    .map_err(|e| StorageError::KeyringError(format!("Invalid key in keyring: {}", e)))?;
+                
+                if key_bytes.len() != 32 {
+                    return Err(StorageError::KeyringError(
+                        format!("Invalid key length in keyring: expected 32, got {}", key_bytes.len())
+                    ));
+                }
+                
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&key_bytes);
+                Ok(key)
+            }
+            Err(keyring::Error::NoEntry) => {
+                // Generate new random key
+                let mut key = [0u8; 32];
+                OsRng.fill_bytes(&mut key);
+                
+                // Store in keyring as hex
+                let key_hex = hex::encode(&key);
+                entry.set_password(&key_hex)
+                    .map_err(|e| StorageError::KeyringError(format!("Failed to store key in keyring: {}", e)))?;
+                
+                Ok(key)
+            }
+            Err(e) => {
+                Err(StorageError::KeyringError(format!("Keyring access error: {}", e)))
+            }
+        }
+    }
+    
+    /// Derive per-key encryption key from master key using HKDF-like construction
+    /// This ensures different storage keys use different encryption keys
+    fn derive_key_specific_key(master_key: &[u8; 32], storage_key: &str) -> [u8; 32] {
+        use sha2::{Sha256, Digest};
+        
+        // HKDF-like key derivation: SHA256(master_key || "signedby_v1:" || storage_key)
+        let mut hasher = Sha256::new();
+        hasher.update(master_key);
+        hasher.update(b"signedby_v1:");
+        hasher.update(storage_key.as_bytes());
+        
+        let result = hasher.finalize();
+        let mut derived = [0u8; 32];
+        derived.copy_from_slice(&result);
+        derived
     }
 }
 
@@ -96,13 +163,17 @@ impl SecureStorage for EncryptedFileStorage {
         };
         use chacha20poly1305::aead::rand_core::RngCore;
         
+        // Get master key from OS keyring
+        let master_key = Self::get_or_create_master_key()?;
+        
+        // Derive key-specific encryption key
+        let enc_key = Self::derive_key_specific_key(&master_key, key);
+        
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12];
         OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
         
-        // Derive encryption key (placeholder - should use OS keyring)
-        let enc_key = derive_storage_key(key);
         let cipher = ChaCha20Poly1305::new_from_slice(&enc_key)
             .map_err(|e| StorageError::EncryptionError(e.to_string()))?;
         
@@ -138,8 +209,12 @@ impl SecureStorage for EncryptedFileStorage {
         let nonce = Nonce::from_slice(&data[..12]);
         let ciphertext = &data[12..];
         
-        // Derive encryption key
-        let enc_key = derive_storage_key(key);
+        // Get master key from OS keyring
+        let master_key = Self::get_or_create_master_key()?;
+        
+        // Derive key-specific encryption key
+        let enc_key = Self::derive_key_specific_key(&master_key, key);
+        
         let cipher = ChaCha20Poly1305::new_from_slice(&enc_key)
             .map_err(|e| StorageError::EncryptionError(e.to_string()))?;
         
@@ -163,23 +238,6 @@ impl SecureStorage for EncryptedFileStorage {
     }
 }
 
-/// Derive storage encryption key from key name
-/// In production, this should use OS keyring (macOS Keychain, Windows DPAPI, Linux Secret Service)
-fn derive_storage_key(key: &str) -> [u8; 32] {
-    use sha2::{Sha256, Digest};
-    
-    // Placeholder: derive from key name + machine-specific entropy
-    // Production should use proper key derivation from secure source
-    let mut hasher = Sha256::new();
-    hasher.update(b"signedby_sdk_storage_v1:");
-    hasher.update(key.as_bytes());
-    
-    let result = hasher.finalize();
-    let mut key_bytes = [0u8; 32];
-    key_bytes.copy_from_slice(&result);
-    key_bytes
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,14 +251,24 @@ mod tests {
         let key = "test_key";
         let data = b"secret data here";
         
-        storage.store(key, data).unwrap();
-        assert!(storage.exists(key));
-        
-        let retrieved = storage.retrieve(key).unwrap();
-        assert_eq!(retrieved, data);
-        
-        storage.delete(key).unwrap();
-        assert!(!storage.exists(key));
+        // This test requires a working OS keyring
+        // Skip if keyring is not available (e.g., headless CI)
+        match storage.store(key, data) {
+            Ok(()) => {
+                assert!(storage.exists(key));
+                
+                let retrieved = storage.retrieve(key).unwrap();
+                assert_eq!(retrieved, data);
+                
+                storage.delete(key).unwrap();
+                assert!(!storage.exists(key));
+            }
+            Err(StorageError::KeyringError(_)) => {
+                // Keyring not available - skip test
+                eprintln!("Skipping test: OS keyring not available");
+            }
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
     }
     
     #[test]
@@ -210,5 +278,21 @@ mod tests {
         
         let result = storage.retrieve("nonexistent");
         assert!(matches!(result, Err(StorageError::NotFound(_))));
+    }
+    
+    #[test]
+    fn test_key_derivation_deterministic() {
+        let master = [0xABu8; 32];
+        let key1 = EncryptedFileStorage::derive_key_specific_key(&master, "test_key");
+        let key2 = EncryptedFileStorage::derive_key_specific_key(&master, "test_key");
+        assert_eq!(key1, key2);
+    }
+    
+    #[test]
+    fn test_key_derivation_different_keys() {
+        let master = [0xABu8; 32];
+        let key1 = EncryptedFileStorage::derive_key_specific_key(&master, "key_a");
+        let key2 = EncryptedFileStorage::derive_key_specific_key(&master, "key_b");
+        assert_ne!(key1, key2);
     }
 }

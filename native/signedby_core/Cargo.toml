@@ -54,7 +54,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync"] }  # Async runti
 
 # SDK encrypted storage (Phase 9A)
 chacha20poly1305 = "0.10"
-tempfile = "3"  # For tests
+keyring = "2"  # OS keyring (macOS Keychain, Windows DPAPI, Linux Secret Service)
 
 # Note: WASM witness calculation requires either:
 # - circom-witnesscalc (needs protoc + clang)
@@ -66,6 +66,7 @@ num-bigint = "0.4"
 default = []
 
 [dev-dependencies]
+tempfile = "3"
 
 [profile.release]
 opt-level = "z"
