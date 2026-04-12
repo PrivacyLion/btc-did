@@ -18,7 +18,9 @@
 
 pub mod binding;
 pub mod poseidon2_bn254;
-pub mod jni;
+
+// NOTE: JNI module removed per Bible Section 16 (Mar 30, 2026).
+// Mobile Android bridge superseded. This is an SDK, not an Android app.
 
 pub use binding::{compute_binding_hash_v4, hash_field, SCHEMA_VERSION_V4, DOMAIN_SEPARATOR_V4};
 

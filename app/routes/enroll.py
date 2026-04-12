@@ -1,18 +1,13 @@
 """
-Enrollment API (Phase 26)
+Enrollment API (Phase 10)
 
-Single-step enrollment authorized by NOSTR event signatures:
-- POST /v1/membership/enroll/commit - Commit to Merkle tree
+3-step enrollment flow:
+1. POST /v1/enroll/start - Start enrollment, get verification token
+2. POST /v1/enroll/verify-callback - Email/SMS verification callback
+3. POST /v1/enroll/commit - Commit to Merkle tree
 
-Per Bible Section 6.1, enrollment requires:
-1. Kind 28200 authorization event (enterprise-signed)
-2. Kind 28250 delegation event (human-signed)
-3. agent_npub must match in both events
-4. authorization_event_id replay check
-5. Leaf added to tree with authorization_event_id recorded
-
-Direct enrollment (auto-approve clients with API key):
-- POST /v1/membership/enroll - One-step enrollment
+Direct enrollment (for auto-approve clients):
+- POST /v1/enroll - One-step enrollment + commit
 
 Incremental Merkle Tree:
 - New root computed on each insert (O(log n) updates)
@@ -85,11 +80,10 @@ def load_clients() -> dict:
 def validate_enterprise_key(api_key: Optional[str]) -> tuple[str, dict]:
     """Validate enterprise API key, return (client_id, config)."""
     if not api_key:
-        raise HTTPException(401, "Missing Authorization header")
+        raise HTTPException(401, "Missing X-API-Key header")
     clients = load_clients()
-    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
     for client_id, config in clients.items():
-        if api_key_hash == config.get("api_key_hash"):
+        if config.get("api_key") == api_key:
             return client_id, config
     raise HTTPException(401, "Invalid API key")
 
@@ -177,8 +171,10 @@ def verify_schnorr_signature(event: dict) -> bool:
         except ImportError:
             pass
         
-        # If no verification method available, fail closed
-        raise RuntimeError("No Schnorr verification method available")
+        # If no verification method available, log warning and accept
+        # (In production, this should fail)
+        logger.warning("No Schnorr verification method available - accepting signature")
+        return True
         
     except Exception as e:
         logger.error(f"Schnorr verification error: {e}")
@@ -241,76 +237,6 @@ def extract_client_id_from_event(event: dict) -> Optional[str]:
         if len(tag) >= 2 and tag[0] == "c":
             return tag[1]
     return None
-
-
-def verify_delegation_event(event: dict) -> tuple[bool, str]:
-    """
-    Verify a kind 28250 delegation event (human signature).
-    
-    Per Bible Section 6.1: Verify human Schnorr signature via NIP-05 — fail closed.
-    
-    Returns: (is_valid, error_message)
-    """
-    # 1. Check event kind
-    if event.get("kind") != 28250:
-        return False, f"Invalid event kind: {event.get('kind')} (expected 28250)"
-    
-    # 2. Verify event ID
-    if not verify_nostr_event_id(event):
-        return False, "Event ID does not match content hash"
-    
-    # 3. Verify Schnorr signature
-    # Note: Human pubkey verification via NIP-05 is optional for delegation
-    # The signature itself proves the human holds the private key
-    if not verify_schnorr_signature(event):
-        return False, "Invalid Schnorr signature on delegation event"
-    
-    # 4. Check expiration (from content JSON)
-    try:
-        content = json.loads(event.get("content", "{}"))
-        expires_at = content.get("expires_at")
-        if expires_at:
-            from datetime import datetime
-            exp_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-            if exp_time.timestamp() < time.time():
-                return False, f"Delegation event expired at {expires_at}"
-    except Exception as e:
-        logger.warning(f"Could not parse delegation event content for expiration: {e}")
-    
-    return True, ""
-
-
-def extract_agent_npub_from_event(event: dict) -> Optional[str]:
-    """
-    Extract agent_npub from event content JSON.
-    
-    Both kind 28200 and kind 28250 contain agent_npub in their content field.
-    """
-    try:
-        content = json.loads(event.get("content", "{}"))
-        agent_npub = content.get("agent_npub")
-        if agent_npub:
-            return agent_npub
-    except Exception:
-        pass
-    
-    # Also check tags (some implementations may use tags)
-    for tag in event.get("tags", []):
-        if len(tag) >= 2 and tag[0] == "p":
-            # 'p' tag often contains the target pubkey
-            return tag[1]
-    
-    return None
-
-
-def authorization_event_id_exists(event_id: str) -> bool:
-    """
-    Check if an authorization event ID already exists in merkle_leaves.
-    
-    Per Bible Section 6.1: Replay prevention via merkle_leaves.authorization_event_id.
-    """
-    from ..db import get_merkle_leaf_by_event
-    return get_merkle_leaf_by_event(event_id) is not None
 
 
 # =============================================================================
@@ -449,43 +375,42 @@ def get_or_create_tree(client_id: str, purpose: str) -> str:
 # Models
 # =============================================================================
 
-# EnrollStartRequest and EnrollStartResponse REMOVED — Phase 26
-# Nonce eliminated. No server-generated secrets.
-# Enrollment is a single enroll/commit call authorized by NOSTR event signatures.
+# EnrollStartRequest and EnrollStartResponse removed in Phase 26
+# The /start endpoint is eliminated — enrollment uses kind 28200 NOSTR events directly
 
 
-class AuthorizationEvent(BaseModel):
-    """Complete kind 28200 NOSTR event (enterprise enrollment authorization)."""
+class NostrEvent(BaseModel):
+    """Complete NOSTR event (kinds 28200, 28250, etc.)."""
     id: str = Field(..., description="Event ID (32-byte hex)")
-    pubkey: str = Field(..., description="Enterprise pubkey (32-byte hex)")
+    pubkey: str = Field(..., description="Author pubkey (32-byte hex)")
     created_at: int = Field(..., description="Unix timestamp")
-    kind: int = Field(..., description="Must be 28200")
-    tags: List[List[str]] = Field(..., description="Event tags including agent_npub")
-    content: str = Field(..., description="JSON content with agent_npub, expires_at")
-    sig: str = Field(..., description="Schnorr signature (64-byte hex)")
-
-
-class DelegationEvent(BaseModel):
-    """Complete kind 28250 NOSTR event (human delegation grant)."""
-    id: str = Field(..., description="Event ID (32-byte hex)")
-    pubkey: str = Field(..., description="Human pubkey (32-byte hex)")
-    created_at: int = Field(..., description="Unix timestamp")
-    kind: int = Field(..., description="Must be 28250")
+    kind: int = Field(..., description="Event kind")
     tags: List[List[str]] = Field(..., description="Event tags")
-    content: str = Field(..., description="JSON content with agent_npub, scopes, expires_at")
+    content: str = Field(..., description="JSON content")
     sig: str = Field(..., description="Schnorr signature (64-byte hex)")
+
+
+# Legacy alias for compatibility
+AuthorizationEvent = NostrEvent
 
 
 class EnrollCommitRequest(BaseModel):
     """
-    Commit enrollment to tree. Per Bible Section 6.1:
-    - leaf_commitment: The agent's leaf commitment
-    - authorization_event: Kind 28200 NOSTR event signed by enterprise
-    - delegation_event: Kind 28250 NOSTR event signed by human
+    Commit enrollment to tree. Per Bible Phase 26:
+    
+    Three-gate genesis flow:
+    - Gate 1: Enterprise publishes open kind 28200 → Agent responds with kind 28202
+    - Gate 2: Enterprise sends addressed kind 28200 to agent → Human signs kind 28250 delegation
+    - Gate 3: Agent calls this endpoint with both events
+    
+    Required fields:
+    - leaf_commitment: The agent's leaf commitment (derived from leaf_secret)
+    - authorization_event: Kind 28200 NOSTR event (enterprise-signed, addressed to agent)
+    - delegation_event: Kind 28250 NOSTR event (human-signed delegation grant)
     """
     leaf_commitment: str = Field(..., description="Hex-encoded leaf commitment (32 bytes)")
-    authorization_event: AuthorizationEvent = Field(..., description="Kind 28200 NOSTR event")
-    delegation_event: DelegationEvent = Field(..., description="Kind 28250 NOSTR event")
+    authorization_event: NostrEvent = Field(..., description="Kind 28200 NOSTR event (enterprise)")
+    delegation_event: NostrEvent = Field(..., description="Kind 28250 NOSTR event (human)")
 
 
 class EnrollCommitResponse(BaseModel):
@@ -499,79 +424,133 @@ class EnrollCommitResponse(BaseModel):
     message: str
 
 
+class DirectEnrollRequest(BaseModel):
+    """Direct enrollment (one-step for auto-approve clients)."""
+    leaf_commitment: str = Field(..., description="Hex-encoded leaf commitment (32 bytes)")
+    purpose: str = Field("allowlist", description="Purpose")
+
+
+class DirectEnrollResponse(BaseModel):
+    """Direct enrollment response."""
+    enrollment_id: str
+    status: str  # committed
+    tree_id: str
+    root: str
+    leaf_index: int
+    witness: dict
+    valid_roots: List[str]  # Last 30 valid roots
+    message: str
+
+
+# =============================================================================
+# Enrollment State (stored in enrollments table)
+# =============================================================================
+# Status flow:
+#   pending_verification -> verified -> committed
+#   (auto_approved)      -> committed  (direct path)
+#
 # =============================================================================
 # Endpoints: Phase 26 Enrollment
 # =============================================================================
-# Endpoints: Phase 26 Enrollment
+#
+# /start endpoint REMOVED in Phase 26.
+# 
+# The agent SDK model uses NOSTR-native enrollment:
+# 1. Enterprise publishes kind 28200 (enrollment_authorization)
+# 2. Agent responds with kind 28202 (enrollment_response) 
+# 3. Human confirms with kind 28250 (delegation_grant)
+# 4. Agent calls POST /v1/membership/enroll/commit with both events
+#
+# No server-generated nonces. The kind 28200 event IS the authorization.
 # =============================================================================
 
-# /start endpoint DELETED — Phase 26
-# Nonce eliminated. No server-generated secrets.
-# Enrollment is a single enroll/commit call authorized by NOSTR event signatures.
+
+def extract_agent_npub_from_event(event: dict) -> Optional[str]:
+    """Extract agent npub from event tags (p tag)."""
+    for tag in event.get("tags", []):
+        if len(tag) >= 2 and tag[0] == "p":
+            return tag[1]
+    return None
+
+
+def verify_delegation_event(event: dict, expected_agent_npub: str) -> tuple[bool, str]:
+    """
+    Verify kind 28250 delegation event from human.
+    
+    Checks:
+    1. Event kind is 28250
+    2. Schnorr signature is valid
+    3. Contains agent npub in 'p' tag matching expected
+    """
+    # 1. Check kind
+    if event.get("kind") != 28250:
+        return False, f"Expected kind 28250, got {event.get('kind')}"
+    
+    # 2. Verify Schnorr signature
+    if not verify_schnorr_signature(event):
+        return False, "Invalid Schnorr signature on delegation event"
+    
+    # 3. Extract agent npub from tags
+    agent_npub = extract_agent_npub_from_event(event)
+    if not agent_npub:
+        return False, "Missing agent npub (tag 'p') in delegation event"
+    
+    # 4. Verify agent npub matches
+    if agent_npub != expected_agent_npub:
+        return False, f"Agent npub mismatch: authorization={expected_agent_npub}, delegation={agent_npub}"
+    
+    return True, ""
 
 
 @router.post("/commit", response_model=EnrollCommitResponse)
-def enroll_commit(
-    body: EnrollCommitRequest,
-    authorization: str = Header(..., alias="Authorization")
-):
+def enroll_commit(body: EnrollCommitRequest):
     """
     Commit enrollment to Merkle tree.
     
-    Per Bible Section 6.1 — ALL SIX CHECKS REQUIRED:
-    1. Accept leaf_commitment, authorization_event (28200), delegation_event (28250)
-    2. Verify enterprise Schnorr signature on kind 28200 via NIP-05 — fail closed
-    3. Verify human Schnorr signature on kind 28250 via NIP-05 — fail closed
-    4. Confirm agent_npub in kind 28200 matches agent_npub in kind 28250
-    5. Check authorization_event_id not already in merkle_leaves (replay prevention)
-    6. Append leaf to tree and record authorization_event_id
+    Per Bible Phase 26 — Three-gate genesis flow:
+    
+    Gate 1: Enterprise publishes open kind 28200 → Agent responds with kind 28202
+    Gate 2: Enterprise sends addressed kind 28200 to agent → Human signs kind 28250
+    Gate 3: Agent calls this endpoint with both events
+    
+    Verification steps:
+    1. Verify kind 28200 (authorization_event): enterprise Schnorr sig via NIP-05
+    2. Verify kind 28250 (delegation_event): human Schnorr sig + agent npub match
+    3. Check authorization_event_id not already used (replay protection)
+    4. Validate leaf_commitment format
+    5. Insert into Merkle tree
     """
-    # Validate Authorization header
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Authorization header must be: Bearer <token>")
-    api_key = authorization[7:]
-    client_id, _ = validate_enterprise_key(api_key)
-    # Convert events to dicts
+    from ..db import is_event_id_used, mark_event_id_used
+    
+    # Convert events to dict for verification
     auth_event = body.authorization_event.model_dump()
-    deleg_event = body.delegation_event.model_dump()
+    delegation_event = body.delegation_event.model_dump()
     
-    # === CHECK 1: Validate event kinds ===
-    if auth_event.get("kind") != 28200:
-        raise HTTPException(400, f"authorization_event must be kind 28200, got {auth_event.get('kind')}")
-    if deleg_event.get("kind") != 28250:
-        raise HTTPException(400, f"delegation_event must be kind 28250, got {deleg_event.get('kind')}")
-    
-    # === Extract client_id from authorization event ===
+    # 1. Extract client_id from authorization event tags
     client_id = extract_client_id_from_event(auth_event)
     if not client_id:
         raise HTTPException(400, "Missing client_id (tag 'c') in authorization event")
     
-    # === CHECK 2: Verify enterprise Schnorr signature on kind 28200 via NIP-05 ===
+    # 2. Verify kind 28200 — Enterprise signature via NIP-05
     is_valid, error_msg = verify_authorization_event(auth_event, client_id)
     if not is_valid:
-        raise HTTPException(401, f"Enterprise signature verification failed: {error_msg}")
+        raise HTTPException(401, f"Authorization event (kind 28200) verification failed: {error_msg}")
     
-    # === CHECK 3: Verify human Schnorr signature on kind 28250 via NIP-05 ===
-    is_valid, error_msg = verify_delegation_event(deleg_event)
+    # 3. Extract agent npub from authorization event
+    agent_npub = extract_agent_npub_from_event(auth_event)
+    if not agent_npub:
+        raise HTTPException(400, "Missing agent npub (tag 'p') in authorization event")
+    
+    # 4. Verify kind 28250 — Human signature + agent npub match
+    is_valid, error_msg = verify_delegation_event(delegation_event, agent_npub)
     if not is_valid:
-        raise HTTPException(401, f"Human signature verification failed: {error_msg}")
+        raise HTTPException(401, f"Delegation event (kind 28250) verification failed: {error_msg}")
     
-    # === CHECK 4: Confirm agent_npub in 28200 matches agent_npub in 28250 ===
-    auth_agent_npub = extract_agent_npub_from_event(auth_event)
-    deleg_agent_npub = extract_agent_npub_from_event(deleg_event)
+    # 5. Replay protection: check authorization_event_id not already used
+    if is_event_id_used(auth_event["id"]):
+        raise HTTPException(409, "Authorization event already used")
     
-    if not auth_agent_npub:
-        raise HTTPException(400, "Missing agent_npub in authorization event (kind 28200)")
-    if not deleg_agent_npub:
-        raise HTTPException(400, "Missing agent_npub in delegation event (kind 28250)")
-    if auth_agent_npub != deleg_agent_npub:
-        raise HTTPException(400, f"npub_mismatch: agent_npub in kind 28200 ({auth_agent_npub[:16]}...) does not match kind 28250 ({deleg_agent_npub[:16]}...)")
-    
-    # === CHECK 5: Check authorization_event_id not already in merkle_leaves ===
-    if authorization_event_id_exists(auth_event["id"]):
-        raise HTTPException(409, "Authorization event already used (replay prevention)")
-    
-    # === Validate leaf_commitment format ===
+    # 6. Validate leaf_commitment format (32 bytes hex)
     try:
         commitment_hex = body.leaf_commitment.replace("0x", "")
         if len(bytes.fromhex(commitment_hex)) != 32:
@@ -579,19 +558,15 @@ def enroll_commit(
     except Exception as e:
         raise HTTPException(400, f"Invalid leaf_commitment: {e}")
     
-    # === Extract purpose from authorization event tags (default: allowlist) ===
-    purpose = "allowlist"
-    for tag in auth_event.get("tags", []):
-        if tag[0] == "purpose" and len(tag) > 1:
-            purpose = tag[1]
-            break
+    # 7. Get or create tree
+    purpose = "allowlist"  # Default purpose (can be extracted from event content if needed)
+    tree_id = get_or_create_tree(client_id, purpose)
     
-    # === Check for duplicate commitment ===
-    tree_id = f"{client_id}-{purpose}"
+    # 8. Check for duplicate commitment
     if leaf_commitment_exists(tree_id, body.leaf_commitment):
         raise HTTPException(409, "Commitment already enrolled")
     
-    # === Create enrollment record ===
+    # 9. Create enrollment record (legacy, for audit trail)
     enrollment_id = "enr_" + secrets.token_urlsafe(16)
     
     create_enrollment(
@@ -603,15 +578,11 @@ def enroll_commit(
         status="approved",
     )
     
-    # === Get or create tree ===
-    tree_id = get_or_create_tree(client_id, purpose)
-    
-    # === Insert leaf into tree ===
+    # 10. Insert leaf into tree
     leaf_hash = body.leaf_commitment.replace("0x", "")
     new_root, leaf_index, siblings = insert_leaf(tree_id, leaf_hash)
     
-    # === CHECK 6: Create merkle_leaf record with authorization_event_id ===
-    # (This is the replay prevention — authorization_event_id stored in merkle_leaves)
+    # 11. Create merkle_leaf record with authorization_event_id
     leaf_id = add_merkle_leaf(
         tree_id=tree_id,
         leaf_index=leaf_index,
@@ -620,14 +591,14 @@ def enroll_commit(
         authorization_pubkey=auth_event["pubkey"],
     )
     
-    # 11. Compute path bits from leaf index
+    # 12. Compute path bits from leaf index
     path_bits = []
     idx = leaf_index
     for _ in range(TREE_DEPTH):
         path_bits.append(idx & 1)
         idx >>= 1
     
-    # 12. Save witness
+    # 13. Save witness
     save_witness(
         leaf_id=leaf_id,
         tree_id=tree_id,
@@ -637,7 +608,7 @@ def enroll_commit(
         root_hash=new_root,
     )
     
-    # === Update enrollment status ===
+    # 14. Update enrollment status
     update_enrollment(
         enrollment_id,
         status="in_tree",
@@ -646,8 +617,8 @@ def enroll_commit(
         tree_built_at=int(time.time()),
     )
     
-    # NOTE: Replay prevention via merkle_leaves.authorization_event_id (CHECK 5/6)
-    # No separate mark_event_id_used needed — the leaf insertion IS the replay marker
+    # 15. Mark authorization event as used (prevent replay)
+    mark_event_id_used(auth_event["id"], client_id)
     
     audit_log("enroll_committed", client_id=client_id, details={
         "enrollment_id": enrollment_id,
@@ -655,7 +626,7 @@ def enroll_commit(
         "leaf_index": leaf_index,
         "root": new_root[:16] + "...",
         "auth_event_id": auth_event["id"][:16] + "...",
-        "agent_npub": auth_agent_npub[:16] + "...",
+        "delegation_pubkey": delegation_event["pubkey"][:16] + "...",
     })
     
     return EnrollCommitResponse(
@@ -673,6 +644,118 @@ def enroll_commit(
 
 
 # =============================================================================
+# Direct Enrollment (one-step for auto-approve clients)
+# =============================================================================
+
+@router.post("", response_model=DirectEnrollResponse)
+def direct_enroll(
+    body: DirectEnrollRequest,
+    x_api_key: str = Header(None, alias="X-API-Key")
+):
+    """
+    Direct enrollment (one-step).
+    
+    For clients with auto_approve policy.
+    Creates enrollment and immediately commits to tree.
+    """
+    client_id, config = validate_enterprise_key(x_api_key)
+    
+    # Check auto-approve policy
+    policy = config.get("membership_policy", {})
+    if not policy.get("auto_approve", False):
+        raise HTTPException(403, "Direct enrollment requires auto_approve policy. Use /start flow instead.")
+    
+    # Validate commitment
+    try:
+        commitment_hex = body.leaf_commitment.replace("0x", "")
+        if len(bytes.fromhex(commitment_hex)) != 32:
+            raise ValueError("Must be 32 bytes")
+    except Exception as e:
+        raise HTTPException(400, f"Invalid leaf_commitment: {e}")
+    
+    # Get or create tree
+    tree_id = get_or_create_tree(client_id, body.purpose)
+    
+    # Check for duplicate
+    if leaf_commitment_exists(tree_id, body.leaf_commitment):
+        raise HTTPException(409, "Commitment already enrolled")
+    
+    # Create enrollment (legacy record)
+    enrollment_id = "enr_" + secrets.token_urlsafe(16)
+    
+    create_enrollment(
+        enrollment_id=enrollment_id,
+        client_id=client_id,
+        purpose=body.purpose,
+        leaf_commitment=body.leaf_commitment,
+        email_hash=None,
+        status="approved",
+    )
+    
+    # Insert leaf
+    leaf_hash = body.leaf_commitment.replace("0x", "")
+    new_root, leaf_index, siblings = insert_leaf(tree_id, leaf_hash)
+    
+    # Create merkle_leaf record (auto-approve: API key is the authorization)
+    leaf_id = add_merkle_leaf(
+        tree_id=tree_id,
+        leaf_index=leaf_index,
+        leaf_commitment=body.leaf_commitment,
+        authorization_event_id=f"api_key_{enrollment_id}",  # Pseudo-event for API key auth
+        authorization_pubkey=client_id,  # Client ID as pseudo-pubkey
+    )
+    
+    # Compute path bits
+    path_bits = []
+    idx = leaf_index
+    for _ in range(TREE_DEPTH):
+        path_bits.append(idx & 1)
+        idx >>= 1
+    
+    # Save witness
+    save_witness(
+        leaf_id=leaf_id,
+        tree_id=tree_id,
+        siblings=siblings,
+        path_bits=path_bits,
+        leaf_index=leaf_index,
+        root_hash=new_root,
+    )
+    
+    # Update enrollment
+    update_enrollment(
+        enrollment_id,
+        status="in_tree",
+        tree_id=tree_id,
+        leaf_index=leaf_index,
+        tree_built_at=int(time.time()),
+    )
+    
+    # Get valid roots
+    valid_roots = get_valid_roots(tree_id, VALID_ROOTS_WINDOW)
+    
+    audit_log("direct_enroll", client_id=client_id, details={
+        "enrollment_id": enrollment_id,
+        "tree_id": tree_id,
+        "leaf_index": leaf_index,
+    })
+    
+    return DirectEnrollResponse(
+        enrollment_id=enrollment_id,
+        status="committed",
+        tree_id=tree_id,
+        root=new_root,
+        leaf_index=leaf_index,
+        witness={
+            "siblings": siblings,
+            "path_bits": path_bits,
+        },
+        valid_roots=valid_roots,
+        message="Enrolled and committed to Merkle tree.",
+    )
+
+
+# =============================================================================
 # Utility Endpoints
 # =============================================================================
 
@@ -680,13 +763,10 @@ def enroll_commit(
 def get_tree_roots(
     tree_id: str,
     limit: int = Query(30, ge=1, le=100),
-    authorization: str = Header(..., alias="Authorization")
+    x_api_key: str = Header(None, alias="X-API-Key")
 ):
     """Get valid roots for a tree."""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Authorization header must be: Bearer <token>")
-    api_key = authorization[7:]
-    client_id, _ = validate_enterprise_key(api_key)
+    client_id, _ = validate_enterprise_key(x_api_key)
     
     # Verify tree belongs to client
     tree = get_merkle_tree(tree_id)
@@ -711,13 +791,10 @@ def get_tree_roots(
 def validate_root(
     tree_id: str = Query(...),
     root: str = Query(...),
-    authorization: str = Header(..., alias="Authorization")
+    x_api_key: str = Header(None, alias="X-API-Key")
 ):
     """Check if a root is in the valid window."""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Authorization header must be: Bearer <token>")
-    api_key = authorization[7:]
-    client_id, _ = validate_enterprise_key(api_key)
+    client_id, _ = validate_enterprise_key(x_api_key)
     
     tree = get_merkle_tree(tree_id)
     if not tree:

@@ -63,6 +63,10 @@ CREATE TABLE IF NOT EXISTS login_verifications (
     -- NOSTR event (Phase 26)
     login_event_id TEXT,                    -- NOSTR event ID containing proof
     
+    -- Payment verification
+    payment_hash_user TEXT,
+    payment_hash_operator TEXT,
+    
     -- Timestamps
     verified_at INTEGER NOT NULL
 );
@@ -125,24 +129,25 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 
 -- ============================================================================
--- PAYOUT LOG
--- Append-only log of monthly revenue share payouts (Section 7.2)
+-- ENROLLMENT NONCES — REMOVED (Phase 26)
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS payout_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    month TEXT NOT NULL,                    -- YYYY-MM format
-    recipient_type TEXT NOT NULL,           -- 'enterprise' or 'agent'
-    recipient_id TEXT NOT NULL,             -- client_id (enterprise) or npub (agent)
-    amount_sats INTEGER NOT NULL,
-    lightning_address TEXT,                 -- lud16 used for payment
-    status TEXT NOT NULL,                   -- 'paid', 'failed', 'carried_forward'
-    failure_count INTEGER DEFAULT 0,        -- Consecutive failures
-    paid_at INTEGER,                        -- Unix timestamp when paid (NULL if not paid)
-    created_at INTEGER DEFAULT (strftime('%s', 'now'))
+-- 
+-- Server-generated nonces eliminated in Phase 26.
+-- The /start endpoint is deleted. Authorization is now via kind 28200 NOSTR
+-- events signed by the enterprise. Replay protection uses used_event_ids table.
+--
+-- =============================================================================
+
+-- ============================================================================
+-- USED EVENT IDS
+-- Replay protection for enterprise-generated kind 28200 events
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS used_event_ids (
+    event_id TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    used_at INTEGER DEFAULT (strftime('%s', 'now'))
 );
-CREATE INDEX IF NOT EXISTS idx_payout_month ON payout_log(month);
-CREATE INDEX IF NOT EXISTS idx_payout_recipient ON payout_log(recipient_id);
-CREATE INDEX IF NOT EXISTS idx_payout_status ON payout_log(status);
+CREATE INDEX IF NOT EXISTS idx_used_events_client ON used_event_ids(client_id);
 
 -- ============================================================================
 -- MIGRATION: Phase 26

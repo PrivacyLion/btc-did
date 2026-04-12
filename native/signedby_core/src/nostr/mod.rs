@@ -8,7 +8,9 @@
 pub mod client;
 pub mod events;
 pub mod nsec_derivation;
-pub mod jni;
+
+// NOTE: JNI module removed per Bible Section 16 (Mar 30, 2026).
+// Mobile Android bridge superseded. This is an SDK, not an Android app.
 
 pub use client::NostrClient;
 pub use events::{ProofEvent, PaymentReceiptEvent, LoginCompleteEvent};

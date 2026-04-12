@@ -19,10 +19,9 @@ use thiserror::Error;
 pub mod witness;
 pub mod zkey;
 pub mod rapidsnark_ffi;
-pub mod jni;
 
-// Re-export JNI functions to prevent LTO from stripping them
-pub use jni::*;
+// NOTE: JNI module removed per Bible Section 16 (Mar 30, 2026).
+// Mobile Android bridge superseded. This is an SDK, not an Android app.
 
 #[derive(Error, Debug)]
 pub enum ProverError {

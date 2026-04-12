@@ -9,9 +9,10 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # CLI argument parsing
 clap = { version = "4.4", features = ["derive"] }
-# JNI for Android
-jni = "0.21"
 anyhow = "1"
+
+# NOTE: jni removed per Bible Section 16 (Mar 30, 2026).
+# Mobile Android bridge superseded. This is an SDK, not an Android app.
 
 # Cryptographic primitives
 sha2 = "0.10"
@@ -32,14 +33,14 @@ ark-serialize = "0.4"
 # Utilities
 thiserror = "1.0"
 once_cell = "1.18"
-libc = "0.2"  # For dlopen/dlsym on Android
+libc = "0.2"  # For dlopen/dlsym (witness calculator loading)
 
 # Bitcoin / Schnorr / Taproot
 secp256k1 = { version = "0.28", features = ["rand-std", "global-context"] }
 bitcoin = { version = "0.31", features = ["rand-std"] }
 
-# Lightning invoice generation
-lightning-invoice = "0.29"
+# NOTE: lightning-invoice removed per Bible Section 16 (Mar 30, 2026).
+# Only used by superseded JNI functions.
 
 # Base64 encoding
 base64 = "0.21"
