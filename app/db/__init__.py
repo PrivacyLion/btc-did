@@ -134,9 +134,8 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             ("details_json", "TEXT"),
             ("created_at", "INTEGER DEFAULT (strftime('%s', 'now'))"),
         ],
-        # enrollment_nonces table REMOVED in Phase 26
-        # Server-generated nonces eliminated. Authorization via kind 28200 NOSTR events.
-        # Replay protection uses used_event_ids table.
+        # enrollment_nonces table REMOVED — Phase 26
+        # Nonce eliminated. Authorization via kind 28200 NOSTR event signature.
         "used_event_ids": [
             ("event_id", "TEXT"),
             ("client_id", "TEXT"),
@@ -767,28 +766,10 @@ def reject_enrollment(enrollment_id: str) -> None:
     update_enrollment(enrollment_id, status="rejected", rejected_at=int(time.time()))
 
 
-# ============================================================================
-# ENROLLMENT NONCES — DEPRECATED (Phase 26)
-# ============================================================================
-# Server-generated nonces eliminated. Authorization via kind 28200 NOSTR events.
-# These stubs remain for legacy compatibility but do nothing.
-
-def create_enrollment_token(token: str, enrollment_id: str, client_id: str, purpose: str, expires_at: int) -> None:
-    """DEPRECATED: Enrollment nonces eliminated in Phase 26."""
-    logger.warning("create_enrollment_token is deprecated — enrollment_nonces table removed in Phase 26")
-    pass
-
-
-def get_enrollment_token(token: str) -> Optional[Dict[str, Any]]:
-    """DEPRECATED: Enrollment nonces eliminated in Phase 26."""
-    logger.warning("get_enrollment_token is deprecated — enrollment_nonces table removed in Phase 26")
-    return None
-
-
-def consume_enrollment_token(token: str) -> None:
-    """DEPRECATED: Enrollment nonces eliminated in Phase 26."""
-    logger.warning("consume_enrollment_token is deprecated — enrollment_nonces table removed in Phase 26")
-    pass
+# Enrollment nonce functions REMOVED — Phase 26
+# Nonce eliminated. No server-generated secrets.
+# Authorization via kind 28200 NOSTR event signature only.
+# Replay protection via used_event_ids table.
 
 
 # Used event IDs (replay protection for enterprise-generated kind 28200 events)

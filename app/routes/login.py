@@ -3,35 +3,26 @@ SignedByMe Login Verification API (Phase 26)
 
 POST /v1/login/verify - Stateless endpoint. No sessions.
 
-SINGLE CHECK: merkle_root in last 30 valid roots
+Per Bible Section 2.4 — ONE CHECK ONLY:
+  merkle_root in last 30 valid roots
 
-Preimage verification REMOVED in Phase 26 — the cryptographic chain guarantees:
-- Groth16 proof is generated on-device (mobile prover)
-- Proof binds npub to merkle membership
-- NOSTR event signature proves npub ownership
-- Server does NOT re-verify Groth16 (done client-side)
+No preimage checks. No payment verification on server.
+Groth16 proof verified by circuit (npub is public output).
 
-All validation → 1 check: is merkle_root in last 30 roots?
-
-npub extraction: From NOSTR event signature (proves ownership).
-
-Pass → return id_token
+All pass → return id_token
 Fail → reject
-
-No database write for auth. Verification logged for audit.
 """
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional
 import time
 import json
 import base64
 import logging
 from pathlib import Path
 
-from ..lib.verifier import pubkey_hex_to_npub
-from ..lib.nostr import NostrEvent, verify_event
 from ..db import is_root_valid_for_client, log_verification
+from ..lib.verifier import pubkey_hex_to_npub
 
 logger = logging.getLogger("login")
 router = APIRouter(tags=["login"])
@@ -57,12 +48,15 @@ def load_clients() -> dict:
 
 def validate_api_key(api_key: str) -> tuple[str, dict]:
     """Validate API key and return (client_id, client_config)."""
+    from hashlib import sha256
+    
     if not api_key:
         raise HTTPException(401, "Missing API key")
     
     clients = load_clients()
+    api_key_hash = sha256(api_key.encode()).hexdigest()
     for client_id, config in clients.items():
-        if config.get("api_key") == api_key:
+        if api_key_hash == config.get("api_key_hash"):
             return client_id, config
     
     raise HTTPException(401, "Invalid API key")
@@ -91,38 +85,24 @@ def _jwt_rs256(payload: dict, kid: str, pem_path: Path) -> str:
 
 
 # =============================================================================
-# Models
+# Models (Per Bible Section 2.4)
 # =============================================================================
 
-class NostrEventModel(BaseModel):
-    """NOSTR event (NIP-01 format)."""
-    id: str = Field(..., description="Event ID (32-byte hex SHA256)")
-    pubkey: str = Field(..., description="Author pubkey (32-byte hex)")
-    created_at: int = Field(..., description="Unix timestamp")
-    kind: int = Field(..., description="Event kind")
-    tags: List[List[str]] = Field(..., description="Event tags")
-    content: str = Field(..., description="Event content")
-    sig: str = Field(..., description="Schnorr signature (64-byte hex)")
+class PublicOutputs(BaseModel):
+    """Groth16 proof public outputs."""
+    merkle_root: str = Field(..., description="Merkle root (64 hex chars)")
+    npub: str = Field(..., description="Agent npub (64 hex chars)")
 
 
 class LoginVerifyRequest(BaseModel):
     """
-    Login verification request (Phase 26).
+    Login verification request.
     
-    SIMPLIFIED: No preimage fields. Server checks merkle_root only.
-    
-    The cryptographic chain guarantees integrity:
-    - Agent generates Groth16 proof locally (binds npub to merkle membership)
-    - Agent signs NOSTR event with nsec (proves npub ownership)
-    - Server only needs to verify merkle_root is recent (last 30 roots)
+    Per Bible Section 2.4:
+    { proof, public_outputs: { merkle_root, npub }, client_id }
     """
-    # NOSTR event containing proof (npub extracted from signature)
-    event: NostrEventModel = Field(..., description="NOSTR event signed by user")
-    
-    # Merkle root for validation
-    merkle_root: str = Field(..., description="Merkle root (64 hex chars)")
-    
-    # Client identification
+    proof: str = Field(..., description="Groth16 proof (hex)")
+    public_outputs: PublicOutputs = Field(..., description="Public outputs from circuit")
     client_id: str = Field(..., description="Client ID")
     nonce: Optional[str] = Field(None, description="Optional nonce for replay protection")
 
@@ -134,8 +114,6 @@ class LoginVerifyResponse(BaseModel):
     token_type: str = "Bearer"
     expires_in: int
     sub: str  # npub in bech32
-    merkle_root: str
-    event_id: str  # For dedup/audit
 
 
 class LoginVerifyError(BaseModel):
@@ -159,27 +137,27 @@ class LoginVerifyError(BaseModel):
 )
 def verify_login(
     body: LoginVerifyRequest,
-    x_api_key: str = Header(..., alias="X-API-Key")
+    authorization: str = Header(..., alias="Authorization")
 ):
+    # Extract Bearer token
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Authorization header must be: Bearer <token>")
+    api_key = authorization[7:]  # Strip "Bearer "
     """
     Verify login and return OIDC id_token.
     
-    ## Single Check (Phase 26)
+    ## Per Bible Section 2.4 — ONE CHECK ONLY
     
-    **merkle_root valid** - Must be in last 30 roots for this client
+    **merkle_root in last 30 valid roots**
     
-    Preimage checks removed. The cryptographic chain guarantees:
-    - Groth16 proof generated on-device binds npub to merkle membership
-    - NOSTR event signature proves npub ownership
-    - Server trusts the client-side proof (no server-side Groth16)
+    No preimage checks. No Groth16 server-side verification.
+    npub is a public output from the Groth16 circuit (proven by the circuit).
     
-    npub is extracted from the NOSTR event signature.
-    
-    Pass → id_token returned
+    Pass → id_token returned with sub=npub
     Fail → 400 error
     """
     # Validate API key
-    client_id, client_config = validate_api_key(x_api_key)
+    client_id, client_config = validate_api_key(api_key)
     
     # Verify client_id matches
     if body.client_id != client_id:
@@ -189,50 +167,39 @@ def verify_login(
             "error_code": "client_id_mismatch"
         })
     
-    # Validate merkle_root format (64 hex chars)
-    if len(body.merkle_root) != 64 or not all(c in "0123456789abcdefABCDEF" for c in body.merkle_root):
+    # Validate merkle_root format
+    merkle_root = body.public_outputs.merkle_root.lower()
+    if len(merkle_root) != 64 or not all(c in "0123456789abcdef" for c in merkle_root):
         raise HTTPException(400, detail={
             "ok": False,
             "error": "merkle_root must be 64 hex characters",
             "error_code": "invalid_format"
         })
     
-    # Convert event model to NostrEvent
-    event = NostrEvent(
-        id=body.event.id,
-        pubkey=body.event.pubkey,
-        created_at=body.event.created_at,
-        kind=body.event.kind,
-        tags=body.event.tags,
-        content=body.event.content,
-        sig=body.event.sig,
-    )
-    
-    # Verify NOSTR event signature (proves npub ownership)
-    valid, error = verify_event(event)
-    if not valid:
-        logger.warning(f"NOSTR event verification failed: {error}")
+    # Validate npub format
+    npub_hex = body.public_outputs.npub.lower()
+    if len(npub_hex) != 64 or not all(c in "0123456789abcdef" for c in npub_hex):
         raise HTTPException(400, detail={
             "ok": False,
-            "error": f"Event signature invalid: {error}",
-            "error_code": "invalid_event"
+            "error": "npub must be 64 hex characters",
+            "error_code": "invalid_format"
         })
     
-    # Extract npub from event pubkey
+    # Convert npub to bech32
     try:
-        npub_bech32 = pubkey_hex_to_npub(event.pubkey)
+        npub_bech32 = pubkey_hex_to_npub(npub_hex)
     except Exception as e:
         raise HTTPException(400, detail={
             "ok": False,
-            "error": f"Failed to extract npub: {e}",
-            "error_code": "npub_extraction_failed"
+            "error": f"Failed to convert npub: {e}",
+            "error_code": "npub_conversion_failed"
         })
     
     # =========================================================================
-    # SINGLE CHECK: merkle_root in last 30 roots
+    # THE ONE CHECK: merkle_root in last 30 roots
     # =========================================================================
-    if not is_root_valid_for_client(client_id, body.merkle_root.lower(), limit=ROOT_VALIDITY_WINDOW):
-        logger.warning(f"Stale merkle_root: {body.merkle_root[:16]}...")
+    if not is_root_valid_for_client(client_id, merkle_root, limit=ROOT_VALIDITY_WINDOW):
+        logger.warning(f"Stale merkle_root: {merkle_root[:16]}...")
         raise HTTPException(400, detail={
             "ok": False,
             "error": f"merkle_root not in valid root set (last {ROOT_VALIDITY_WINDOW} roots)",
@@ -245,15 +212,12 @@ def verify_login(
     
     now = int(time.time())
     
-    # Log verification (payment hashes no longer required)
+    # Log verification (no payment fields)
     log_verification(
         npub=npub_bech32,
         client_id=client_id,
-        merkle_root=body.merkle_root.lower(),
-        payment_hash_user=None,
-        payment_hash_operator=None,
+        merkle_root=merkle_root,
         verified_at=now,
-        login_event_id=event.id,
     )
     
     # Load signing keys
@@ -278,18 +242,19 @@ def verify_login(
     kid = jwks["keys"][0].get("kid", "signedby-1")
     exp = now + 3600  # 1 hour
     
-    # Build OIDC claims (amr updated: no "lightning" since preimage check removed)
+    # Build OIDC claims
+    # Per Bible: amr = ["zk_membership"] — no "lightning"
     claims = {
         "iss": ISSUER,
         "aud": client_id,
         "sub": npub_bech32,
         "iat": now,
         "exp": exp,
-        "amr": ["nostr_sig", "merkle"],
+        "amr": ["zk_membership"],
         
         # SignedByMe-specific claims
-        "https://signedby.me/claims/merkle_root": body.merkle_root.lower(),
-        "https://signedby.me/claims/event_id": event.id,
+        "https://signedby.me/claims/merkle_root": merkle_root,
+        "https://signedby.me/claims/membership_verified": True,
     }
     
     if body.nonce:
@@ -306,84 +271,12 @@ def verify_login(
         token_type="Bearer",
         expires_in=exp - now,
         sub=npub_bech32,
-        merkle_root=body.merkle_root.lower(),
-        event_id=event.id,
     )
 
 
 # =============================================================================
-# Login Start (Phase 26.4) — Returns enrollment_policy if verification required
+# Health Check
 # =============================================================================
-
-class EnrollmentPolicy(BaseModel):
-    """Enrollment policy returned in login/start response."""
-    verification_required: bool = False
-    verification_provider: Optional[str] = None  # "persona" | "jumio" | "none"
-    verification_type: Optional[str] = None  # "age_18_plus" | "identity_verified" | "none"
-
-
-class LoginStartRequest(BaseModel):
-    """Login start request."""
-    client_id: str = Field(..., description="Client ID")
-    nonce: Optional[str] = Field(None, description="Session nonce")
-
-
-class LoginStartResponse(BaseModel):
-    """Login start response."""
-    ok: bool
-    client_id: str
-    client_name: Optional[str] = None
-    enrollment_policy: Optional[EnrollmentPolicy] = None
-    require_membership: bool = False
-
-
-@router.post("/v1/login/start", response_model=LoginStartResponse)
-def login_start(
-    body: LoginStartRequest,
-    x_api_key: str = Header(..., alias="X-API-Key")
-):
-    """
-    Check login requirements for a client (Phase 26.4).
-    
-    Returns enrollment_policy if verification_required = true.
-    App uses this to determine if KYC flow is needed before proof generation.
-    
-    This endpoint does NOT create a session (per Bible Decision 10).
-    Enterprise generates QR locally. This just returns client config.
-    """
-    # Validate API key
-    api_client_id, _ = validate_api_key(x_api_key)
-    
-    # Get target client config
-    clients = load_clients()
-    client_config = clients.get(body.client_id)
-    
-    if not client_config:
-        raise HTTPException(404, detail={
-            "ok": False,
-            "error": f"Client not found: {body.client_id}",
-            "error_code": "client_not_found"
-        })
-    
-    # Build enrollment_policy from config
-    enrollment_config = client_config.get("enrollment_policy", {})
-    enrollment_policy = None
-    
-    if enrollment_config.get("verification_required", False):
-        enrollment_policy = EnrollmentPolicy(
-            verification_required=True,
-            verification_provider=enrollment_config.get("verification_provider"),
-            verification_type=enrollment_config.get("verification_type"),
-        )
-    
-    return LoginStartResponse(
-        ok=True,
-        client_id=body.client_id,
-        client_name=client_config.get("name"),
-        enrollment_policy=enrollment_policy,
-        require_membership=client_config.get("require_membership", False),
-    )
-
 
 @router.get("/v1/login/verify/health")
 def verify_health():
@@ -392,5 +285,4 @@ def verify_health():
         "ok": True,
         "phase": 26,
         "checks": ["merkle_root"],
-        "note": "Preimage checks removed in Phase 26 — cryptographic chain guarantees integrity",
     }
