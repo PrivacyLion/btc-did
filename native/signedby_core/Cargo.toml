@@ -33,7 +33,7 @@ ark-relations = "0.4.0"
 
 # Circom-compat for proof generation with circom-generated zkey
 # CRITICAL: Uses CircomReduction (not LibsnarkReduction) for circom zkeyfiles
-ark-circom = { version = "0.1.0", default-features = false }
+ark-circom = "0.1.0"
 
 # Utilities
 thiserror = "1.0"
