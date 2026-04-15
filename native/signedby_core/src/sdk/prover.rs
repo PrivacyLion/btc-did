@@ -14,7 +14,7 @@
 
 use anyhow::{Result, anyhow};
 use ark_bn254::{Bn254, Fr};
-use ark_circom::{CircomBuilder, CircomConfig};
+use ark_circom::{CircomBuilder, CircomConfig, CircomReduction};
 use ark_ff::PrimeField;
 use ark_groth16::{Groth16, ProvingKey};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -180,7 +180,7 @@ impl MembershipProver {
         // Generate the proof using Groth16 with CircomReduction
         // CRITICAL: We use the default which is CircomReduction for ark-circom
         let mut rng = ark_std::rand::thread_rng();
-        let proof = Groth16::<Bn254>::prove(proving_key, circom, &mut rng)?;
+        let proof = Groth16::<Bn254, CircomReduction>::prove(proving_key, circom, &mut rng)?;
         
         // Serialize the proof
         let mut proof_bytes = Vec::new();
