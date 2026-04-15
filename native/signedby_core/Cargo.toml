@@ -19,7 +19,7 @@ sha2 = "0.10"
 hex = "0.4"
 k256 = { version = "0.13", features = ["ecdsa", "schnorr"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
-getrandom = { version = "0.2", features = ["js"] }
+getrandom = { version = "0.2" }
 
 # Arkworks for Groth16 / BN254 operations
 ark-ff = "0.4"
