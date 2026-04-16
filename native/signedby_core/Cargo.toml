@@ -22,18 +22,18 @@ rand_core = { version = "0.6", features = ["getrandom"] }
 getrandom = { version = "0.2" }
 
 # Arkworks for Groth16 / BN254 operations
-ark-ff = "0.4.2"
+ark-ff = "0.4.1"
 ark-bn254 = "0.4.0"
-ark-ec = "0.4.2"
+ark-ec = "0.4.1"
 ark-std = "0.4.0"
 ark-groth16 = "0.4.0"
 ark-snark = "0.4.0"
-ark-serialize = "0.4.2"
+ark-serialize = "0.4.1"
 ark-relations = "0.4.0"
 
 # Circom-compat for proof generation with circom-generated zkey
 # CRITICAL: Uses CircomReduction (not LibsnarkReduction) for circom zkeyfiles
-ark-circom = { git = "https://github.com/arkworks-rs/circom-compat", rev = "dbc38c5" }
+ark-circom = { git = "https://github.com/arkworks-rs/circom-compat", rev = "b892c62" }
 
 # Utilities
 thiserror = "1.0"
