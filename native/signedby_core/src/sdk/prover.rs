@@ -15,7 +15,7 @@
 use anyhow::{Result, anyhow};
 use ark_bn254::{Bn254, Fr};
 use ark_circom::{CircomBuilder, CircomConfig, CircomReduction};
-use ark_ff::PrimeField;
+use ark_ff::{BigInteger, PrimeField};
 use ark_groth16::{Groth16, ProvingKey};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_snark::SNARK;
@@ -140,7 +140,7 @@ impl MembershipProver {
         let cfg = CircomConfig::<Bn254>::new(
             &self.config.wasm_path,
             &self.config.r1cs_path,
-        )?;
+        ).map_err(|e| anyhow!("{}", e))?;
         
         // Build the circuit with inputs
         let mut builder = CircomBuilder::new(cfg);
@@ -150,7 +150,7 @@ impl MembershipProver {
             builder.push_input(
                 &format!("leaf_secret[{}]", i),
                 bigint_from_fr(elem),
-            )?;
+            );
         }
         
         // Set siblings[20]
@@ -159,7 +159,7 @@ impl MembershipProver {
             builder.push_input(
                 &format!("siblings[{}]", i),
                 sibling,
-            )?;
+            );
         }
         
         // Set path_bits[20]
@@ -167,11 +167,11 @@ impl MembershipProver {
             builder.push_input(
                 &format!("path_bits[{}]", i),
                 num_bigint::BigInt::from(bit),
-            )?;
+            );
         }
         
         // Build the circuit (generates witness internally)
-        let circom = builder.build()?;
+        let circom = builder.build().map_err(|e| anyhow!("{}", e))?;
         
         // Get the public inputs from the circuit
         let public_inputs = circom.get_public_inputs()
