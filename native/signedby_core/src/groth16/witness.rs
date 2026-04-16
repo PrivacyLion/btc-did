@@ -220,19 +220,11 @@ impl WitnessCalculator {
         eprintln!("[witness] path_bits count: {}", inputs.path_bits.len());
         eprintln!("═══════════════════════════════════════════════════════════════");
         
-        #[cfg(target_os = "android")]
-        {
-            self.calculate_via_ffi(&input_json)
-        }
-        
-        #[cfg(not(target_os = "android"))]
-        {
-            self.calculate_via_subprocess(&input_json)
-        }
+        self.calculate_via_ffi(&input_json)
     }
     
-    /// Calculate witness via FFI (Android)
-    #[cfg(target_os = "android")]
+    /// Calculate witness via FFI (dlopen/dlsym)
+    /// Loads libmembership_witness.so and calls witnesscalc_membership()
     fn calculate_via_ffi(&self, input_json: &str) -> Result<Vec<u8>, WitnessError> {
         use std::ffi::CString;
         
@@ -334,46 +326,6 @@ impl WitnessCalculator {
         eprintln!("[witness] Generated {} bytes of witness data", witness_buf.len());
         
         Ok(witness_buf)
-    }
-    
-    /// Calculate witness via subprocess (desktop/testing)
-    #[cfg(not(target_os = "android"))]
-    fn calculate_via_subprocess(&self, input_json: &str) -> Result<Vec<u8>, WitnessError> {
-        use std::process::Command;
-        
-        if !self.is_available() {
-            return Err(WitnessError::CalculatorNotFound(
-                format!("Calculator not found: {}", self.calculator_path)
-            ));
-        }
-        
-        // Write input JSON to temp file
-        let input_path = "/tmp/signedby_witness_input.json";
-        let output_path = "/tmp/signedby_witness.wtns";
-        std::fs::write(input_path, input_json)?;
-        
-        eprintln!("[witness] Running: {} {} {}", self.calculator_path, input_path, output_path);
-        let start = std::time::Instant::now();
-        
-        let output = Command::new(&self.calculator_path)
-            .arg(input_path)
-            .arg(output_path)
-            .output()?;
-        
-        let elapsed = start.elapsed();
-        eprintln!("[witness] Calculator completed in {:?}", elapsed);
-        
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(WitnessError::CalculationFailed(format!(
-                "Exit code: {:?}, stderr: {}", output.status.code(), stderr
-            )));
-        }
-        
-        let witness_bytes = std::fs::read(output_path)?;
-        eprintln!("[witness] Read {} bytes from {}", witness_bytes.len(), output_path);
-        
-        Ok(witness_bytes)
     }
     
     /// Generate witness to file (for compatibility)
