@@ -29,11 +29,6 @@ ark-std = "0.4.0"
 ark-groth16 = "0.4.0"
 ark-snark = "0.4.0"
 ark-serialize = "0.4.1"
-ark-relations = "0.4.0"
-
-# Circom-compat for proof generation with circom-generated zkey
-# CRITICAL: Uses CircomReduction (not LibsnarkReduction) for circom zkeyfiles
-ark-circom = { git = "https://github.com/arkworks-rs/circom-compat", rev = "b892c62" }
 
 # Utilities
 thiserror = "1.0"
