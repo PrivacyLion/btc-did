@@ -13,6 +13,7 @@
 
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
+use nostr_sdk::client::EventSource;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -204,8 +205,7 @@ impl NostrClient {
             .custom_tag(SingleLetterTag::lowercase(Alphabet::P), vec![agent_npub.to_string()])
             .limit(100);
         
-        let timeout = Duration::from_secs(5);
-        let events = self.client.get_events_of(vec![filter], Some(timeout)).await
+        let events = self.client.get_events_of(vec![filter], EventSource::relays(Some(Duration::from_secs(5)))).await
             .map_err(|e| anyhow!("Failed to fetch enrollment events: {}", e))?;
         
         Ok(events)
@@ -225,8 +225,7 @@ impl NostrClient {
             .author(human_pubkey)
             .limit(100);
         
-        let timeout = Duration::from_secs(5);
-        let events = self.client.get_events_of(vec![filter], Some(timeout)).await
+        let events = self.client.get_events_of(vec![filter], EventSource::relays(Some(Duration::from_secs(5)))).await
             .map_err(|e| anyhow!("Failed to fetch delegation events: {}", e))?;
         
         Ok(events)
@@ -246,8 +245,7 @@ impl NostrClient {
             .author(human_pubkey)
             .limit(100);
         
-        let timeout = Duration::from_secs(5);
-        let events = self.client.get_events_of(vec![filter], Some(timeout)).await
+        let events = self.client.get_events_of(vec![filter], EventSource::relays(Some(Duration::from_secs(5)))).await
             .map_err(|e| anyhow!("Failed to fetch revocation events: {}", e))?;
         
         Ok(events)
