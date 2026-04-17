@@ -11,7 +11,7 @@
 
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
-use nostr_sdk::nwc::{NWC, NostrWalletConnectURI};
+use nwc::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

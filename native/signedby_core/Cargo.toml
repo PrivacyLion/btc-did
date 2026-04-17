@@ -50,7 +50,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # NOSTR (Phase 9)
-nostr-sdk = { version = "0.35", features = ["nwc"] }  # Full NOSTR library with NIP-47 (NWC) support
+nostr-sdk = "0.35.0"  # Full NOSTR library
+nwc = "0.35.0"  # NIP-47 Nostr Wallet Connect
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }  # Async runtime for nostr-sdk
 
 # HTTP client for API calls (Phase 9A.4)
