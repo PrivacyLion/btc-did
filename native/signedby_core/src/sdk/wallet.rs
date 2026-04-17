@@ -11,7 +11,6 @@
 
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
-use nwc::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -32,11 +31,14 @@ pub const STRIKE_API_URL: &str = "https://api.strike.me/v1";
 pub const RENEWAL_WINDOW_SECS: u64 = 72 * 60 * 60;
 
 /// NWC wallet manager for agent Lightning operations
+/// 
+/// NWC (NIP-47) is used ONLY for receiving payments (20% allocation).
+/// Subscription invoices are generated via Strike Business API per Bible line 916.
 pub struct NwcWallet {
     /// NOSTR client for publishing kind 0 profile
     nostr_client: NostrClient,
-    /// NWC client for NIP-47 wallet operations
-    nwc: Option<NWC>,
+    /// NWC connection URI (stored for later NWC client creation)
+    nwc_uri: Option<String>,
     /// Agent's Lightning address
     lightning_address: Option<String>,
     /// HTTP client for Strike API
@@ -60,11 +62,13 @@ pub struct SubscriptionInvoice {
     pub expires_at: u64,
 }
 
-/// Strike invoice request
+/// Strike invoice request per Bible lines 522-523
 #[derive(Debug, Serialize)]
 struct StrikeInvoiceRequest {
-    amount: StrikeAmount,
+    #[serde(rename = "correlationId")]
+    correlation_id: String,
     description: String,
+    amount: StrikeAmount,
 }
 
 #[derive(Debug, Serialize)]
@@ -82,37 +86,21 @@ struct StrikeInvoiceResponse {
     ln_invoice: Option<String>,
 }
 
+/// Strike quote response (for getting BOLT11)
+#[derive(Debug, Deserialize)]
+struct StrikeQuoteResponse {
+    #[serde(rename = "lnInvoice")]
+    ln_invoice: String,
+}
+
 impl NwcWallet {
     /// Initialize NWC wallet with connection URI
     /// 
     /// Per Bible line 610: Agent initializes its own NWC (NIP-47) wallet during SDK setup
     /// Connection URI format: nostr+walletconnect://pubkey?relay=...&secret=...
-    pub async fn initialize(
-        nostr_client: NostrClient,
-        connection_uri: &str,
-    ) -> Result<Self> {
-        // Parse NWC connection URI
-        let uri = NostrWalletConnectURI::parse(connection_uri)
-            .map_err(|e| anyhow!("Invalid NWC connection URI: {}", e))?;
-        
-        // Create NWC client
-        let nwc = NWC::new(uri);
-        
-        let http_client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| anyhow!("Failed to create HTTP client: {}", e))?;
-        
-        Ok(Self {
-            nostr_client,
-            nwc: Some(nwc),
-            lightning_address: None,
-            http_client,
-        })
-    }
-    
-    /// Create wallet without NWC connection (for Lightning address publishing only)
-    pub fn without_nwc(nostr_client: NostrClient) -> Self {
+    /// 
+    /// Note: NWC is used ONLY for receiving payments, not generating subscription invoices.
+    pub fn new(nostr_client: NostrClient, nwc_connection_uri: Option<&str>) -> Self {
         let http_client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
@@ -120,10 +108,15 @@ impl NwcWallet {
         
         Self {
             nostr_client,
-            nwc: None,
+            nwc_uri: nwc_connection_uri.map(String::from),
             lightning_address: None,
             http_client,
         }
+    }
+    
+    /// Create wallet without NWC connection (for Lightning address publishing only)
+    pub fn without_nwc(nostr_client: NostrClient) -> Self {
+        Self::new(nostr_client, None)
     }
     
     /// Store NWC connection URI in secure storage
@@ -171,9 +164,6 @@ impl NwcWallet {
         let metadata = Metadata::new()
             .lud16(lightning_address);
         
-        // Get agent's keys for signing
-        let agent_keys = identity.get_agent_keys()?;
-        
         // Create and sign the kind 0 event
         let event_builder = EventBuilder::metadata(&metadata);
         
@@ -195,26 +185,32 @@ impl NwcWallet {
     /// Generate subscription invoice via Strike Business API
     /// 
     /// Per Bible line 916: Generate subscription invoices via Strike Business API (not NWC)
+    /// Per Bible lines 522-523: Use Strike Business API for invoice generation
     /// Human pays monthly subscription to SignedByMe's operator Strike account
+    /// 
+    /// This method does NOT use NWC - subscriptions go to the operator's Strike account.
     pub async fn generate_subscription_invoice(
         &self,
         amount_sats: u64,
         strike_api_key: &str,
+        correlation_id: &str,
     ) -> Result<SubscriptionInvoice> {
-        // Build Strike invoice request
+        // Step 1: Create invoice via Strike API
+        let create_url = format!("{}/invoices", STRIKE_API_URL);
+        
         let request = StrikeInvoiceRequest {
-            amount: StrikeAmount {
-                amount: format!("{}", amount_sats),
-                currency: "BTC".to_string(), // Strike expects BTC for sats
-            },
+            correlation_id: correlation_id.to_string(),
             description: "SignedByMe monthly subscription".to_string(),
+            amount: StrikeAmount {
+                // Strike expects amount in the smallest unit
+                // For BTC, this is satoshis
+                amount: format!("{}", amount_sats),
+                currency: "SATS".to_string(),
+            },
         };
         
-        // Call Strike API
-        let url = format!("{}/invoices", STRIKE_API_URL);
-        
         let response = self.http_client
-            .post(&url)
+            .post(&create_url)
             .header("Authorization", format!("Bearer {}", strike_api_key))
             .header("Content-Type", "application/json")
             .json(&request)
@@ -228,17 +224,34 @@ impl NwcWallet {
             return Err(anyhow!("Strike API returned {}: {}", status, error_text));
         }
         
-        let strike_response: StrikeInvoiceResponse = response.json().await
+        let invoice_response: StrikeInvoiceResponse = response.json().await
             .map_err(|e| anyhow!("Failed to parse Strike response: {}", e))?;
         
-        let bolt11 = strike_response.ln_invoice
-            .ok_or_else(|| anyhow!("Strike response missing BOLT11 invoice"))?;
+        // Step 2: Get the BOLT11 invoice via quote endpoint
+        let quote_url = format!("{}/invoices/{}/quote", STRIKE_API_URL, invoice_response.invoice_id);
+        
+        let quote_response = self.http_client
+            .post(&quote_url)
+            .header("Authorization", format!("Bearer {}", strike_api_key))
+            .header("Content-Type", "application/json")
+            .send()
+            .await
+            .map_err(|e| anyhow!("Strike quote request failed: {}", e))?;
+        
+        let quote_status = quote_response.status();
+        if !quote_status.is_success() {
+            let error_text = quote_response.text().await.unwrap_or_default();
+            return Err(anyhow!("Strike quote API returned {}: {}", quote_status, error_text));
+        }
+        
+        let quote: StrikeQuoteResponse = quote_response.json().await
+            .map_err(|e| anyhow!("Failed to parse Strike quote response: {}", e))?;
         
         // Calculate expiry (1 hour from now)
         let expires_at = current_timestamp() + 3600;
         
         Ok(SubscriptionInvoice {
-            bolt11,
+            bolt11: quote.ln_invoice,
             amount_sats,
             description: "SignedByMe monthly subscription".to_string(),
             expires_at,
@@ -292,22 +305,35 @@ impl NwcWallet {
         Ok(false)
     }
     
-    /// Create invoice via NWC for receiving payment
+    /// Create invoice via NWC for receiving payment (20% allocation)
     /// 
     /// Per Bible line 901: Agent's NWC wallet receives 20% monthly subscription allocation
+    /// 
+    /// Note: This uses the agent's NWC wallet, NOT Strike.
+    /// The NWC connection must be initialized with a valid connection URI.
     pub async fn create_receive_invoice(
         &self,
         amount_sats: u64,
         description: &str,
     ) -> Result<String> {
-        let nwc = self.nwc.as_ref()
-            .ok_or_else(|| anyhow!("NWC not initialized"))?;
+        let nwc_uri = self.nwc_uri.as_ref()
+            .ok_or_else(|| anyhow!("NWC not initialized - provide connection URI"))?;
         
-        let invoice = nwc.make_invoice(
-            amount_sats,
-            description,
-            None, // expiry
-        ).await
+        // Parse and create NWC client
+        let uri = nwc::NostrWalletConnectURI::parse(nwc_uri)
+            .map_err(|e| anyhow!("Invalid NWC URI: {}", e))?;
+        
+        let nwc_client = nwc::NWC::new(uri);
+        
+        // Create invoice request
+        let params = nwc::prelude::MakeInvoiceRequestParams {
+            amount: amount_sats * 1000, // NWC uses millisats
+            description: Some(description.to_string()),
+            description_hash: None,
+            expiry: Some(3600), // 1 hour
+        };
+        
+        let invoice = nwc_client.make_invoice(params).await
             .map_err(|e| anyhow!("Failed to create invoice via NWC: {}", e))?;
         
         Ok(invoice)
@@ -315,21 +341,37 @@ impl NwcWallet {
     
     /// Get wallet balance via NWC
     pub async fn get_balance(&self) -> Result<u64> {
-        let nwc = self.nwc.as_ref()
+        let nwc_uri = self.nwc_uri.as_ref()
             .ok_or_else(|| anyhow!("NWC not initialized"))?;
         
-        let balance = nwc.get_balance().await
+        let uri = nwc::NostrWalletConnectURI::parse(nwc_uri)
+            .map_err(|e| anyhow!("Invalid NWC URI: {}", e))?;
+        
+        let nwc_client = nwc::NWC::new(uri);
+        
+        let balance = nwc_client.get_balance().await
             .map_err(|e| anyhow!("Failed to get balance via NWC: {}", e))?;
         
-        Ok(balance)
+        // Balance is in millisats, convert to sats
+        Ok(balance / 1000)
     }
     
     /// Pay invoice via NWC
     pub async fn pay_invoice(&self, bolt11: &str) -> Result<String> {
-        let nwc = self.nwc.as_ref()
+        let nwc_uri = self.nwc_uri.as_ref()
             .ok_or_else(|| anyhow!("NWC not initialized"))?;
         
-        let preimage = nwc.pay_invoice(bolt11).await
+        let uri = nwc::NostrWalletConnectURI::parse(nwc_uri)
+            .map_err(|e| anyhow!("Invalid NWC URI: {}", e))?;
+        
+        let nwc_client = nwc::NWC::new(uri);
+        
+        let params = nwc::prelude::PayInvoiceRequestParams {
+            invoice: bolt11.to_string(),
+            amount: None, // Use invoice amount
+        };
+        
+        let preimage = nwc_client.pay_invoice(params).await
             .map_err(|e| anyhow!("Failed to pay invoice via NWC: {}", e))?;
         
         Ok(preimage)
@@ -340,9 +382,9 @@ impl NwcWallet {
         self.lightning_address.as_deref()
     }
     
-    /// Check if NWC is connected
-    pub fn is_nwc_connected(&self) -> bool {
-        self.nwc.is_some()
+    /// Check if NWC is configured
+    pub fn is_nwc_configured(&self) -> bool {
+        self.nwc_uri.is_some()
     }
 }
 
