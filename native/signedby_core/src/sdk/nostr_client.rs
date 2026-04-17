@@ -116,6 +116,14 @@ impl NostrClient {
         self.keys.public_key()
     }
     
+    /// Get a clone of the inner nostr-sdk Client
+    /// 
+    /// Returns a clone so the caller can use it without holding the NostrClient lock.
+    /// Useful for advanced queries like delegation validation.
+    pub fn inner_client(&self) -> Client {
+        self.client.clone()
+    }
+    
     /// Publish proof event (kind 28101)
     /// 
     /// Published after successful ZK proof generation.
