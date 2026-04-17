@@ -4,7 +4,10 @@
 // - DID generation in TEE/encrypted storage
 // - leaf_secret derivation
 // - leaf_commitment computation
-// - Human nsec import with explicit consent
+//
+// Per Bible Section 15 Decision 941 (Apr 14, 2026):
+// - Agent never holds human nsec
+// - Human signs kind 28250 and kind 28251 with their own NOSTR client
 //
 // The identity chain (from Bible Section 2.1):
 //   DID private key → leaf_secret → leaf_commitment
@@ -15,16 +18,16 @@
 
 use anyhow::{Result, anyhow};
 use ark_bn254::Fr;
-use ark_ff::{PrimeField, UniformRand};
+use ark_ff::PrimeField;
 use nostr_sdk::prelude::*;
 use serde::{Serialize, Deserialize};
 
 use crate::key_manager::ManagedKey;
-use crate::membership::{bn254_leaf_commitment, bn254_derive_nsec};
+use crate::membership::bn254_leaf_commitment;
 use crate::nostr::derive_nsec_from_leaf_secret;
 use super::storage::{
-    SecureStorage, StorageError, HumanNsecConsent,
-    KEY_DID_PRIVATE, KEY_LEAF_SECRET, KEY_HUMAN_NSEC, KEY_HUMAN_NSEC_CONSENT,
+    SecureStorage,
+    KEY_DID_PRIVATE, KEY_LEAF_SECRET,
 };
 
 /// Agent identity state
@@ -40,10 +43,6 @@ pub struct AgentIdentityState {
     pub agent_npub_hex: String,
     /// Leaf commitment (hex, 32 bytes) - the ONLY thing server sees at enrollment
     pub leaf_commitment: String,
-    /// Whether human nsec is imported
-    pub human_nsec_imported: bool,
-    /// Human's npub if imported (bech32)
-    pub human_npub: Option<String>,
 }
 
 /// Agent identity manager
@@ -98,8 +97,6 @@ impl<S: SecureStorage> AgentIdentity<S> {
             agent_npub: agent_npub.to_bech32()?,
             agent_npub_hex: agent_npub.to_hex(),
             leaf_commitment: leaf_commitment_hex,
-            human_nsec_imported: false,
-            human_npub: None,
         })
     }
     
@@ -127,97 +124,13 @@ impl<S: SecureStorage> AgentIdentity<S> {
         let agent_keys = derive_nsec_from_leaf_secret(&leaf_secret)?;
         let agent_npub = Keys::new(agent_keys).public_key();
         
-        // Check human nsec
-        let human_nsec_imported = self.storage.exists(KEY_HUMAN_NSEC);
-        let human_npub = if human_nsec_imported {
-            Some(self.get_human_npub()?)
-        } else {
-            None
-        };
-        
         Ok(AgentIdentityState {
             did: did_key.to_did(),
             pubkey_hex: did_key.pubkey_hex(),
             agent_npub: agent_npub.to_bech32()?,
             agent_npub_hex: agent_npub.to_hex(),
             leaf_commitment: leaf_commitment_hex,
-            human_nsec_imported,
-            human_npub,
         })
-    }
-    
-    /// Import human nsec with explicit consent
-    /// Per Bible: "human grants explicit consent for agent to hold and sign NOSTR events with their nsec"
-    pub fn import_human_nsec(&self, human_nsec_hex: &str, consent_text: &str) -> Result<String> {
-        // Parse and validate human nsec
-        let human_nsec = SecretKey::from_hex(human_nsec_hex)
-            .map_err(|e| anyhow!("Invalid human nsec: {}", e))?;
-        
-        // Derive human npub
-        let human_keys = Keys::new(human_nsec.clone());
-        let human_npub = human_keys.public_key();
-        let human_npub_bech32 = human_npub.to_bech32()?;
-        
-        // Create consent record
-        let consent = HumanNsecConsent {
-            granted_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            consent_text: consent_text.to_string(),
-            human_npub_hash: sha256_hex(&human_npub.to_hex()),
-        };
-        
-        // Store human nsec
-        self.storage.store(KEY_HUMAN_NSEC, human_nsec.secret_bytes().as_ref())
-            .map_err(|e| anyhow!("Failed to store human nsec: {}", e))?;
-        
-        // Store consent record
-        let consent_json = serde_json::to_vec(&consent)?;
-        self.storage.store(KEY_HUMAN_NSEC_CONSENT, &consent_json)
-            .map_err(|e| anyhow!("Failed to store consent: {}", e))?;
-        
-        Ok(human_npub_bech32)
-    }
-    
-    /// Check if human nsec consent was granted
-    pub fn has_human_nsec_consent(&self) -> bool {
-        self.storage.exists(KEY_HUMAN_NSEC_CONSENT)
-    }
-    
-    /// Get human nsec consent record
-    pub fn get_human_nsec_consent(&self) -> Result<HumanNsecConsent> {
-        let consent_bytes = self.storage.retrieve(KEY_HUMAN_NSEC_CONSENT)
-            .map_err(|e| anyhow!("No consent record: {}", e))?;
-        let consent: HumanNsecConsent = serde_json::from_slice(&consent_bytes)?;
-        Ok(consent)
-    }
-    
-    /// Get human npub (if nsec imported)
-    pub fn get_human_npub(&self) -> Result<String> {
-        let nsec_bytes = self.storage.retrieve(KEY_HUMAN_NSEC)
-            .map_err(|e| anyhow!("Human nsec not imported: {}", e))?;
-        let human_nsec = SecretKey::from_slice(&nsec_bytes)
-            .map_err(|e| anyhow!("Invalid stored nsec: {}", e))?;
-        let human_keys = Keys::new(human_nsec);
-        Ok(human_keys.public_key().to_bech32()?)
-    }
-    
-    /// Sign a NOSTR event with human's nsec (for kind 28250 delegation)
-    /// Per Bible Gate 2: "agent retrieves the human's nsec from TEE and signs kind 28250"
-    pub fn sign_with_human_nsec(&self, unsigned_event: UnsignedEvent) -> Result<Event> {
-        if !self.has_human_nsec_consent() {
-            return Err(anyhow!("Human nsec consent not granted"));
-        }
-        
-        let nsec_bytes = self.storage.retrieve(KEY_HUMAN_NSEC)
-            .map_err(|e| anyhow!("Failed to retrieve human nsec: {}", e))?;
-        let human_nsec = SecretKey::from_slice(&nsec_bytes)
-            .map_err(|e| anyhow!("Invalid stored nsec: {}", e))?;
-        let human_keys = Keys::new(human_nsec);
-        
-        let signed_event = unsigned_event.sign(&human_keys)?;
-        Ok(signed_event)
     }
     
     /// Get agent's NOSTR keys (derived from leaf_secret)
@@ -305,14 +218,6 @@ fn fr_to_hex(fr: &Fr) -> String {
     hex::encode(bytes)
 }
 
-/// SHA-256 hash to hex
-fn sha256_hex(input: &str) -> String {
-    use sha2::{Sha256, Digest};
-    let mut hasher = Sha256::new();
-    hasher.update(input.as_bytes());
-    hex::encode(hasher.finalize())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,8 +236,6 @@ mod tests {
         
         assert!(identity.is_initialized());
         assert!(state.did.starts_with("did:btcr:"));
-        assert!(!state.human_nsec_imported);
-        assert!(state.human_npub.is_none());
     }
     
     #[test]
@@ -348,27 +251,5 @@ mod tests {
         assert_eq!(state1.did, state2.did);
         assert_eq!(state1.agent_npub, state2.agent_npub);
         assert_eq!(state1.leaf_commitment, state2.leaf_commitment);
-    }
-    
-    #[test]
-    fn test_human_nsec_import() {
-        let dir = tempdir().unwrap();
-        let storage = EncryptedFileStorage::new(dir.path().to_path_buf()).unwrap();
-        let identity = AgentIdentity::new(storage);
-        
-        identity.initialize().unwrap();
-        
-        // Generate a test human nsec
-        let human_keys = Keys::generate();
-        let human_nsec_hex = human_keys.secret_key().to_secret_hex();
-        
-        let consent_text = "I authorize this agent to sign NOSTR events on my behalf";
-        let human_npub = identity.import_human_nsec(&human_nsec_hex, consent_text).unwrap();
-        
-        assert!(identity.has_human_nsec_consent());
-        assert_eq!(human_npub, human_keys.public_key().to_bech32().unwrap());
-        
-        let consent = identity.get_human_nsec_consent().unwrap();
-        assert_eq!(consent.consent_text, consent_text);
     }
 }

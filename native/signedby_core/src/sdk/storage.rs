@@ -3,7 +3,10 @@
 // Per Bible:
 // - DID private key in TEE/secure storage, never extracted
 // - leaf_secret in secure storage
-// - Human nsec stored in same TEE/encrypted storage
+//
+// Per Bible Section 15 Decision 941 (Apr 14, 2026):
+// - Agent never holds human nsec
+// - Secure storage holds ONLY: DID private key and leaf_secret
 //
 // This module provides a platform-agnostic interface.
 // Actual TEE implementation depends on target:
@@ -11,7 +14,6 @@
 // - iOS: Secure Enclave
 // - Desktop/Server: Encrypted file storage with OS keyring (macOS Keychain, Windows DPAPI, Linux Secret Service)
 
-use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
 
 /// Storage error types
@@ -36,25 +38,12 @@ pub enum StorageError {
     KeyringError(String),
 }
 
-/// Storage keys for SDK secrets
+/// Storage keys for SDK secrets (ONLY these two - per Bible 941)
 pub const KEY_DID_PRIVATE: &str = "signedby_did_private_key";
 pub const KEY_LEAF_SECRET: &str = "signedby_leaf_secret";
-pub const KEY_HUMAN_NSEC: &str = "signedby_human_nsec";
-pub const KEY_HUMAN_NSEC_CONSENT: &str = "signedby_human_nsec_consent";
 
 /// Keyring service name for SignedByMe storage encryption keys
 const KEYRING_SERVICE: &str = "com.signedby.sdk";
-
-/// Human nsec consent record
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HumanNsecConsent {
-    /// Timestamp when consent was granted (Unix epoch)
-    pub granted_at: u64,
-    /// Human-readable description shown at consent time
-    pub consent_text: String,
-    /// Hash of the human's npub for verification
-    pub human_npub_hash: String,
-}
 
 /// Platform-agnostic secure storage trait
 pub trait SecureStorage: Send + Sync {
