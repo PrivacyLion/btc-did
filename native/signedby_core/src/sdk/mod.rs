@@ -24,6 +24,7 @@ pub mod prover;
 pub mod nostr_client;
 pub mod enrollment;
 pub mod delegation;
+pub mod wallet;
 
 pub use identity::AgentIdentity;
 pub use storage::{SecureStorage, StorageError};
@@ -31,3 +32,4 @@ pub use prover::{MembershipProver, ProverConfig, ProofResult, MerkleWitness};
 pub use nostr_client::NostrClient;
 pub use enrollment::{EnrollmentBootstrap, EnrollmentResult};
 pub use delegation::{DelegationValidator, DelegationValidation};
+pub use wallet::NwcWallet;
