@@ -22,8 +22,10 @@ pub mod identity;
 pub mod storage;
 pub mod prover;
 pub mod nostr_client;
+pub mod enrollment;
 
 pub use identity::AgentIdentity;
 pub use storage::{SecureStorage, StorageError};
 pub use prover::{MembershipProver, ProverConfig, ProofResult, MerkleWitness};
 pub use nostr_client::NostrClient;
+pub use enrollment::{EnrollmentBootstrap, EnrollmentResult};

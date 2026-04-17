@@ -70,7 +70,7 @@ impl ProverConfig {
 }
 
 /// Merkle witness for proof generation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MerkleWitness {
     /// Merkle siblings (20 elements, hex strings)
     pub siblings: Vec<String>,
