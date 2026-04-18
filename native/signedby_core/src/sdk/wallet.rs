@@ -11,6 +11,7 @@
 
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
+use nostr_sdk::nips::nip47::NostrWalletConnectURI;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -320,23 +321,23 @@ impl NwcWallet {
             .ok_or_else(|| anyhow!("NWC not initialized - provide connection URI"))?;
         
         // Parse and create NWC client
-        let uri = nwc::NostrWalletConnectURI::parse(nwc_uri)
+        let uri = NostrWalletConnectURI::parse(nwc_uri)
             .map_err(|e| anyhow!("Invalid NWC URI: {}", e))?;
         
         let nwc_client = nwc::NWC::new(uri);
         
-        // Create invoice request
-        let params = nwc::prelude::MakeInvoiceRequestParams {
-            amount: amount_sats * 1000, // NWC uses millisats
-            description: Some(description.to_string()),
-            description_hash: None,
-            expiry: Some(3600), // 1 hour
-        };
+        // Create invoice request - amount in millisats
+        let amount_msats = amount_sats * 1000;
         
-        let invoice = nwc_client.make_invoice(params).await
+        let response = nwc_client.make_invoice(
+            amount_msats,
+            Some(description.to_string()),
+            None, // description_hash
+            Some(3600), // expiry in seconds
+        ).await
             .map_err(|e| anyhow!("Failed to create invoice via NWC: {}", e))?;
         
-        Ok(invoice)
+        Ok(response.invoice)
     }
     
     /// Get wallet balance via NWC
@@ -344,16 +345,16 @@ impl NwcWallet {
         let nwc_uri = self.nwc_uri.as_ref()
             .ok_or_else(|| anyhow!("NWC not initialized"))?;
         
-        let uri = nwc::NostrWalletConnectURI::parse(nwc_uri)
+        let uri = NostrWalletConnectURI::parse(nwc_uri)
             .map_err(|e| anyhow!("Invalid NWC URI: {}", e))?;
         
         let nwc_client = nwc::NWC::new(uri);
         
-        let balance = nwc_client.get_balance().await
+        let response = nwc_client.get_balance().await
             .map_err(|e| anyhow!("Failed to get balance via NWC: {}", e))?;
         
         // Balance is in millisats, convert to sats
-        Ok(balance / 1000)
+        Ok(response.balance / 1000)
     }
     
     /// Pay invoice via NWC
@@ -361,20 +362,16 @@ impl NwcWallet {
         let nwc_uri = self.nwc_uri.as_ref()
             .ok_or_else(|| anyhow!("NWC not initialized"))?;
         
-        let uri = nwc::NostrWalletConnectURI::parse(nwc_uri)
+        let uri = NostrWalletConnectURI::parse(nwc_uri)
             .map_err(|e| anyhow!("Invalid NWC URI: {}", e))?;
         
         let nwc_client = nwc::NWC::new(uri);
         
-        let params = nwc::prelude::PayInvoiceRequestParams {
-            invoice: bolt11.to_string(),
-            amount: None, // Use invoice amount
-        };
-        
-        let preimage = nwc_client.pay_invoice(params).await
+        // pay_invoice takes a BOLT11 string directly
+        let response = nwc_client.pay_invoice(bolt11.to_string()).await
             .map_err(|e| anyhow!("Failed to pay invoice via NWC: {}", e))?;
         
-        Ok(preimage)
+        Ok(response.preimage)
     }
     
     /// Get Lightning address
