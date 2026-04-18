@@ -60,6 +60,7 @@ reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-feature
 # SDK encrypted storage (Phase 9A)
 chacha20poly1305 = "0.10"
 keyring = "2"  # OS keyring (macOS Keychain, Windows DPAPI, Linux Secret Service)
+dirs = "5"  # Cross-platform directory paths (for FFI default storage)
 
 # Note: WASM witness calculation requires either:
 # - circom-witnesscalc (needs protoc + clang)

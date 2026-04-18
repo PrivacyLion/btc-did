@@ -13,6 +13,7 @@ pub mod membership; // Groth16 membership proofs
 pub mod groth16;    // Native Groth16 prover
 pub mod nostr;      // NOSTR client (Phase 9)
 pub mod sdk;        // Agent SDK Core (Phase 9A)
+pub mod ffi;        // C-compatible FFI bindings (Phase 9A.7)
 
 // Re-exports for library consumers
 pub use key_manager::ManagedKey;
