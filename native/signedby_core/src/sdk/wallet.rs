@@ -12,6 +12,7 @@
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
 use nostr_sdk::nips::nip47::NostrWalletConnectURI;
+use nwc::MakeInvoiceRequestParams;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -329,12 +330,15 @@ impl NwcWallet {
         // Create invoice request - amount in millisats
         let amount_msats = amount_sats * 1000;
         
-        let response = nwc_client.make_invoice(
-            amount_msats,
-            Some(description.to_string()),
-            None, // description_hash
-            Some(3600), // expiry in seconds
-        ).await
+        let params = MakeInvoiceRequestParams {
+            amount: amount_msats,
+            description: Some(description.to_string()),
+            description_hash: None,
+            expiry: Some(3600),
+            ..Default::default()
+        };
+        
+        let response = nwc_client.make_invoice(params).await
             .map_err(|e| anyhow!("Failed to create invoice via NWC: {}", e))?;
         
         Ok(response.invoice)
@@ -350,11 +354,11 @@ impl NwcWallet {
         
         let nwc_client = nwc::NWC::new(uri);
         
-        let response = nwc_client.get_balance().await
+        let balance = nwc_client.get_balance().await
             .map_err(|e| anyhow!("Failed to get balance via NWC: {}", e))?;
         
         // Balance is in millisats, convert to sats
-        Ok(response.balance / 1000)
+        Ok(balance / 1000)
     }
     
     /// Pay invoice via NWC
@@ -367,11 +371,11 @@ impl NwcWallet {
         
         let nwc_client = nwc::NWC::new(uri);
         
-        // pay_invoice takes a BOLT11 string directly
-        let response = nwc_client.pay_invoice(bolt11.to_string()).await
+        // pay_invoice takes a BOLT11 string directly, returns preimage string
+        let preimage = nwc_client.pay_invoice(bolt11.to_string()).await
             .map_err(|e| anyhow!("Failed to pay invoice via NWC: {}", e))?;
         
-        Ok(response.preimage)
+        Ok(preimage)
     }
     
     /// Get Lightning address
