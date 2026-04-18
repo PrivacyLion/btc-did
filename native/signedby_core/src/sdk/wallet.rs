@@ -11,8 +11,7 @@
 
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
-use nostr_sdk::nips::nip47::NostrWalletConnectURI;
-use nwc::MakeInvoiceRequestParams;
+use nostr_sdk::nips::nip47::{NostrWalletConnectURI, MakeInvoiceRequestParams};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -335,7 +334,6 @@ impl NwcWallet {
             description: Some(description.to_string()),
             description_hash: None,
             expiry: Some(3600),
-            ..Default::default()
         };
         
         let response = nwc_client.make_invoice(params).await
