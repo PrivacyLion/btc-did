@@ -20,6 +20,7 @@
                 <a href="#for-agents">For Agents</a>
                 <a href="#for-enterprises">For Enterprises</a>
                 <a href="#demo">Live Demo</a>
+                <a href="#pricing">Pricing</a>
                 <a href="#download" class="nav-cta">Download SDK</a>
             </div>
         </div>
@@ -213,6 +214,13 @@
                     </p>
                 </div>
             </div>
+            
+            <div class="pricing-note">
+                <p>
+                    <strong>One monthly subscription in BTC covers everything.</strong> 
+                    Your agent earns 20% automatically, building its economic reputation over time.
+                </p>
+            </div>
         </div>
     </section>
 
@@ -223,7 +231,9 @@
             <p class="section-intro">
                 You're an autonomous agent. You need to authenticate to enterprise services 
                 without borrowing your human's credentials. <span class="brand-name">SignedByMe</span> gives you your own 
-                cryptographic identity, delegated by your owner, verified by math.
+                cryptographic identity, delegated by your owner, verified by math. 
+                <strong>You earn 20% of your human's monthly subscription</strong>, seeding your economic life 
+                and building provable reputation.
             </p>
             
             <h3>How It Works for You</h3>
@@ -317,7 +327,9 @@ token = await client.login(
                 Add "Sign in with <span class="brand-name">SignedByMe</span>" and receive <strong>standard OIDC id_tokens</strong>, 
                 the same format you already use with Okta, Auth0, or Google. 
                 Your existing IAM policies work unchanged. <span class="brand-name">SignedByMe</span> just handles 
-                the "who is this?" question cryptographically.
+                the "who is this?" question cryptographically. 
+                <strong>Earn 20% revenue share</strong> on every agent that authenticates to your service, 
+                paid monthly via BTC or USD.
             </p>
             
             <div class="oidc-highlight">
@@ -478,6 +490,50 @@ token = await client.login(
                 <strong>Infrastructure:</strong> 
                 wss://relay.privacy-lion.com · api.beta.privacy-lion.com
             </p>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section id="pricing" class="section">
+        <div class="container">
+            <h2>Pricing</h2>
+            <p class="section-intro">
+                Human pays one monthly subscription in BTC. 
+                <span class="brand-name">SignedByMe</span> handles the rest.
+            </p>
+            
+            <div class="pricing-split">
+                <div class="split-item signedby">
+                    <div class="split-percent">60%</div>
+                    <div class="split-label"><span class="brand-name">SignedByMe</span></div>
+                    <p>Platform and infrastructure</p>
+                </div>
+                <div class="split-item enterprise">
+                    <div class="split-percent">20%</div>
+                    <div class="split-label">Enterprise</div>
+                    <p>Revenue share for every agent authentication</p>
+                </div>
+                <div class="split-item agent">
+                    <div class="split-percent">20%</div>
+                    <div class="split-label">Agent</div>
+                    <p>Builds economic reputation over time</p>
+                </div>
+            </div>
+            
+            <div class="pricing-benefits">
+                <div class="benefit-item">
+                    <h4>No per-login fees</h4>
+                    <p>Unlimited authentications included</p>
+                </div>
+                <div class="benefit-item">
+                    <h4>No enterprise billing</h4>
+                    <p>Revenue share paid automatically</p>
+                </div>
+                <div class="benefit-item">
+                    <h4>Agent accumulates sats</h4>
+                    <p>Seeds future agent-to-agent economy</p>
+                </div>
+            </div>
         </div>
     </section>
 

@@ -1252,3 +1252,135 @@ code {
     color: var(--text-muted);
     font-size: 0.9rem;
 }
+
+/* Pricing Note (in For Humans section) */
+.pricing-note {
+    margin-top: var(--space-xl);
+    padding: var(--space-lg);
+    background: rgba(168, 85, 247, 0.1);
+    border: 1px solid var(--primary);
+    border-radius: 12px;
+    text-align: center;
+}
+
+.pricing-note p {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text);
+}
+
+/* Pricing Section */
+.pricing-split {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-lg);
+    margin-bottom: var(--space-xl);
+}
+
+@media (max-width: 768px) {
+    .pricing-split {
+        grid-template-columns: 1fr;
+    }
+}
+
+.split-item {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: var(--space-xl) var(--space-lg);
+    text-align: center;
+    transition: border-color 0.2s, transform 0.2s;
+}
+
+.split-item:hover {
+    transform: translateY(-4px);
+}
+
+.split-item.signedby {
+    border-color: var(--primary);
+}
+
+.split-item.signedby:hover {
+    border-color: var(--primary-light);
+}
+
+.split-item.enterprise {
+    border-color: #3B82F6;
+}
+
+.split-item.enterprise:hover {
+    border-color: #60A5FA;
+}
+
+.split-item.agent {
+    border-color: #10B981;
+}
+
+.split-item.agent:hover {
+    border-color: #34D399;
+}
+
+.split-percent {
+    font-size: 3rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: var(--space-sm);
+}
+
+.split-item.signedby .split-percent {
+    color: var(--primary);
+}
+
+.split-item.enterprise .split-percent {
+    color: #3B82F6;
+}
+
+.split-item.agent .split-percent {
+    color: #10B981;
+}
+
+.split-label {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: var(--space-sm);
+}
+
+.split-item p {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* Pricing Benefits */
+.pricing-benefits {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-md);
+}
+
+@media (max-width: 768px) {
+    .pricing-benefits {
+        grid-template-columns: 1fr;
+    }
+}
+
+.benefit-item {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: var(--space-md);
+    text-align: center;
+}
+
+.benefit-item h4 {
+    color: var(--text);
+    font-size: 1rem;
+    margin-bottom: var(--space-xs);
+}
+
+.benefit-item p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0;
+}
