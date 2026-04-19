@@ -324,74 +324,88 @@ code {
 .pillars-intro {
     color: var(--text-secondary);
     margin-bottom: var(--space-lg);
-    font-style: italic;
+    font-size: 1.05rem;
 }
 
 /* Result Block */
 .result-block {
     margin-top: var(--space-xl);
-    padding: var(--space-lg);
-    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.03));
-    border-left: 4px solid var(--success);
-    border-radius: 0 12px 12px 0;
+    padding: var(--space-xl) var(--space-lg);
+    background: var(--bg-alt);
+    border-radius: 16px;
 }
 
 .result-block h3 {
-    color: var(--success);
-    margin-bottom: var(--space-md);
+    color: var(--text);
+    font-size: 1.5rem;
+    margin-bottom: var(--space-sm);
+    text-align: center;
 }
 
 .result-block > p {
-    color: var(--text);
+    color: var(--text-secondary);
     font-size: 1.05rem;
     line-height: 1.7;
-    margin-bottom: var(--space-lg);
+    margin-bottom: var(--space-xl);
+    text-align: center;
 }
 
 .result-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--space-lg);
 }
 
+@media (max-width: 900px) {
+    .result-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .result-item {
-    background: rgba(255, 255, 255, 0.7);
-    padding: var(--space-md);
-    border-radius: 8px;
+    background: var(--bg);
+    padding: var(--space-lg);
+    border-radius: 12px;
+    border: 1px solid var(--border);
 }
 
 .result-item h4 {
-    color: var(--success);
-    font-size: 1rem;
-    margin-bottom: var(--space-sm);
+    color: var(--primary);
+    font-size: 1.1rem;
+    margin-bottom: var(--space-md);
+    font-weight: 600;
 }
 
 .result-item p {
     color: var(--text-secondary);
     font-size: 0.95rem;
-    line-height: 1.6;
+    line-height: 1.7;
     margin: 0;
 }
 
 /* Guarantee Block */
 .guarantee-block {
-    margin-top: var(--space-lg);
-    padding: var(--space-lg);
-    background: linear-gradient(90deg, rgba(59, 130, 246, 0.08), rgba(139, 92, 246, 0.05));
-    border: 1px solid var(--primary);
-    border-radius: 12px;
+    margin-top: var(--space-xl);
+    padding: var(--space-xl);
+    background: linear-gradient(135deg, #1E1E1E 0%, #2D2D2D 100%);
+    border-radius: 16px;
+    text-align: center;
 }
 
 .guarantee-block h3 {
-    color: var(--primary);
-    margin-bottom: var(--space-md);
+    color: var(--bg);
+    font-size: 1.5rem;
+    margin-bottom: var(--space-lg);
 }
 
 .guarantee-block p {
-    color: var(--text);
-    font-size: 1rem;
-    line-height: 1.7;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 1.05rem;
+    line-height: 1.8;
     margin-bottom: var(--space-md);
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .guarantee-block p:last-child {
@@ -399,9 +413,11 @@ code {
 }
 
 .guarantee-emphasis {
-    font-size: 1.125rem !important;
-    text-align: center;
-    padding-top: var(--space-sm);
+    font-size: 1.25rem !important;
+    color: var(--bg) !important;
+    padding-top: var(--space-md);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    margin-top: var(--space-lg) !important;
 }
 
 /* Pillars / Three Column Grid */
@@ -416,19 +432,30 @@ code {
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: var(--space-lg);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.pillar:hover {
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
 }
 
 .pillar-icon {
-    font-size: 2rem;
+    font-size: 2.5rem;
     margin-bottom: var(--space-md);
+    display: block;
 }
 
 .pillar h3 {
     color: var(--text);
+    font-size: 1.1rem;
+    margin-bottom: var(--space-sm);
 }
 
 .pillar p {
     font-size: 0.95rem;
+    line-height: 1.6;
+    margin: 0;
 }
 
 /* Steps */
