@@ -255,6 +255,130 @@ code {
     font-size: 1.125rem;
 }
 
+/* Intro Block */
+.intro-block {
+    max-width: var(--content-width);
+    margin-bottom: var(--space-xl);
+}
+
+.intro-block p {
+    margin-bottom: var(--space-md);
+    font-size: 1.05rem;
+    line-height: 1.7;
+}
+
+/* Subsection Titles */
+.subsection-title {
+    font-size: 1.5rem;
+    margin-top: var(--space-xl);
+    margin-bottom: var(--space-lg);
+    color: var(--text);
+}
+
+/* Layers Table */
+.layers-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: var(--space-xl);
+    background: var(--bg);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.layers-table th,
+.layers-table td {
+    padding: var(--space-md);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+.layers-table th {
+    background: var(--bg-alt);
+    font-weight: 600;
+    color: var(--text);
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.layers-table td {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.layers-table td strong {
+    color: var(--text);
+}
+
+.layers-table tr:last-child td {
+    border-bottom: none;
+}
+
+.layers-table tr:hover {
+    background: rgba(59, 130, 246, 0.03);
+}
+
+/* Pillars Intro */
+.pillars-intro {
+    color: var(--text-secondary);
+    margin-bottom: var(--space-lg);
+    font-style: italic;
+}
+
+/* Result Block */
+.result-block {
+    margin-top: var(--space-xl);
+    padding: var(--space-lg);
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.03));
+    border-left: 4px solid var(--success);
+    border-radius: 0 12px 12px 0;
+}
+
+.result-block h3 {
+    color: var(--success);
+    margin-bottom: var(--space-md);
+}
+
+.result-block p {
+    color: var(--text);
+    font-size: 1.05rem;
+    line-height: 1.7;
+    margin: 0;
+}
+
+/* Guarantee Block */
+.guarantee-block {
+    margin-top: var(--space-lg);
+    padding: var(--space-lg);
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.08), rgba(139, 92, 246, 0.05));
+    border: 1px solid var(--primary);
+    border-radius: 12px;
+}
+
+.guarantee-block h3 {
+    color: var(--primary);
+    margin-bottom: var(--space-md);
+}
+
+.guarantee-block p {
+    color: var(--text);
+    font-size: 1rem;
+    line-height: 1.7;
+    margin-bottom: var(--space-md);
+}
+
+.guarantee-block p:last-child {
+    margin-bottom: 0;
+}
+
+.guarantee-emphasis {
+    font-size: 1.125rem !important;
+    text-align: center;
+    padding-top: var(--space-sm);
+}
+
 /* Pillars / Three Column Grid */
 .pillars {
     display: grid;

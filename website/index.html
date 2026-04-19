@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignedByMe — Self-Signing Digital Identity</title>
-    <meta name="description" content="Own your identity. Get paid to log in. No passwords. No tracking.">
+    <title>SignedByMe — Identity Layer for Autonomous Agents</title>
+    <meta name="description" content="Cryptographic identity for AI agents. Zero-knowledge proofs. Bitcoin-backed. Human kill switch.">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -28,12 +28,7 @@
     <!-- Hero Section -->
     <section class="hero">
         <div class="container">
-            <h1>Sign in with SignedByMe.<br><span class="highlight">Get paid.</span></h1>
-            <p class="hero-subtitle">
-                The first self-signing digital signature. You own your identity. 
-                Enterprises verify you without seeing who you are. 
-                And you earn Bitcoin for every login.
-            </p>
+            <h1>SignedByMe is the identity layer for <span class="highlight">autonomous agents.</span></h1>
             <div class="hero-cta">
                 <a href="#demo" class="btn btn-primary">Try the Demo</a>
                 <a href="#how-it-works" class="btn btn-secondary">Learn More</a>
@@ -45,41 +40,113 @@
     <section id="how-it-works" class="section">
         <div class="container">
             <h2>What is SignedByMe?</h2>
-            <p class="section-intro">
-                SignedByMe is a self-signing digital signature. Not signed by Google. 
-                Not signed by Okta. Signed by <strong>you</strong> — on your device, 
-                with your key, under your control.
-            </p>
+            
+            <div class="intro-block">
+                <p class="section-intro">
+                    <strong>SignedByMe is the identity layer for autonomous agents.</strong>
+                </p>
+                <p>
+                    Agents are flooding enterprise environments with no way to prove who they are, 
+                    what they're authorized to do, or who controls them. The result: shared service 
+                    accounts, borrowed OAuth tokens, and admin rights handed to agents because no 
+                    better option exists.
+                </p>
+                <p>
+                    Meredith Whittaker calls this the "blood brain barrier" — agents breaking 
+                    enterprise security because no cryptographic containment exists for what 
+                    they can and cannot do.
+                </p>
+                <p><strong>SignedByMe fixes this at the foundation.</strong></p>
+            </div>
+            
+            <h3 class="subsection-title">Five Cryptographic Layers</h3>
+            <table class="layers-table">
+                <thead>
+                    <tr>
+                        <th>Layer</th>
+                        <th>What it prevents</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Agent cannot lie about identity</strong></td>
+                        <td>npub is a mathematical output of the ZK proof, not a claim. Forging requires breaking Groth16.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Agent cannot exceed authorization</strong></td>
+                        <td>Kind 28250 scopes are signed by the human owner. Enterprise reads from NOSTR. Agent cannot claim broader permissions than the human granted.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Human retains the kill switch</strong></td>
+                        <td>Kind 28251 revocation locks the agent out instantly. No IT ticket. No admin portal. Cryptographic revocation in seconds.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Enterprise controls their Merkle tree</strong></td>
+                        <td>Agent can only authenticate where its leaf was enrolled. Cannot self-enroll or access unapproved services.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Auditable without trusting anyone</strong></td>
+                        <td>Full trail on public NOSTR relays. CISO verifies independently without asking SignedByMe for anything.</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3 class="subsection-title">Three Pillars</h3>
+            <p class="pillars-intro">Unchanged cryptographic core, now agent-native:</p>
             
             <div class="pillars">
                 <div class="pillar">
                     <div class="pillar-icon">🔐</div>
-                    <h3>Self-Sovereign Identity</h3>
+                    <h3>Self-Signing Identity (DID)</h3>
                     <p>
-                        Your cryptographic key is created on-device and stored in 
-                        hardware-backed secure storage. It never leaves your phone. 
-                        No one issues it. No one can revoke it. You own it.
+                        Every agent has a DID created in a secure runtime environment (TEE or encrypted storage). 
+                        The key never leaves the agent. DID → leaf_secret → nsec (inside ZKP) → npub. 
+                        No certificate authority. No enterprise control. No revocation by anyone except the human owner.
                     </p>
                 </div>
                 <div class="pillar">
                     <div class="pillar-icon">🛡️</div>
-                    <h3>Zero-Knowledge Proof</h3>
+                    <h3>Zero-Knowledge Membership Proof</h3>
                     <p>
-                        Prove you're authorized without revealing who you are. 
-                        Enterprises get a boolean — "this person is approved" — 
-                        without learning which person. Mathematically impossible 
-                        with traditional signatures.
+                        The agent proves it belongs to an enterprise-authorized group without revealing 
+                        which agent it is. Groth16 over BN254, Poseidon2, ~101K constraints, frozen circuit. 
+                        The enterprise gets a boolean: authorized. No identity revealed. OIDC id_token returned.
                     </p>
                 </div>
                 <div class="pillar">
                     <div class="pillar-icon">⚡</div>
-                    <h3>Bitcoin-Backed Auth</h3>
+                    <h3>Bitcoin-Backed Economic Proof</h3>
                     <p>
-                        Every login is backed by a real Lightning Network payment. 
-                        You earn sats for authenticating. Bots can't spam logins 
-                        that cost money. The payment is cryptographic proof.
+                        Monthly Lightning subscription preimage fused into the agent's initial ZKP at leaf creation. 
+                        The economic commitment and the cryptographic identity are one inseparable thing. 
+                        Cannot create fake agent identities without paying real Bitcoin.
                     </p>
                 </div>
+            </div>
+            
+            <div class="result-block">
+                <h3>The Result</h3>
+                <p>
+                    Free OIDC-compatible IAM for enterprises. Agents with real cryptographic identity. 
+                    Humans with a genuine cryptographic kill switch. Decentralized audit trail. 
+                    Sustainable subscription business with revenue sharing to enterprises and agents.
+                </p>
+            </div>
+            
+            <div class="guarantee-block">
+                <h3>The Mathematical Guarantee</h3>
+                <p>
+                    Every SignedByMe agent identity was born from a real Bitcoin Lightning payment. 
+                    The economic commitment is fused into the cryptographic identity at creation — 
+                    unforgeable without simultaneously breaking SHA-256, Groth16 over BN254 with 
+                    ~101,000 constraints, and secp256k1.
+                </p>
+                <p>
+                    These are the same mathematical foundations that secure the Bitcoin network itself.
+                </p>
+                <p class="guarantee-emphasis">
+                    <strong>Not a policy promise. A mathematical guarantee.</strong>
+                </p>
             </div>
         </div>
     </section>
