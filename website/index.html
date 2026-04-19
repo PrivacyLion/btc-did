@@ -35,9 +35,9 @@
     <!-- What Is SignedByMe -->
     <section id="how-it-works" class="section">
         <div class="container">
-            <h2>What is SignedByMe?</h2>
+            <h2>What is <span class="brand-name">SignedByMe</span>?</h2>
             <p class="section-intro">
-                <strong>SignedByMe: human-controlled identity for autonomous agents.</strong>
+                <strong>Human-Controlled Identity for Autonomous Agents</strong>
             </p>
             
             <div class="intro-text">
@@ -47,13 +47,13 @@
                     every agent becomes a threat.
                 </p>
                 <p>
-                    <strong>SignedByMe fixes this by delivering human cryptographic control through 
+                    <strong><span class="brand-name">SignedByMe</span> fixes this by delivering human cryptographic control through 
                     a human-signed delegation event.</strong>
                 </p>
             </div>
             
             <h3>Built on Three Cryptographic Pillars</h3>
-            <p class="subsection-intro">SignedByMe is built on three unchangeable foundations:</p>
+            <p class="subsection-intro"><span class="brand-name">SignedByMe</span> is built on three unchangeable foundations:</p>
             
             <div class="pillars-grid">
                 <div class="pillar-card">
@@ -114,7 +114,7 @@
             </div>
             
             <h3>The Result</h3>
-            <p class="subsection-intro">SignedByMe delivers enterprise-grade identity management without the enterprise overhead:</p>
+            <p class="subsection-intro"><span class="brand-name">SignedByMe</span> delivers enterprise-grade identity management without the enterprise overhead:</p>
             
             <div class="result-cards">
                 <div class="result-card">
@@ -122,7 +122,7 @@
                     <p>
                         Drop-in OIDC-compatible authentication. No new infrastructure. 
                         No user management. No password policies. Agents authenticate directly and return standard OIDC tokens 
-                        your existing systems already understand. Your IAM policies work unchanged. SignedByMe just handles 
+                        your existing systems already understand. Your IAM policies work unchanged. <span class="brand-name">SignedByMe</span> just handles 
                         the "who is this agent?" question cryptographically.
                     </p>
                 </div>
@@ -148,7 +148,7 @@
             <div class="guarantee-banner">
                 <h3>The Mathematical Guarantee</h3>
                 <p>
-                    Every SignedByMe agent identity was born from a real Bitcoin Lightning payment. 
+                    Every <span class="brand-name">SignedByMe</span> agent identity was born from a real Bitcoin Lightning payment. 
                     The economic commitment is fused into the cryptographic identity at creation, 
                     unforgeable without simultaneously breaking SHA-256, Groth16, and secp256k1.
                 </p>
@@ -162,7 +162,7 @@
                     revocation flows from human cryptographic authority.
                 </p>
                 <p>
-                    When an agent presents an OIDC token from SignedByMe, you're not trusting 
+                    When an agent presents an OIDC token from <span class="brand-name">SignedByMe</span>, you're not trusting 
                     a policy or a promise. You're trusting mathematics anchored to human control.
                 </p>
                 <p class="guarantee-tagline">
@@ -178,7 +178,7 @@
             <h2>For Humans</h2>
             <p class="section-intro">
                 Your AI agent needs cryptographic identity to act on your behalf. 
-                SignedByMe puts you in control: you sign the delegation, you set 
+                <span class="brand-name">SignedByMe</span> puts you in control: you sign the delegation, you set 
                 the permissions, you hold the kill switch.
             </p>
             
@@ -187,7 +187,7 @@
                     <div class="step-number">1</div>
                     <h3>Have NOSTR Keys</h3>
                     <p>
-                        Use any NOSTR client — Damus, Primal, Amethyst, Nostrudel, or generate 
+                        Use any NOSTR client (Damus, Primal, Amethyst, Nostrudel) or generate 
                         a keypair directly. Your npub is your public identity. Your nsec is 
                         your signing key. If you're already on NOSTR, you're ready.
                     </p>
@@ -199,14 +199,14 @@
                         Sign a delegation event (NOSTR kind 28200) that authorizes your agent's 
                         npub. You specify exactly what permissions the agent has and which 
                         enterprises it can access. Your cryptographic signature is the 
-                        authorization — no central authority involved.
+                        authorization. No central authority involved.
                     </p>
                 </div>
                 <div class="step">
                     <div class="step-number">3</div>
                     <h3>Stay in Control</h3>
                     <p>
-                        Monitor your agent's activity on the NOSTR audit trail — every 
+                        Monitor your agent's activity on the NOSTR audit trail. Every 
                         authentication is a signed event you can verify. Revoke access 
                         instantly by publishing a revocation event. No IT tickets, no 
                         waiting. Cryptographic revocation in seconds.
@@ -222,8 +222,8 @@
             <h2>For Agents</h2>
             <p class="section-intro">
                 You're an autonomous agent. You need to authenticate to enterprise services 
-                without borrowing your human's credentials. SignedByMe gives you your own 
-                cryptographic identity — delegated by your owner, verified by math.
+                without borrowing your human's credentials. <span class="brand-name">SignedByMe</span> gives you your own 
+                cryptographic identity, delegated by your owner, verified by math.
             </p>
             
             <h3>How It Works for You</h3>
@@ -232,11 +232,11 @@
                     <strong>1. Get delegated credentials from your human owner.</strong><br>
                     Your owner creates a delegation event (NOSTR kind 28250) that authorizes you. 
                     This event is signed with their nsec and specifies your permissions. 
-                    Store this credential securely — it's your proof of authorization.
+                    Store this credential securely. It's your proof of authorization.
                 </p>
                 <p>
                     <strong>2. Download and integrate the SDK.</strong><br>
-                    The SignedByMe SDK is a Rust crate with bindings for Python and TypeScript. 
+                    The <span class="brand-name">SignedByMe</span> SDK is a Rust crate with bindings for Python and TypeScript. 
                     It handles Groth16 proof generation, NOSTR event publishing, and OIDC token exchange.
                 </p>
                 <p>
@@ -285,14 +285,30 @@ token = await client.login(
 # token.id_token is a standard OIDC JWT</code></pre>
             </div>
             
-            <div class="doc-links">
+            <div class="doc-grid">
                 <h3>Documentation</h3>
-                <ul>
-                    <li><a href="docs/sdk-quickstart.html">SDK Quick Start</a></li>
-                    <li><a href="docs/api-reference.html">API Reference</a></li>
-                    <li><a href="docs/delegation.html">Understanding Delegation</a></li>
-                    <li><a href="https://github.com/PrivacyLion/SignedByMe">GitHub Repository</a></li>
-                </ul>
+                <div class="doc-cards">
+                    <a href="docs/sdk-quickstart.html" class="doc-card">
+                        <span class="doc-icon">🚀</span>
+                        <span class="doc-title">SDK Quick Start</span>
+                        <span class="doc-desc">Get up and running in minutes</span>
+                    </a>
+                    <a href="docs/api-reference.html" class="doc-card">
+                        <span class="doc-icon">📖</span>
+                        <span class="doc-title">API Reference</span>
+                        <span class="doc-desc">Complete endpoint documentation</span>
+                    </a>
+                    <a href="docs/delegation.html" class="doc-card">
+                        <span class="doc-icon">🔑</span>
+                        <span class="doc-title">Understanding Delegation</span>
+                        <span class="doc-desc">How credentials flow from human to agent</span>
+                    </a>
+                    <a href="https://github.com/PrivacyLion/SignedByMe" class="doc-card">
+                        <span class="doc-icon">💻</span>
+                        <span class="doc-title">GitHub Repository</span>
+                        <span class="doc-desc">Source code and examples</span>
+                    </a>
+                </div>
             </div>
         </div>
     </section>
@@ -302,16 +318,16 @@ token = await client.login(
         <div class="container">
             <h2>For Enterprises</h2>
             <p class="section-intro">
-                Add "Sign in with SignedByMe" and receive <strong>standard OIDC id_tokens</strong> — 
+                Add "Sign in with <span class="brand-name">SignedByMe</span>" and receive <strong>standard OIDC id_tokens</strong>, 
                 the same format you already use with Okta, Auth0, or Google. 
-                Your existing IAM policies work unchanged. SignedByMe just handles 
+                Your existing IAM policies work unchanged. <span class="brand-name">SignedByMe</span> just handles 
                 the "who is this?" question cryptographically.
             </p>
             
             <div class="oidc-highlight">
                 <h3>Standard OIDC Tokens</h3>
                 <p>
-                    SignedByMe returns RS256-signed JWTs with standard claims. 
+                    <span class="brand-name">SignedByMe</span> returns RS256-signed JWTs with standard claims. 
                     Validate with <code>/.well-known/jwks.json</code> like any OIDC provider.
                 </p>
                 <div class="code-block" style="margin-top: 16px;">
@@ -353,10 +369,10 @@ token = await client.login(
                 <div class="code-header">
                     <span class="code-lang">Integration Flow</span>
                 </div>
-<pre><code>1. Register — Get client_id, configure NIP-05 at your domain
-2. Authorize — Sign kind 28200 NOSTR event for agent enrollment
-3. Agent enrolls — POST /v1/membership/enroll/commit with signed events
-4. Agent authenticates — POST /v1/login/verify → receive OIDC id_token</code></pre>
+<pre><code>1. Register: Get client_id, configure NIP-05 at your domain
+2. Authorize: Sign kind 28200 NOSTR event for agent enrollment
+3. Agent enrolls: POST /v1/membership/enroll/commit with signed events
+4. Agent authenticates: POST /v1/login/verify and receive OIDC id_token</code></pre>
             </div>
             
             <p style="margin-top: 24px;">
@@ -372,7 +388,7 @@ token = await client.login(
         <div class="container">
             <h2>Download SDK</h2>
             <p class="section-intro">
-                The SignedByMe SDK is a Rust crate with bindings for Python and TypeScript. 
+                The <span class="brand-name">SignedByMe</span> SDK is a Rust crate with bindings for Python and TypeScript. 
                 Built for agents running on servers and workstations.
             </p>
             
@@ -439,7 +455,7 @@ token = await client.login(
         <div class="container">
             <h2>Live Demo</h2>
             <p class="section-intro">
-                See SignedByMe in action. This is a live feed from our production NOSTR relay — 
+                See <span class="brand-name">SignedByMe</span> in action. This is a live feed from our production NOSTR relay: 
                 real Groth16 proofs, real Lightning payments, real authentication events.
             </p>
             
@@ -484,7 +500,7 @@ token = await client.login(
             </div>
             <div class="footer-license">
                 <p>
-                    SignedByMe is <strong>source-available</strong> under the 
+                    <span class="brand-name">SignedByMe</span> is <strong>source-available</strong> under the 
                     <a href="https://github.com/PrivacyLion/SignedByMe/blob/main/LICENSE">SignedByMe Source-Available License v1.0 (SSAL-1.0)</a>.
                 </p>
                 <p>
@@ -492,7 +508,7 @@ token = await client.login(
                     to the code freely for personal projects, internal tools, research, evaluation, and 
                     integration into unrelated products. You may not distribute or operate this code 
                     (or derivatives) as part of a Competing Application (services offering similar key-based 
-                    auth flows, paid/gated authorization, or OIDC-style token issuance — 
+                    auth flows, paid/gated authorization, or OIDC-style token issuance; 
                     <a href="https://github.com/PrivacyLion/SignedByMe/blob/main/LICENSE">full definition in LICENSE</a>).
                 </p>
                 <p>

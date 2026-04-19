@@ -1191,3 +1191,64 @@ code {
 .event-dot.delegation {
     background: #EC4899;  /* Pink for human delegation */
 }
+
+/* SignedByMe brand name - always purple */
+.brand-name {
+    color: var(--primary);
+}
+
+/* Documentation Cards */
+.doc-grid {
+    margin-top: var(--space-xl);
+}
+
+.doc-grid h3 {
+    color: var(--text);
+    margin-bottom: var(--space-lg);
+}
+
+.doc-cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-md);
+}
+
+@media (max-width: 768px) {
+    .doc-cards {
+        grid-template-columns: 1fr;
+    }
+}
+
+.doc-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: var(--space-lg);
+    text-decoration: none;
+    transition: border-color 0.2s, transform 0.2s;
+}
+
+.doc-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    text-decoration: none;
+}
+
+.doc-icon {
+    font-size: 1.5rem;
+    margin-bottom: var(--space-sm);
+}
+
+.doc-title {
+    color: var(--primary-light);
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: var(--space-xs);
+}
+
+.doc-desc {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}

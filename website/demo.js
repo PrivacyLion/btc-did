@@ -1,20 +1,17 @@
 /**
  * SignedByMe Live Demo
  * 
- * Two flows demonstrating the complete genesis flow:
- * 
- * LOGIN FLOW:
- * 1. Generate nonce locally (no server call)
- * 2. Display QR code with deep link: signedby://{client_id}/{nonce}/{amount_sats}
- * 3. Subscribe to NOSTR relay for kind 28101 proof events (#nonce tag)
- * 4. On proof event: pay invoices via Strike, submit to /v1/login/verify
- * 5. Display id_token on success
+ * Demonstrates the NOSTR event flow:
  * 
  * ENROLLMENT FLOW:
- * 1. Generate nonce locally (no server call)
- * 2. Sign and publish kind 28200 event to relay
- * 3. Display QR code with deep link: signedby://enroll/{client_id}/{nonce}?exp={unix_timestamp}
- * 4. Regenerate every 90 seconds
+ * 1. Enterprise signs kind 28200 authorization event
+ * 2. Human signs kind 28250 delegation event
+ * 3. Agent calls POST /v1/membership/enroll/commit
+ * 
+ * LOGIN FLOW:
+ * 1. Agent generates Groth16 proof
+ * 2. Agent calls POST /v1/login/verify
+ * 3. Receives OIDC id_token
  */
 
 // Configuration
@@ -88,7 +85,7 @@ function buildDemoHTML() {
             <div class="demo-main">
                 <div class="demo-qr-section">
                     <div id="demo-qr" class="demo-qr-box">
-                        <p class="demo-qr-placeholder">QR code will appear here</p>
+                        <p class="demo-qr-placeholder">Select a flow to begin</p>
                     </div>
                     <p id="demo-timer" class="demo-timer"></p>
                 </div>
@@ -265,7 +262,7 @@ function resetDemo() {
     dom.resetBtn.style.display = 'none';
     dom.modeSelect.disabled = false;
     dom.qrContainer.classList.remove('active');
-    dom.qrContainer.innerHTML = '<p class="demo-qr-placeholder">QR code will appear here</p>';
+    dom.qrContainer.innerHTML = '<p class="demo-qr-placeholder">Select a flow to begin</p>';
     dom.timer.textContent = '';
     dom.status.textContent = 'Ready';
     dom.result.style.display = 'none';
