@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignedByMe: Identity for Autonomous Agents</title>
-    <meta name="description" content="Cryptographic identity for AI agents. Zero-knowledge proofs. Bitcoin-backed. Human kill switch.">
+    <title>SignedByMe: Human-Controlled Identity for Autonomous Agents</title>
+    <meta name="description" content="Human-controlled cryptographic identity for AI agents. Zero-knowledge proofs. Bitcoin-backed. Instant revocation.">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -27,7 +27,7 @@
     <!-- Hero Section -->
     <section class="hero">
         <div class="container">
-            <h1>SignedByMe: identity for <span class="highlight">autonomous agents.</span></h1>
+            <h1>SignedByMe: human-controlled identity for <span class="highlight">autonomous agents.</span></h1>
         </div>
     </section>
 
@@ -37,7 +37,7 @@
             <h2>What is SignedByMe?</h2>
             
             <p class="lead">
-                <strong>SignedByMe: identity for autonomous agents.</strong>
+                <strong>SignedByMe: human-controlled identity for autonomous agents.</strong>
             </p>
             <p>
                 Agents are flooding the internet with borrowed credentials, escalated privileges 
@@ -59,6 +59,7 @@
                         Every agent has a cryptographic identity created in secure storage. 
                         The key never leaves the agent. No certificate authority. No enterprise control. 
                         Only the human owner can revoke.
+                        <span class="technical">(Technical: DID-based, derived via Poseidon2 hash inside the ZK circuit)</span>
                     </p>
                 </div>
                 
@@ -66,8 +67,9 @@
                     <strong>Zero-Knowledge Membership Proof</strong>
                     <p>
                         The agent proves it belongs to an authorized group without revealing 
-                        which agent it is. Enterprise gets a simple answer: authorized or not. 
+                        which agent it is. Enterprise gets a boolean: authorized or not. 
                         No identity revealed.
+                        <span class="technical">(Technical: Groth16 over BN254, ~101K constraints, Merkle tree membership)</span>
                     </p>
                 </div>
                 
@@ -76,7 +78,8 @@
                     <p>
                         Real Bitcoin payment required to create each agent identity. 
                         Economic commitment and cryptographic identity are fused together. 
-                        Cannot create fake agents without paying real Bitcoin.
+                        Cannot create agent identities without paying real Bitcoin.
+                        <span class="technical">(Technical: Lightning preimage bound into ZKP at leaf creation)</span>
                     </p>
                 </div>
             </div>
@@ -94,23 +97,23 @@
                 <tbody>
                     <tr>
                         <td><strong>Agent cannot fake identity</strong></td>
-                        <td>Agent's public key is mathematical proof of authorization, not a self-asserted claim. Faking identity requires breaking the zero-knowledge proof system.</td>
+                        <td>Agent's public key is a mathematical output of the ZK proof, not a claim. Faking requires breaking the proof system.</td>
                     </tr>
                     <tr>
                         <td><strong>Agent cannot exceed permissions</strong></td>
-                        <td>Human owner digitally signs what the agent is authorized to do. Agent cannot claim broader access than the human granted.</td>
+                        <td>Human owner digitally signs what the agent is authorized to do. Agent cannot claim broader access than granted.</td>
                     </tr>
                     <tr>
                         <td><strong>Human keeps instant kill switch</strong></td>
-                        <td>Human can instantly revoke agent access cryptographically. No IT tickets, no admin approval needed. Revocation takes seconds.</td>
+                        <td>Human publishes a revocation event to instantly lock out the agent. No IT tickets. Cryptographic revocation in seconds.</td>
                     </tr>
                     <tr>
                         <td><strong>Enterprise controls access boundaries</strong></td>
-                        <td>Agent can only access services where it was pre-enrolled. Cannot grant itself access to new systems.</td>
+                        <td>Agent can only authenticate where it was enrolled. Cannot self-enroll or access unapproved services.</td>
                     </tr>
                     <tr>
                         <td><strong>Fully auditable without trust</strong></td>
-                        <td>Complete activity trail lives on public infrastructure. Security teams can verify independently without asking SignedByMe.</td>
+                        <td>Complete trail on public NOSTR relays. Security teams verify independently.</td>
                     </tr>
                 </tbody>
             </table>
@@ -140,16 +143,20 @@
             <p>
                 Every SignedByMe agent identity was born from a real Bitcoin Lightning payment. 
                 The economic commitment is fused into the cryptographic identity at creation, 
-                unforgeable without simultaneously breaking SHA-256, Groth16 over BN254 with 
-                ~101,000 constraints, and secp256k1.
+                unforgeable without simultaneously breaking SHA-256, Groth16, and secp256k1.
             </p>
             <p>
                 This isn't just authentication. It's mathematical proof backed by the same 
-                cryptographic foundations that secure the Bitcoin network itself.
+                foundations that secure the Bitcoin network.
+            </p>
+            <p>
+                The human's cryptographic signature creates the agent's authorization and 
+                maintains ultimate control. Every permission, every access grant, every 
+                revocation flows from human cryptographic authority.
             </p>
             <p>
                 When an agent presents an OIDC token from SignedByMe, you're not trusting 
-                a policy or a promise. You're trusting mathematics.
+                a policy or a promise. You're trusting mathematics anchored to human control.
             </p>
             <p class="emphasis">
                 <strong>Not a policy promise. A mathematical guarantee.</strong>

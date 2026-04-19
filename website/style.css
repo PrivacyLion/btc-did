@@ -320,6 +320,14 @@ code {
     color: var(--text-secondary);
 }
 
+.pillar-item .technical {
+    display: block;
+    margin-top: var(--space-xs);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 /* Layers Table */
 .layers-table {
     width: 100%;
