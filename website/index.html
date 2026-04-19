@@ -230,8 +230,8 @@
             <div class="agent-flow">
                 <p>
                     <strong>1. Get delegated credentials from your human owner.</strong><br>
-                    Your owner creates a delegation event (NOSTR kind 28200) that authorizes you. 
-                    This event is signed with their DID and specifies your permissions. 
+                    Your owner creates a delegation event (NOSTR kind 28250) that authorizes you. 
+                    This event is signed with their nsec and specifies your permissions. 
                     Store this credential securely — it's your proof of authorization.
                 </p>
                 <p>
@@ -353,10 +353,10 @@ token = await client.login(
                 <div class="code-header">
                     <span class="code-lang">Integration Flow</span>
                 </div>
-<pre><code>1. Generate nonce, display QR: signedby://{client_id}/{nonce}/{sats}
-2. Subscribe to NOSTR relay for proof event (kind 28101)
-3. On proof: pay Lightning invoices, call POST /v1/login/verify
-4. Receive OIDC id_token with sub=npub (user's pseudonymous ID)</code></pre>
+<pre><code>1. Register — Get client_id, configure NIP-05 at your domain
+2. Authorize — Sign kind 28200 NOSTR event for agent enrollment
+3. Agent enrolls — POST /v1/membership/enroll/commit with signed events
+4. Agent authenticates — POST /v1/login/verify → receive OIDC id_token</code></pre>
             </div>
             
             <p style="margin-top: 24px;">
@@ -455,9 +455,10 @@ token = await client.login(
                     </div>
                 </div>
                 <div class="event-legend">
+                    <span class="legend-item"><span class="event-dot auth"></span> Authorization (28200)</span>
+                    <span class="legend-item"><span class="event-dot delegation"></span> Delegation (28250)</span>
                     <span class="legend-item"><span class="event-dot proof"></span> Proof (28101)</span>
-                    <span class="legend-item"><span class="event-dot payment"></span> Payment (28102)</span>
-                    <span class="legend-item"><span class="event-dot complete"></span> Login Complete (28103)</span>
+                    <span class="legend-item"><span class="event-dot complete"></span> Login (28103)</span>
                 </div>
             </div>
             

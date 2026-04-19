@@ -1182,3 +1182,12 @@ code {
     padding-top: var(--space-lg);
     border-top: 1px solid var(--primary);
 }
+
+/* Additional event dot colors */
+.event-dot.auth {
+    background: #3B82F6;  /* Blue for enterprise authorization */
+}
+
+.event-dot.delegation {
+    background: #EC4899;  /* Pink for human delegation */
+}
