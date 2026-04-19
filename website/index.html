@@ -61,29 +61,29 @@
                 <thead>
                     <tr>
                         <th>Layer</th>
-                        <th>What it prevents</th>
+                        <th>What It Prevents</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td><strong>Agent cannot lie about identity</strong></td>
-                        <td>npub is a mathematical output of the ZK proof, not a claim. Forging requires breaking Groth16.</td>
+                        <td><strong>Agent cannot fake identity</strong></td>
+                        <td>Agent's public key is mathematical proof of authorization, not a self-asserted claim. Faking identity requires breaking the zero-knowledge proof system.</td>
                     </tr>
                     <tr>
-                        <td><strong>Agent cannot exceed authorization</strong></td>
-                        <td>Kind 28250 scopes are signed by the human owner. Enterprise reads from NOSTR. Agent cannot claim broader permissions than the human granted.</td>
+                        <td><strong>Agent cannot exceed permissions</strong></td>
+                        <td>Human owner digitally signs what the agent is authorized to do. Agent cannot claim broader access than the human granted.</td>
                     </tr>
                     <tr>
-                        <td><strong>Human retains the kill switch</strong></td>
-                        <td>Kind 28251 revocation locks the agent out instantly. No IT ticket. No admin portal. Cryptographic revocation in seconds.</td>
+                        <td><strong>Human keeps instant kill switch</strong></td>
+                        <td>Human can instantly revoke agent access cryptographically. No IT tickets, no admin approval needed. Revocation takes seconds.</td>
                     </tr>
                     <tr>
-                        <td><strong>Enterprise controls their Merkle tree</strong></td>
-                        <td>Agent can only authenticate where its leaf was enrolled. Cannot self-enroll or access unapproved services.</td>
+                        <td><strong>Enterprise controls access boundaries</strong></td>
+                        <td>Agent can only access services where it was pre-enrolled. Cannot grant itself access to new systems.</td>
                     </tr>
                     <tr>
-                        <td><strong>Auditable without trusting anyone</strong></td>
-                        <td>Full trail on public NOSTR relays. CISO verifies independently without asking SignedByMe for anything.</td>
+                        <td><strong>Fully auditable without trust</strong></td>
+                        <td>Complete activity trail lives on public infrastructure. Security teams can verify independently without asking SignedByMe.</td>
                     </tr>
                 </tbody>
             </table>
