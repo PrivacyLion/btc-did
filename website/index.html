@@ -56,7 +56,9 @@
                 </p>
             </div>
             
-            <h3 class="subsection-title">Five Cryptographic Layers</h3>
+            <h3 class="subsection-title">How SignedByMe Works</h3>
+            <p class="section-intro">SignedByMe delivers five layers of cryptographic protection:</p>
+            
             <table class="layers-table">
                 <thead>
                     <tr>
@@ -88,35 +90,35 @@
                 </tbody>
             </table>
             
-            <h3 class="subsection-title">Three Pillars</h3>
-            <p class="pillars-intro">Unchanged cryptographic core, now agent-native:</p>
+            <h3 class="subsection-title">Built on Three Cryptographic Pillars</h3>
+            <p class="pillars-intro">These protections are built on three unchangeable foundations:</p>
             
             <div class="pillars">
                 <div class="pillar">
                     <div class="pillar-icon">🔐</div>
-                    <h3>Self-Signing Identity (DID)</h3>
+                    <h3>Self-Signing Identity</h3>
                     <p>
-                        Every agent has a DID created in a secure runtime environment (TEE or encrypted storage). 
-                        The key never leaves the agent. DID → leaf_secret → nsec (inside ZKP) → npub. 
-                        No certificate authority. No enterprise control. No revocation by anyone except the human owner.
+                        Every agent has a cryptographic identity created in secure storage. 
+                        The key never leaves the agent. No certificate authority. No enterprise control. 
+                        Only the human owner can revoke.
                     </p>
                 </div>
                 <div class="pillar">
                     <div class="pillar-icon">🛡️</div>
                     <h3>Zero-Knowledge Membership Proof</h3>
                     <p>
-                        The agent proves it belongs to an enterprise-authorized group without revealing 
-                        which agent it is. Groth16 over BN254, Poseidon2, ~101K constraints, frozen circuit. 
-                        The enterprise gets a boolean: authorized. No identity revealed. OIDC id_token returned.
+                        The agent proves it belongs to an authorized group without revealing 
+                        which agent it is. Enterprise gets a simple answer: authorized or not. 
+                        No identity revealed.
                     </p>
                 </div>
                 <div class="pillar">
                     <div class="pillar-icon">⚡</div>
                     <h3>Bitcoin-Backed Economic Proof</h3>
                     <p>
-                        Monthly Lightning subscription preimage fused into the agent's initial ZKP at leaf creation. 
-                        The economic commitment and the cryptographic identity are one inseparable thing. 
-                        Cannot create fake agent identities without paying real Bitcoin.
+                        Real Bitcoin payment required to create each agent identity. 
+                        Economic commitment and cryptographic identity are fused together. 
+                        Cannot create fake agents without paying real Bitcoin.
                     </p>
                 </div>
             </div>
@@ -124,10 +126,34 @@
             <div class="result-block">
                 <h3>The Result</h3>
                 <p>
-                    Free OIDC-compatible IAM for enterprises. Agents with real cryptographic identity. 
-                    Humans with a genuine cryptographic kill switch. Decentralized audit trail. 
-                    Sustainable subscription business with revenue sharing to enterprises and agents.
+                    SignedByMe delivers enterprise-grade identity management without the enterprise overhead:
                 </p>
+                <div class="result-grid">
+                    <div class="result-item">
+                        <h4>For Enterprises</h4>
+                        <p>
+                            Drop-in OIDC-compatible authentication. No new infrastructure. No user management. 
+                            No password policies. Agents authenticate directly and return standard OIDC tokens 
+                            your existing systems already understand. Your IAM policies work unchanged — 
+                            SignedByMe just handles the "who is this agent?" question cryptographically.
+                        </p>
+                    </div>
+                    <div class="result-item">
+                        <h4>For Humans</h4>
+                        <p>
+                            Complete cryptographic control over agent behavior. Grant specific permissions. 
+                            Revoke instantly from anywhere. No IT tickets. No admin approval. 
+                            Your cryptographic signature is the only authority that matters.
+                        </p>
+                    </div>
+                    <div class="result-item">
+                        <h4>For Agents</h4>
+                        <p>
+                            Real cryptographic identity that can't be borrowed, shared, or faked. 
+                            Authenticate independently without depending on human credentials or shared service accounts.
+                        </p>
+                    </div>
+                </div>
             </div>
             
             <div class="guarantee-block">
@@ -139,7 +165,12 @@
                     ~101,000 constraints, and secp256k1.
                 </p>
                 <p>
-                    These are the same mathematical foundations that secure the Bitcoin network itself.
+                    This isn't just authentication. It's mathematical proof backed by the same 
+                    cryptographic foundations that secure the Bitcoin network itself.
+                </p>
+                <p>
+                    When an agent presents an OIDC token from SignedByMe, you're not trusting 
+                    a policy or a promise — you're trusting mathematics.
                 </p>
                 <p class="guarantee-emphasis">
                     <strong>Not a policy promise. A mathematical guarantee.</strong>
