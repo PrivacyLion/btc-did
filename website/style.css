@@ -1392,14 +1392,36 @@ code {
 }
 
 .price-amount {
-    font-size: 5rem;
+    font-size: 2.5rem;
     font-weight: 700;
     color: var(--primary);
-    line-height: 1;
+    line-height: 1.2;
+}
+
+@media (min-width: 768px) {
+    .price-amount {
+        font-size: 3.5rem;
+    }
 }
 
 .price-period {
     font-size: 1.25rem;
     color: var(--text-muted);
     margin-top: var(--space-sm);
+}
+
+/* Volume pricing line */
+.volume-pricing {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: var(--space-xl);
+}
+
+.volume-pricing a {
+    color: var(--primary);
+}
+
+.volume-pricing a:hover {
+    color: var(--primary-light);
 }
