@@ -38,31 +38,64 @@
 
     <!-- What Is SignedByMe -->
     <section id="how-it-works" class="section">
-        <div class="container">
+        <div class="container content-flow">
             <h2>What is SignedByMe?</h2>
             
-            <div class="intro-block">
-                <p class="section-intro">
-                    <strong>SignedByMe is the identity layer for autonomous agents.</strong>
-                </p>
-                <p>
-                    Agents are flooding the internet with borrowed credentials, escalated privileges 
-                    and no way to cryptographically log in with their own identity. The result: 
-                    every agent becomes a threat.
-                </p>
-                <p>
-                    <strong>SignedByMe fixes this by delivering human cryptographic control through 
-                    a human-signed delegation event.</strong>
-                </p>
+            <p class="lead">
+                <strong>SignedByMe is the identity layer for autonomous agents.</strong>
+            </p>
+            <p>
+                Agents are flooding the internet with borrowed credentials, escalated privileges 
+                and no way to cryptographically log in with their own identity. The result: 
+                every agent becomes a threat.
+            </p>
+            <p>
+                <strong>SignedByMe fixes this by delivering human cryptographic control through 
+                a human-signed delegation event.</strong>
+            </p>
+            
+            <h3>Built on Three Cryptographic Pillars</h3>
+            <p>SignedByMe is built on three unchangeable foundations:</p>
+            
+            <div class="pillar-flow">
+                <div class="pillar-item">
+                    <span class="pillar-icon">🔐</span>
+                    <strong>Self-Signing Identity</strong>
+                    <p>
+                        Every agent has a cryptographic identity created in secure storage. 
+                        The key never leaves the agent. No certificate authority. No enterprise control. 
+                        Only the human owner can revoke.
+                    </p>
+                </div>
+                
+                <div class="pillar-item">
+                    <span class="pillar-icon">🛡️</span>
+                    <strong>Zero-Knowledge Membership Proof</strong>
+                    <p>
+                        The agent proves it belongs to an authorized group without revealing 
+                        which agent it is. Enterprise gets a simple answer: authorized or not. 
+                        No identity revealed.
+                    </p>
+                </div>
+                
+                <div class="pillar-item">
+                    <span class="pillar-icon">⚡</span>
+                    <strong>Bitcoin-Backed Economic Proof</strong>
+                    <p>
+                        Real Bitcoin payment required to create each agent identity. 
+                        Economic commitment and cryptographic identity are fused together. 
+                        Cannot create fake agents without paying real Bitcoin.
+                    </p>
+                </div>
             </div>
             
-            <h3 class="subsection-title">How SignedByMe Works</h3>
-            <p class="section-intro">SignedByMe delivers five layers of cryptographic protection:</p>
+            <h3>Delivering Five Security Guarantees</h3>
+            <p>These foundations enable five layers of protection:</p>
             
             <table class="layers-table">
                 <thead>
                     <tr>
-                        <th>Layer</th>
+                        <th>Guarantee</th>
                         <th>What It Prevents</th>
                     </tr>
                 </thead>
@@ -90,92 +123,45 @@
                 </tbody>
             </table>
             
-            <h3 class="subsection-title">Built on Three Cryptographic Pillars</h3>
-            <p class="pillars-intro">These protections are built on three unchangeable foundations:</p>
+            <h3>The Result</h3>
+            <p>SignedByMe delivers enterprise-grade identity management without the enterprise overhead:</p>
             
-            <div class="pillars">
-                <div class="pillar">
-                    <div class="pillar-icon">🔐</div>
-                    <h3>Self-Signing Identity</h3>
-                    <p>
-                        Every agent has a cryptographic identity created in secure storage. 
-                        The key never leaves the agent. No certificate authority. No enterprise control. 
-                        Only the human owner can revoke.
-                    </p>
-                </div>
-                <div class="pillar">
-                    <div class="pillar-icon">🛡️</div>
-                    <h3>Zero-Knowledge Membership Proof</h3>
-                    <p>
-                        The agent proves it belongs to an authorized group without revealing 
-                        which agent it is. Enterprise gets a simple answer: authorized or not. 
-                        No identity revealed.
-                    </p>
-                </div>
-                <div class="pillar">
-                    <div class="pillar-icon">⚡</div>
-                    <h3>Bitcoin-Backed Economic Proof</h3>
-                    <p>
-                        Real Bitcoin payment required to create each agent identity. 
-                        Economic commitment and cryptographic identity are fused together. 
-                        Cannot create fake agents without paying real Bitcoin.
-                    </p>
-                </div>
-            </div>
+            <p>
+                <strong>For Enterprises:</strong> Drop-in OIDC-compatible authentication. No new infrastructure. 
+                No user management. No password policies. Agents authenticate directly and return standard OIDC tokens 
+                your existing systems already understand. Your IAM policies work unchanged — SignedByMe just handles 
+                the "who is this agent?" question cryptographically.
+            </p>
             
-            <div class="result-block">
-                <h3>The Result</h3>
-                <p>
-                    SignedByMe delivers enterprise-grade identity management without the enterprise overhead:
-                </p>
-                <div class="result-grid">
-                    <div class="result-item">
-                        <h4>For Enterprises</h4>
-                        <p>
-                            Drop-in OIDC-compatible authentication. No new infrastructure. No user management. 
-                            No password policies. Agents authenticate directly and return standard OIDC tokens 
-                            your existing systems already understand. Your IAM policies work unchanged — 
-                            SignedByMe just handles the "who is this agent?" question cryptographically.
-                        </p>
-                    </div>
-                    <div class="result-item">
-                        <h4>For Humans</h4>
-                        <p>
-                            Complete cryptographic control over agent behavior. Grant specific permissions. 
-                            Revoke instantly from anywhere. No IT tickets. No admin approval. 
-                            Your cryptographic signature is the only authority that matters.
-                        </p>
-                    </div>
-                    <div class="result-item">
-                        <h4>For Agents</h4>
-                        <p>
-                            Real cryptographic identity that can't be borrowed, shared, or faked. 
-                            Authenticate independently without depending on human credentials or shared service accounts.
-                        </p>
-                    </div>
-                </div>
-            </div>
+            <p>
+                <strong>For Humans:</strong> Complete cryptographic control over agent behavior. Grant specific permissions. 
+                Revoke instantly from anywhere. No IT tickets. No admin approval. Your cryptographic signature is the 
+                only authority that matters.
+            </p>
             
-            <div class="guarantee-block">
-                <h3>The Mathematical Guarantee</h3>
-                <p>
-                    Every SignedByMe agent identity was born from a real Bitcoin Lightning payment. 
-                    The economic commitment is fused into the cryptographic identity at creation — 
-                    unforgeable without simultaneously breaking SHA-256, Groth16 over BN254 with 
-                    ~101,000 constraints, and secp256k1.
-                </p>
-                <p>
-                    This isn't just authentication. It's mathematical proof backed by the same 
-                    cryptographic foundations that secure the Bitcoin network itself.
-                </p>
-                <p>
-                    When an agent presents an OIDC token from SignedByMe, you're not trusting 
-                    a policy or a promise — you're trusting mathematics.
-                </p>
-                <p class="guarantee-emphasis">
-                    <strong>Not a policy promise. A mathematical guarantee.</strong>
-                </p>
-            </div>
+            <p>
+                <strong>For Agents:</strong> Real cryptographic identity that can't be borrowed, shared, or faked. 
+                Authenticate independently without depending on human credentials or shared service accounts.
+            </p>
+            
+            <h3>The Mathematical Guarantee</h3>
+            <p>
+                Every SignedByMe agent identity was born from a real Bitcoin Lightning payment. 
+                The economic commitment is fused into the cryptographic identity at creation — 
+                unforgeable without simultaneously breaking SHA-256, Groth16 over BN254 with 
+                ~101,000 constraints, and secp256k1.
+            </p>
+            <p>
+                This isn't just authentication. It's mathematical proof backed by the same 
+                cryptographic foundations that secure the Bitcoin network itself.
+            </p>
+            <p>
+                When an agent presents an OIDC token from SignedByMe, you're not trusting 
+                a policy or a promise — you're trusting mathematics.
+            </p>
+            <p class="emphasis">
+                <strong>Not a policy promise. A mathematical guarantee.</strong>
+            </p>
         </div>
     </section>
 

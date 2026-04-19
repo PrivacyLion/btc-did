@@ -255,24 +255,68 @@ code {
     font-size: 1.125rem;
 }
 
-/* Intro Block */
-.intro-block {
+/* Content Flow Layout */
+.content-flow {
     max-width: var(--content-width);
-    margin-bottom: var(--space-xl);
 }
 
-.intro-block p {
+.content-flow p {
     margin-bottom: var(--space-md);
     font-size: 1.05rem;
-    line-height: 1.7;
+    line-height: 1.8;
+    color: var(--text-secondary);
 }
 
-/* Subsection Titles */
-.subsection-title {
-    font-size: 1.5rem;
-    margin-top: var(--space-xl);
-    margin-bottom: var(--space-lg);
+.content-flow p strong {
     color: var(--text);
+}
+
+.content-flow .lead {
+    font-size: 1.2rem;
+    color: var(--text);
+}
+
+.content-flow h3 {
+    font-size: 1.4rem;
+    margin-top: var(--space-xl);
+    margin-bottom: var(--space-md);
+    color: var(--text);
+}
+
+.content-flow .emphasis {
+    font-size: 1.15rem;
+    text-align: center;
+    margin-top: var(--space-lg);
+    padding-top: var(--space-lg);
+    border-top: 1px solid var(--border);
+}
+
+/* Pillar Flow (inline flowing style) */
+.pillar-flow {
+    margin: var(--space-lg) 0 var(--space-xl);
+}
+
+.pillar-item {
+    margin-bottom: var(--space-lg);
+}
+
+.pillar-item .pillar-icon {
+    font-size: 1.3rem;
+    margin-right: var(--space-xs);
+}
+
+.pillar-item strong {
+    font-size: 1.05rem;
+    color: var(--text);
+}
+
+.pillar-item p {
+    margin-top: var(--space-xs);
+    margin-bottom: 0;
+    margin-left: 2rem;
+    font-size: 1rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
 }
 
 /* Layers Table */
