@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignedByMe: Human-Controlled Identity for Autonomous Agents</title>
+    <title>SignedByMe | Human-Controlled Identity for Autonomous Agents</title>
     <meta name="description" content="Human-controlled cryptographic identity for AI agents. Zero-knowledge proofs. Bitcoin-backed. Instant revocation.">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -27,7 +27,7 @@
     <!-- Hero Section -->
     <section class="hero">
         <div class="container">
-            <h1>SignedByMe: human-controlled identity for <span class="highlight">autonomous agents.</span></h1>
+            <h1>Human-Controlled Identity for <span class="highlight">Autonomous Agents</span></h1>
         </div>
     </section>
 
@@ -59,7 +59,7 @@
                         Every agent has a cryptographic identity created in secure storage. 
                         The key never leaves the agent. No certificate authority. No enterprise control. 
                         Only the human owner can revoke.
-                        <span class="technical">(Technical: DID-based, derived via Poseidon2 hash inside the ZK circuit)</span>
+                        <span class="technical">(<a href="https://github.com/PrivacyLion/SignedByMe#self-signing-identity" class="code-link">View in code →</a>)</span>
                     </p>
                 </div>
                 
@@ -69,7 +69,7 @@
                         The agent proves it belongs to an authorized group without revealing 
                         which agent it is. Enterprise gets a boolean: authorized or not. 
                         No identity revealed.
-                        <span class="technical">(Technical: Groth16 over BN254, ~101K constraints, Merkle tree membership)</span>
+                        <span class="technical">(<a href="https://github.com/PrivacyLion/SignedByMe#zero-knowledge-proof" class="code-link">View in code →</a>)</span>
                     </p>
                 </div>
                 
@@ -79,7 +79,7 @@
                         Real Bitcoin payment required to create each agent identity. 
                         Economic commitment and cryptographic identity are fused together. 
                         Cannot create agent identities without paying real Bitcoin.
-                        <span class="technical">(Technical: Lightning preimage bound into ZKP at leaf creation)</span>
+                        <span class="technical">(<a href="https://github.com/PrivacyLion/SignedByMe#bitcoin-proof" class="code-link">View in code →</a>)</span>
                     </p>
                 </div>
             </div>

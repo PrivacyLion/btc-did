@@ -1,22 +1,22 @@
 /* SignedByMe Website - System Fonts Only */
 
 :root {
-    /* Brand colors */
-    --primary: #3B82F6;
-    --primary-dark: #1D4ED8;
-    --primary-light: #DBEAFE;
-    --accent: #8B5CF6;
+    /* Brand colors - Purple focus */
+    --primary: #A855F7;
+    --primary-dark: #9333EA;
+    --primary-light: #C084FC;
+    --accent: #D8B4FE;
     --success: #10B981;
     --warning: #F59E0B;
     --lightning: #F7931A;
     
-    /* Neutrals */
-    --text: #111827;
-    --text-secondary: #6B7280;
+    /* Dark theme */
+    --text: #FFFFFF;
+    --text-secondary: #D1D5DB;
     --text-muted: #9CA3AF;
-    --bg: #FFFFFF;
-    --bg-alt: #F9FAFB;
-    --border: #E5E7EB;
+    --bg: #000000;
+    --bg-alt: #0A0A0A;
+    --border: #27272A;
     
     /* Spacing */
     --space-xs: 4px;
@@ -123,7 +123,7 @@ code {
     top: 0;
     left: 0;
     right: 0;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(0, 0, 0, 0.95);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
     z-index: 100;
@@ -186,19 +186,15 @@ code {
 /* Hero */
 .hero {
     padding: calc(var(--space-2xl) + 60px) 0 var(--space-2xl);
-    background: linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
+    background: var(--bg);
 }
 
 .hero h1 {
     margin-bottom: var(--space-lg);
-    white-space: nowrap;
 }
 
 .hero .highlight {
-    background: linear-gradient(90deg, var(--primary), var(--accent));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--primary);
 }
 
 .hero-subtitle {
@@ -229,25 +225,26 @@ code {
 }
 
 .btn-primary {
-    background: linear-gradient(90deg, var(--primary), var(--accent));
-    color: white;
+    background: var(--primary);
+    color: #000000;
+    font-weight: 700;
 }
 
 .btn-primary:hover {
-    opacity: 0.9;
+    background: var(--primary-light);
     transform: translateY(-1px);
     text-decoration: none;
 }
 
 .btn-secondary {
-    background: var(--bg);
+    background: transparent;
     color: var(--text);
-    border: 1px solid var(--border);
+    border: 1px solid var(--primary);
 }
 
 .btn-secondary:hover {
-    background: var(--bg-alt);
-    border-color: var(--text-muted);
+    background: rgba(168, 85, 247, 0.1);
+    border-color: var(--primary-light);
     text-decoration: none;
 }
 
@@ -289,7 +286,8 @@ code {
     text-align: center;
     margin-top: var(--space-lg);
     padding-top: var(--space-lg);
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--primary);
+    color: var(--primary-light);
 }
 
 /* Pillar Flow (inline flowing style) */
@@ -308,7 +306,7 @@ code {
 
 .pillar-item strong {
     font-size: 1.05rem;
-    color: var(--text);
+    color: var(--primary-light);
 }
 
 .pillar-item p {
@@ -325,7 +323,15 @@ code {
     margin-top: var(--space-xs);
     font-size: 0.85rem;
     color: var(--text-muted);
-    font-style: italic;
+}
+
+.pillar-item .code-link {
+    color: var(--primary);
+    font-style: normal;
+}
+
+.pillar-item .code-link:hover {
+    color: var(--primary-light);
 }
 
 /* Layers Table */
@@ -333,10 +339,10 @@ code {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: var(--space-xl);
-    background: var(--bg);
+    background: var(--bg-alt);
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border: 1px solid var(--border);
 }
 
 .layers-table th,
@@ -347,9 +353,9 @@ code {
 }
 
 .layers-table th {
-    background: var(--bg-alt);
+    background: #18181B;
     font-weight: 600;
-    color: var(--text);
+    color: var(--primary);
     font-size: 0.9rem;
     text-transform: uppercase;
     letter-spacing: 0.03em;
@@ -370,7 +376,7 @@ code {
 }
 
 .layers-table tr:hover {
-    background: rgba(59, 130, 246, 0.03);
+    background: rgba(168, 85, 247, 0.05);
 }
 
 /* Pillars Intro */
@@ -384,8 +390,9 @@ code {
 .result-block {
     margin-top: var(--space-xl);
     padding: var(--space-xl) var(--space-lg);
-    background: var(--bg-alt);
+    background: #18181B;
     border-radius: 16px;
+    border: 1px solid var(--border);
 }
 
 .result-block h3 {
@@ -416,14 +423,14 @@ code {
 }
 
 .result-item {
-    background: var(--bg);
+    background: var(--bg-alt);
     padding: var(--space-lg);
     border-radius: 12px;
     border: 1px solid var(--border);
 }
 
 .result-item h4 {
-    color: var(--primary);
+    color: var(--primary-light);
     font-size: 1.1rem;
     margin-bottom: var(--space-md);
     font-weight: 600;
@@ -440,19 +447,20 @@ code {
 .guarantee-block {
     margin-top: var(--space-xl);
     padding: var(--space-xl);
-    background: linear-gradient(135deg, #1E1E1E 0%, #2D2D2D 100%);
+    background: linear-gradient(135deg, #18181B 0%, #27272A 100%);
     border-radius: 16px;
     text-align: center;
+    border: 1px solid var(--primary);
 }
 
 .guarantee-block h3 {
-    color: var(--bg);
+    color: var(--primary);
     font-size: 1.5rem;
     margin-bottom: var(--space-lg);
 }
 
 .guarantee-block p {
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--text-secondary);
     font-size: 1.05rem;
     line-height: 1.8;
     margin-bottom: var(--space-md);
@@ -467,9 +475,9 @@ code {
 
 .guarantee-emphasis {
     font-size: 1.25rem !important;
-    color: var(--bg) !important;
+    color: var(--text) !important;
     padding-top: var(--space-md);
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    border-top: 1px solid var(--primary);
     margin-top: var(--space-lg) !important;
 }
 
@@ -481,7 +489,7 @@ code {
 }
 
 .pillar {
-    background: var(--bg);
+    background: var(--bg-alt);
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: var(--space-lg);
@@ -490,7 +498,7 @@ code {
 
 .pillar:hover {
     border-color: var(--primary);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+    box-shadow: 0 4px 12px rgba(168, 85, 247, 0.2);
 }
 
 .pillar-icon {
@@ -529,8 +537,8 @@ code {
     top: 0;
     width: 40px;
     height: 40px;
-    background: linear-gradient(90deg, var(--primary), var(--accent));
-    color: white;
+    background: var(--primary);
+    color: #000000;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -582,8 +590,9 @@ code {
 .doc-links {
     margin-top: var(--space-lg);
     padding: var(--space-lg);
-    background: var(--bg-alt);
+    background: #18181B;
     border-radius: 12px;
+    border: 1px solid var(--border);
 }
 
 .doc-links h3 {
@@ -614,13 +623,13 @@ code {
 
 .benefit {
     padding: var(--space-md);
-    background: var(--bg);
+    background: var(--bg-alt);
     border: 1px solid var(--border);
     border-radius: 8px;
 }
 
 .benefit h3 {
-    color: var(--primary);
+    color: var(--primary-light);
     font-size: 1.125rem;
 }
 
@@ -637,7 +646,7 @@ code {
     flex-wrap: wrap;
     gap: var(--space-lg);
     padding: var(--space-lg);
-    background: linear-gradient(90deg, rgba(59, 130, 246, 0.05), rgba(139, 92, 246, 0.05));
+    background: rgba(168, 85, 247, 0.1);
     border: 1px solid var(--primary);
     border-radius: 12px;
     margin-bottom: var(--space-lg);
@@ -655,7 +664,7 @@ code {
 }
 
 .checksum {
-    background: var(--bg-alt);
+    background: #18181B;
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: var(--space-md);
@@ -673,8 +682,8 @@ code {
 
 .checksum .hash {
     display: block;
-    background: #1E1E1E;
-    color: #D4D4D4;
+    background: #0A0A0A;
+    color: var(--primary-light);
     padding: var(--space-sm) var(--space-md);
     border-radius: 4px;
     font-size: 0.85rem;
@@ -682,14 +691,14 @@ code {
 }
 
 .checksum .hash-value {
-    background: var(--bg);
+    background: var(--bg-alt);
     color: var(--text-muted);
     border: 1px solid var(--border);
 }
 
 /* Demo Section */
 .demo-container {
-    background: var(--bg);
+    background: #18181B;
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: var(--space-lg);
@@ -713,9 +722,10 @@ code {
 
 /* Footer */
 .footer {
-    background: var(--text);
-    color: var(--bg);
+    background: #0A0A0A;
+    color: var(--text);
     padding: var(--space-xl) 0 var(--space-lg);
+    border-top: 1px solid var(--border);
 }
 
 .footer-content {
@@ -734,7 +744,7 @@ code {
 }
 
 .footer-brand .logo-text {
-    color: var(--bg);
+    color: var(--primary);
 }
 
 .footer-links {
@@ -748,13 +758,13 @@ code {
 }
 
 .footer-links a:hover {
-    color: var(--bg);
+    color: var(--primary-light);
 }
 
 .footer-legal {
     font-size: 0.85rem;
     color: var(--text-muted);
-    border-top: 1px solid #374151;
+    border-top: 1px solid var(--border);
     padding-top: var(--space-lg);
 }
 
