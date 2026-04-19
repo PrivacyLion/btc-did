@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignedByMe — Self-Signing Digital Identity</title>
+    <meta name="description" content="Own your identity. Get paid to log in. No passwords. No tracking.">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="#" class="nav-logo">
+                <span class="logo-icon">⚡</span>
+                <span class="logo-text">SignedByMe</span>
+            </a>
+            <div class="nav-links">
+                <a href="#how-it-works">How It Works</a>
+                <a href="#for-agents">For Agents</a>
+                <a href="#for-enterprises">For Enterprises</a>
+                <a href="#demo">Live Demo</a>
+                <a href="#download" class="nav-cta">Download SDK</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <h1>Sign in with SignedByMe.<br><span class="highlight">Get paid.</span></h1>
+            <p class="hero-subtitle">
+                The first self-signing digital signature. You own your identity. 
+                Enterprises verify you without seeing who you are. 
+                And you earn Bitcoin for every login.
+            </p>
+            <div class="hero-cta">
+                <a href="#demo" class="btn btn-primary">Try the Demo</a>
+                <a href="#how-it-works" class="btn btn-secondary">Learn More</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- What Is SignedByMe -->
+    <section id="how-it-works" class="section">
+        <div class="container">
+            <h2>What is SignedByMe?</h2>
+            <p class="section-intro">
+                SignedByMe is a self-signing digital signature. Not signed by Google. 
+                Not signed by Okta. Signed by <strong>you</strong> — on your device, 
+                with your key, under your control.
+            </p>
+            
+            <div class="pillars">
+                <div class="pillar">
+                    <div class="pillar-icon">🔐</div>
+                    <h3>Self-Sovereign Identity</h3>
+                    <p>
+                        Your cryptographic key is created on-device and stored in 
+                        hardware-backed secure storage. It never leaves your phone. 
+                        No one issues it. No one can revoke it. You own it.
+                    </p>
+                </div>
+                <div class="pillar">
+                    <div class="pillar-icon">🛡️</div>
+                    <h3>Zero-Knowledge Proof</h3>
+                    <p>
+                        Prove you're authorized without revealing who you are. 
+                        Enterprises get a boolean — "this person is approved" — 
+                        without learning which person. Mathematically impossible 
+                        with traditional signatures.
+                    </p>
+                </div>
+                <div class="pillar">
+                    <div class="pillar-icon">⚡</div>
+                    <h3>Bitcoin-Backed Auth</h3>
+                    <p>
+                        Every login is backed by a real Lightning Network payment. 
+                        You earn sats for authenticating. Bots can't spam logins 
+                        that cost money. The payment is cryptographic proof.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- For Agent Owners (Humans) -->
+    <section class="section section-alt">
+        <div class="container">
+            <h2>For Agent Owners</h2>
+            <p class="section-intro">
+                Your AI agent needs to prove it's acting on your behalf. 
+                SignedByMe gives your agent a cryptographic credential 
+                that enterprises can verify — without exposing your identity.
+            </p>
+            
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3>Download the App</h3>
+                    <p>Install SignedByMe on your phone. Create your identity in 30 seconds.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3>Authorize Your Agent</h3>
+                    <p>Scan the QR code your agent displays. Approve the connection.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3>Agent Acts on Your Behalf</h3>
+                    <p>
+                        Your agent can now authenticate to enterprises using your credential. 
+                        You get paid for every login. You can revoke anytime.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- For Agents (Technical) -->
+    <section id="for-agents" class="section">
+        <div class="container">
+            <h2>For AI Agents</h2>
+            <p class="section-intro">
+                Integrate SignedByMe to give your agent cryptographically verifiable 
+                identity. Standard SDK. Four API calls. Works with any enterprise 
+                that accepts OIDC.
+            </p>
+            
+            <div class="code-block">
+                <div class="code-header">
+                    <span class="code-lang">Rust</span>
+                </div>
+<pre><code>use signedby_sdk::{SignedByClient, LoginRequest};
+
+// Initialize with owner's delegated credential
+let client = SignedByClient::new(credential_path)?;
+
+// Authenticate to an enterprise
+let token = client.login(LoginRequest {
+    client_id: "acme-corp",
+    nonce: &amp;session_nonce,
+}).await?;
+
+// token.id_token is a standard OIDC JWT
+// Enterprise verifies via /.well-known/jwks.json</code></pre>
+            </div>
+            
+            <div class="doc-links">
+                <h3>Documentation</h3>
+                <ul>
+                    <li><a href="docs/sdk-quickstart.html">SDK Quick Start</a></li>
+                    <li><a href="docs/api-reference.html">API Reference</a></li>
+                    <li><a href="docs/delegation.html">Credential Delegation</a></li>
+                    <li><a href="https://github.com/PrivacyLion/SignedByMe">GitHub Repository</a></li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- For Enterprises -->
+    <section id="for-enterprises" class="section section-alt">
+        <div class="container">
+            <h2>For Enterprises</h2>
+            <p class="section-intro">
+                Add "Sign in with SignedByMe" to your app. Your users are 
+                cryptographically verified with zero PII. No breach risk. 
+                No passwords. Standard OIDC integration.
+            </p>
+            
+            <div class="enterprise-benefits">
+                <div class="benefit">
+                    <h3>4 API Calls</h3>
+                    <p>Same integration complexity as Okta or Auth0.</p>
+                </div>
+                <div class="benefit">
+                    <h3>Zero PII</h3>
+                    <p>You never see names, emails, or any personal data.</p>
+                </div>
+                <div class="benefit">
+                    <h3>No Breach Risk</h3>
+                    <p>Can't leak what you don't store.</p>
+                </div>
+                <div class="benefit">
+                    <h3>Private Allowlists</h3>
+                    <p>Control who can log in without knowing who logged in.</p>
+                </div>
+            </div>
+            
+            <div class="code-block">
+                <div class="code-header">
+                    <span class="code-lang">Integration Flow</span>
+                </div>
+<pre><code>1. Generate nonce, display QR: signedby://{client_id}/{nonce}/{sats}
+2. Subscribe to NOSTR relay for proof event (kind 28101)
+3. On proof: pay Lightning invoices, call POST /v1/login/verify
+4. Receive OIDC id_token with sub=npub (user's pseudonymous ID)</code></pre>
+            </div>
+            
+            <p style="margin-top: 24px;">
+                <a href="docs/enterprise-integration.html" class="btn btn-primary">
+                    Enterprise Integration Guide →
+                </a>
+            </p>
+        </div>
+    </section>
+
+    <!-- SDK Download -->
+    <section id="download" class="section">
+        <div class="container">
+            <h2>Download SDK</h2>
+            <p class="section-intro">
+                The SignedByMe SDK is available as a Rust crate with bindings for 
+                Python, TypeScript, and native mobile platforms.
+            </p>
+            
+            <div class="download-box">
+                <div class="download-info">
+                    <h3>signedby-sdk-v0.1.0</h3>
+                    <p class="download-meta">
+                        Latest release · Rust + FFI bindings · 2.4 MB
+                    </p>
+                </div>
+                <a href="https://github.com/PrivacyLion/SignedByMe/releases/latest" 
+                   class="btn btn-primary btn-large">
+                    Download from GitHub
+                </a>
+            </div>
+            
+            <div class="checksum">
+                <h4>Verify Download</h4>
+                <p>Compare the SHA-256 hash to ensure integrity:</p>
+                <code class="hash">sha256sum signedby-sdk-v0.1.0.tar.gz</code>
+                <code class="hash-value">[SHA-256 hash will be displayed here after release]</code>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Demo -->
+    <section id="demo" class="section section-alt">
+        <div class="container">
+            <h2>Live Demo</h2>
+            <p class="section-intro">
+                See SignedByMe in action. This demo runs on real infrastructure — 
+                real NOSTR relay, real Lightning, real Groth16 proofs.
+            </p>
+            
+            <div id="demo-container" class="demo-container">
+                <!-- Demo app loads here -->
+                <div class="demo-placeholder">
+                    <p>Demo loading...</p>
+                </div>
+            </div>
+            
+            <p class="demo-note">
+                <strong>Infrastructure:</strong> 
+                relay.privacy-lion.com · api.beta.privacy-lion.com
+            </p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-icon">⚡</span>
+                    <span class="logo-text">SignedByMe</span>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/PrivacyLion/SignedByMe">GitHub</a>
+                    <a href="docs/">Documentation</a>
+                    <a href="mailto:contact@privacy-lion.com">Contact</a>
+                </div>
+            </div>
+            <p class="footer-legal">
+                © 2026 Privacy Lion. SignedByMe™ patent pending.
+            </p>
+        </div>
+    </footer>
+
+    <!-- Scripts (local only, no CDN) -->
+    <script src="qrcode.min.js"></script>
+    <script src="nostr.min.js"></script>
+    <script src="demo.js"></script>
+</body>
+</html>

@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Integration Guide — SignedByMe</title>
+    <link rel="stylesheet" href="../style.css">
+    <style>
+        body {
+            padding-top: 80px;
+        }
+        .doc-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 48px 24px;
+        }
+        .doc-nav {
+            margin-bottom: 32px;
+        }
+        .doc-nav a {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        .doc-title {
+            margin-bottom: 16px;
+        }
+        .doc-meta {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 48px;
+        }
+        .doc-section {
+            margin-bottom: 48px;
+        }
+        .doc-section h2 {
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .doc-section h3 {
+            font-size: 1.125rem;
+            margin-top: 24px;
+            margin-bottom: 12px;
+        }
+        .doc-section p, .doc-section li {
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+        .doc-section ul, .doc-section ol {
+            margin: 16px 0;
+            padding-left: 24px;
+        }
+        .doc-section li {
+            margin-bottom: 8px;
+        }
+        .doc-code {
+            background: #1E1E1E;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+        .doc-code pre {
+            padding: 16px;
+            margin: 0;
+        }
+        .doc-code code {
+            color: #D4D4D4;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        .doc-note {
+            background: var(--primary-light);
+            border-left: 4px solid var(--primary);
+            padding: 16px;
+            border-radius: 0 8px 8px 0;
+            margin: 16px 0;
+        }
+        .doc-note p {
+            margin: 0;
+            color: var(--text);
+        }
+        .doc-warning {
+            background: #FEF3C7;
+            border-left: 4px solid var(--warning);
+        }
+        .doc-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 0.9rem;
+        }
+        .doc-table th, .doc-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .doc-table th {
+            background: var(--bg-alt);
+            font-weight: 600;
+        }
+        .inline-code {
+            background: var(--bg-alt);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="../" class="nav-logo">
+                <span class="logo-icon">⚡</span>
+                <span class="logo-text">SignedByMe</span>
+            </a>
+            <div class="nav-links">
+                <a href="../#how-it-works">How It Works</a>
+                <a href="../#for-agents">For Agents</a>
+                <a href="../#for-enterprises">For Enterprises</a>
+                <a href="../#demo">Live Demo</a>
+                <a href="../#download" class="nav-cta">Download SDK</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="doc-container">
+        <nav class="doc-nav">
+            <a href="../">← Back to Home</a>
+        </nav>
+        
+        <h1 class="doc-title">Enterprise Integration Guide</h1>
+        <p class="doc-meta">
+            Last updated: April 2026 · Estimated integration time: 2-4 hours
+        </p>
+        
+        <!-- Overview -->
+        <section class="doc-section">
+            <h2>Overview</h2>
+            <p>
+                SignedByMe provides passwordless, privacy-preserving authentication 
+                via standard OIDC. Your users prove membership in your allowlist 
+                using zero-knowledge proofs — without revealing which member they are.
+            </p>
+            <p>
+                Integration requires four steps:
+            </p>
+            <ol>
+                <li>Register your enterprise and get API credentials</li>
+                <li>Display login QR code / deep link</li>
+                <li>Listen for proof events on NOSTR</li>
+                <li>Verify proof and receive OIDC id_token</li>
+            </ol>
+        </section>
+        
+        <!-- Prerequisites -->
+        <section class="doc-section">
+            <h2>Prerequisites</h2>
+            <ul>
+                <li><strong>Client ID</strong> — Assigned during enterprise registration</li>
+                <li><strong>API Key</strong> — For authenticating verification requests</li>
+                <li><strong>Strike API Key</strong> — For paying Lightning invoices (or your own LN node)</li>
+                <li><strong>NOSTR Relay Access</strong> — WebSocket connection to <span class="inline-code">wss://relay.privacy-lion.com</span></li>
+            </ul>
+            
+            <div class="doc-note">
+                <p>
+                    <strong>Don't have credentials?</strong> 
+                    Contact <a href="mailto:enterprise@privacy-lion.com">enterprise@privacy-lion.com</a> 
+                    to register your enterprise.
+                </p>
+            </div>
+        </section>
+        
+        <!-- Step 1: Display QR -->
+        <section class="doc-section">
+            <h2>Step 1: Display Login QR Code</h2>
+            <p>
+                Generate a login session entirely client-side. No API call required.
+            </p>
+            
+            <h3>Deep Link Format</h3>
+            <div class="doc-code">
+<pre><code>signedby://{client_id}/{nonce}/{amount_sats}</code></pre>
+            </div>
+            
+            <table class="doc-table">
+                <tr>
+                    <th>Parameter</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><span class="inline-code">client_id</span></td>
+                    <td>Your enterprise identifier (e.g., "acme")</td>
+                </tr>
+                <tr>
+                    <td><span class="inline-code">nonce</span></td>
+                    <td>32-character hex string (16 random bytes)</td>
+                </tr>
+                <tr>
+                    <td><span class="inline-code">amount_sats</span></td>
+                    <td>Satoshis to pay user on successful login</td>
+                </tr>
+            </table>
+            
+            <h3>Example</h3>
+            <div class="doc-code">
+<pre><code>// Generate nonce
+const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+
+// Build deep link
+const deepLink = `signedby://acme/${nonce}/100`;
+
+// Display as QR code
+new QRCode(document.getElementById('qr'), {
+    text: deepLink,
+    width: 256,
+    height: 256
+});</code></pre>
+            </div>
+        </section>
+        
+        <!-- Step 2: Subscribe to NOSTR -->
+        <section class="doc-section">
+            <h2>Step 2: Subscribe to NOSTR Relay</h2>
+            <p>
+                Connect to the relay and subscribe to <strong>kind 28101</strong> events 
+                tagged with your nonce. The user's app will publish a proof event 
+                when they scan and authenticate.
+            </p>
+            
+            <h3>Subscription Filter</h3>
+            <div class="doc-code">
+<pre><code>const ws = new WebSocket('wss://relay.privacy-lion.com');
+
+ws.onopen = () => {
+    ws.send(JSON.stringify([
+        'REQ',
+        'login-sub',
+        {
+            kinds: [28101],
+            '#nonce': [nonce]
+        }
+    ]));
+};
+
+ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg[0] === 'EVENT' && msg[2].kind === 28101) {
+        handleProofEvent(msg[2]);
+    }
+};</code></pre>
+            </div>
+            
+            <h3>Proof Event Structure (kind 28101)</h3>
+            <div class="doc-code">
+<pre><code>{
+    "kind": 28101,
+    "pubkey": "user_npub_hex",
+    "created_at": 1714089600,
+    "tags": [
+        ["nonce", "your_nonce_here"],
+        ["c", "your_client_id"]
+    ],
+    "content": {
+        "proof": "base64_groth16_proof",
+        "public_outputs": {
+            "npub": "npub1...",
+            "merkle_root": "0x..."
+        },
+        "invoices": {
+            "user_invoice": "lnbc100n1...",
+            "operator_invoice": "lnbc10n1..."
+        }
+    },
+    "id": "event_id",
+    "sig": "schnorr_signature"
+}</code></pre>
+            </div>
+        </section>
+        
+        <!-- Step 3: Pay Invoices -->
+        <section class="doc-section">
+            <h2>Step 3: Pay Lightning Invoices</h2>
+            <p>
+                The proof event contains two BOLT11 invoices. You must pay both:
+            </p>
+            <ul>
+                <li><strong>user_invoice</strong> — Payment to the user (90% of amount)</li>
+                <li><strong>operator_invoice</strong> — Platform fee (10% of amount)</li>
+            </ul>
+            
+            <h3>Using Strike API</h3>
+            <div class="doc-code">
+<pre><code>async function payInvoice(bolt11, strikeApiKey) {
+    // Create quote
+    const quoteRes = await fetch('https://api.strike.me/v1/payment-quotes/lightning', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${strikeApiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            lnInvoice: bolt11,
+            sourceCurrency: 'BTC'
+        })
+    });
+    const quote = await quoteRes.json();
+    
+    // Execute payment
+    const payRes = await fetch(
+        `https://api.strike.me/v1/payment-quotes/${quote.paymentQuoteId}/execute`,
+        {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${strikeApiKey}` }
+        }
+    );
+    const payment = await payRes.json();
+    
+    return payment.preimage; // Hex-encoded preimage
+}</code></pre>
+            </div>
+            
+            <div class="doc-note doc-warning">
+                <p>
+                    <strong>Important:</strong> Save both payment preimages. 
+                    You'll need them for verification.
+                </p>
+            </div>
+        </section>
+        
+        <!-- Step 4: Verify -->
+        <section class="doc-section">
+            <h2>Step 4: Verify and Get Token</h2>
+            <p>
+                Submit the proof and payment preimages to receive an OIDC id_token.
+            </p>
+            
+            <h3>API Endpoint</h3>
+            <div class="doc-code">
+<pre><code>POST https://api.beta.privacy-lion.com/v1/login/verify
+Content-Type: application/json
+X-API-Key: your_api_key
+
+{
+    "proof": "base64_groth16_proof",
+    "public_outputs": {
+        "merkle_root": "0x...",
+        "npub": "npub1..."
+    },
+    "user_invoice": "lnbc100n1...",
+    "operator_invoice": "lnbc10n1...",
+    "preimage_hex": "user_payment_preimage",
+    "operator_preimage_hex": "operator_payment_preimage"
+}</code></pre>
+            </div>
+            
+            <h3>Response</h3>
+            <div class="doc-code">
+<pre><code>{
+    "id_token": "eyJhbGciOiJSUzI1NiIs...",
+    "token_type": "Bearer",
+    "expires_in": 3600
+}</code></pre>
+            </div>
+            
+            <h3>ID Token Claims</h3>
+            <table class="doc-table">
+                <tr>
+                    <th>Claim</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><span class="inline-code">sub</span></td>
+                    <td>User's npub (consistent per enterprise, unlinkable across enterprises)</td>
+                </tr>
+                <tr>
+                    <td><span class="inline-code">iss</span></td>
+                    <td>https://api.beta.privacy-lion.com</td>
+                </tr>
+                <tr>
+                    <td><span class="inline-code">aud</span></td>
+                    <td>Your client_id</td>
+                </tr>
+                <tr>
+                    <td><span class="inline-code">membership_root</span></td>
+                    <td>Merkle root user proved membership against</td>
+                </tr>
+                <tr>
+                    <td><span class="inline-code">payment_verified</span></td>
+                    <td>true (Lightning payment confirmed)</td>
+                </tr>
+            </table>
+        </section>
+        
+        <!-- Enrollment -->
+        <section class="doc-section">
+            <h2>User Enrollment</h2>
+            <p>
+                Before users can log in, they must be enrolled in your Merkle tree. 
+                Enrollment is a separate flow where you authorize a user to join 
+                your allowlist.
+            </p>
+            
+            <h3>Enrollment QR Format</h3>
+            <div class="doc-code">
+<pre><code>signedby://enroll/{client_id}/{nonce}?exp={unix_timestamp}</code></pre>
+            </div>
+            
+            <h3>Kind 28200: Enrollment Authorization</h3>
+            <p>
+                Before displaying the enrollment QR, you must publish a 
+                <strong>kind 28200</strong> event signed with your enterprise NOSTR key. 
+                This authorizes the enrollment session.
+            </p>
+            <div class="doc-code">
+<pre><code>{
+    "kind": 28200,
+    "pubkey": "your_enterprise_npub_hex",
+    "created_at": 1714089600,
+    "tags": [
+        ["nonce", "enrollment_nonce"],
+        ["c", "your_client_id"]
+    ],
+    "content": {
+        "client_id": "your_client_id",
+        "expires_at": "2026-04-19T12:00:00Z"
+    }
+}</code></pre>
+            </div>
+            
+            <div class="doc-note">
+                <p>
+                    <strong>NIP-05 Verification:</strong> Your enterprise NOSTR pubkey 
+                    should be published at <span class="inline-code">yourdomain.com/.well-known/nostr.json</span> 
+                    for user apps to verify authenticity.
+                </p>
+            </div>
+        </section>
+        
+        <!-- Security -->
+        <section class="doc-section">
+            <h2>Security Considerations</h2>
+            <ul>
+                <li>
+                    <strong>Nonce uniqueness:</strong> Generate a fresh nonce for each login. 
+                    Never reuse nonces.
+                </li>
+                <li>
+                    <strong>Session timeout:</strong> Nonces should expire after 5 minutes. 
+                    Stop listening after expiry.
+                </li>
+                <li>
+                    <strong>Verify the proof:</strong> Always submit to <span class="inline-code">/v1/login/verify</span>. 
+                    Don't trust the NOSTR event alone.
+                </li>
+                <li>
+                    <strong>HTTPS only:</strong> Never load SignedByMe integration over HTTP.
+                </li>
+                <li>
+                    <strong>Protect API keys:</strong> Keep your API key server-side. 
+                    Never expose in client code.
+                </li>
+            </ul>
+        </section>
+        
+        <!-- Support -->
+        <section class="doc-section">
+            <h2>Support</h2>
+            <p>
+                Questions? Issues?
+            </p>
+            <ul>
+                <li>Email: <a href="mailto:enterprise@privacy-lion.com">enterprise@privacy-lion.com</a></li>
+                <li>GitHub: <a href="https://github.com/PrivacyLion/SignedByMe/issues">Open an issue</a></li>
+            </ul>
+        </section>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-icon">⚡</span>
+                    <span class="logo-text">SignedByMe</span>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/PrivacyLion/SignedByMe">GitHub</a>
+                    <a href="./">Documentation</a>
+                    <a href="mailto:contact@privacy-lion.com">Contact</a>
+                </div>
+            </div>
+            <p class="footer-legal">
+                © 2026 Privacy Lion. SignedByMe™ patent pending.
+            </p>
+        </div>
+    </footer>
+</body>
+</html>
