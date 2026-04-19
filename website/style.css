@@ -191,6 +191,7 @@ code {
 
 .hero h1 {
     margin-bottom: var(--space-lg);
+    white-space: nowrap;
 }
 
 .hero .highlight {
@@ -750,6 +751,13 @@ code {
 }
 
 /* Responsive */
+@media (max-width: 900px) {
+    .hero h1 {
+        white-space: normal;
+        font-size: clamp(1.75rem, 4vw, 2.5rem);
+    }
+}
+
 @media (max-width: 768px) {
     .nav-links {
         display: none; /* TODO: Add mobile menu */
@@ -757,10 +765,6 @@ code {
     
     .hero {
         text-align: center;
-    }
-    
-    .hero-cta {
-        justify-content: center;
     }
     
     .hero-subtitle {
