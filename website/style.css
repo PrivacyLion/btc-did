@@ -1384,3 +1384,22 @@ code {
     color: var(--text-muted);
     margin: 0;
 }
+
+/* Price Hero */
+.price-hero {
+    text-align: center;
+    margin-bottom: var(--space-lg);
+}
+
+.price-amount {
+    font-size: 5rem;
+    font-weight: 700;
+    color: var(--primary);
+    line-height: 1;
+}
+
+.price-period {
+    font-size: 1.25rem;
+    color: var(--text-muted);
+    margin-top: var(--space-sm);
+}
