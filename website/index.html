@@ -18,6 +18,7 @@
                 <a href="#how-it-works">How It Works</a>
                 <a href="#for-humans">For Humans</a>
                 <a href="#for-agents">For Agents</a>
+                <a href="#for-enterprises">For Enterprises</a>
                 <a href="#demo">Live Demo</a>
                 <a href="#download" class="nav-cta">Download SDK</a>
             </div>
@@ -33,134 +34,141 @@
 
     <!-- What Is SignedByMe -->
     <section id="how-it-works" class="section">
-        <div class="container content-flow">
+        <div class="container">
             <h2>What is SignedByMe?</h2>
-            
-            <p class="lead">
+            <p class="section-intro">
                 <strong>SignedByMe: human-controlled identity for autonomous agents.</strong>
             </p>
-            <p>
-                Agents are flooding the internet with borrowed credentials, escalated privileges 
-                and no way to cryptographically log in with their own identity. The result: 
-                every agent becomes a threat.
-            </p>
-            <p>
-                <strong>SignedByMe fixes this by delivering human cryptographic control through 
-                a human-signed delegation event.</strong>
-            </p>
+            
+            <div class="intro-text">
+                <p>
+                    Agents are flooding the internet with borrowed credentials, escalated privileges 
+                    and no way to cryptographically log in with their own identity. The result: 
+                    every agent becomes a threat.
+                </p>
+                <p>
+                    <strong>SignedByMe fixes this by delivering human cryptographic control through 
+                    a human-signed delegation event.</strong>
+                </p>
+            </div>
             
             <h3>Built on Three Cryptographic Pillars</h3>
-            <p>SignedByMe is built on three unchangeable foundations:</p>
+            <p class="subsection-intro">SignedByMe is built on three unchangeable foundations:</p>
             
-            <div class="pillar-flow">
-                <div class="pillar-item">
-                    <strong>Self-Signing Identity</strong>
+            <div class="pillars-grid">
+                <div class="pillar-card">
+                    <h4>Self-Signing Identity</h4>
                     <p>
                         Every agent has a cryptographic identity created in secure storage. 
                         The key never leaves the agent. No certificate authority. No enterprise control. 
                         Only the human owner can revoke.
-                        <span class="technical">(<a href="https://github.com/PrivacyLion/SignedByMe#self-signing-identity" class="code-link">View in code →</a>)</span>
                     </p>
+                    <a href="https://github.com/PrivacyLion/SignedByMe#self-signing-identity" class="pillar-link">View in code →</a>
                 </div>
                 
-                <div class="pillar-item">
-                    <strong>Zero-Knowledge Membership Proof</strong>
+                <div class="pillar-card">
+                    <h4>Zero-Knowledge Membership Proof</h4>
                     <p>
                         The agent proves it belongs to an authorized group without revealing 
                         which agent it is. Enterprise gets a boolean: authorized or not. 
                         No identity revealed.
-                        <span class="technical">(<a href="https://github.com/PrivacyLion/SignedByMe#zero-knowledge-proof" class="code-link">View in code →</a>)</span>
                     </p>
+                    <a href="https://github.com/PrivacyLion/SignedByMe#zero-knowledge-proof" class="pillar-link">View in code →</a>
                 </div>
                 
-                <div class="pillar-item">
-                    <strong>Bitcoin-Backed Economic Proof</strong>
+                <div class="pillar-card">
+                    <h4>Bitcoin-Backed Economic Proof</h4>
                     <p>
                         Real Bitcoin payment required to create each agent identity. 
                         Economic commitment and cryptographic identity are fused together. 
                         Cannot create agent identities without paying real Bitcoin.
-                        <span class="technical">(<a href="https://github.com/PrivacyLion/SignedByMe#bitcoin-proof" class="code-link">View in code →</a>)</span>
                     </p>
+                    <a href="https://github.com/PrivacyLion/SignedByMe#bitcoin-proof" class="pillar-link">View in code →</a>
                 </div>
             </div>
             
             <h3>Delivering Five Security Guarantees</h3>
-            <p>These foundations enable five layers of protection:</p>
+            <p class="subsection-intro">These foundations enable five layers of protection:</p>
             
-            <table class="layers-table">
-                <thead>
-                    <tr>
-                        <th>Guarantee</th>
-                        <th>What It Prevents</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>Agent cannot fake identity</strong></td>
-                        <td>Agent's public key is a mathematical output of the ZK proof, not a claim. Faking requires breaking the proof system.</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Agent cannot exceed permissions</strong></td>
-                        <td>Human owner digitally signs what the agent is authorized to do. Agent cannot claim broader access than granted.</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Human keeps instant kill switch</strong></td>
-                        <td>Human publishes a revocation event to instantly lock out the agent. No IT tickets. Cryptographic revocation in seconds.</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Enterprise controls access boundaries</strong></td>
-                        <td>Agent can only authenticate where it was enrolled. Cannot self-enroll or access unapproved services.</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Fully auditable without trust</strong></td>
-                        <td>Complete trail on public NOSTR relays. Security teams verify independently.</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="guarantees-grid">
+                <div class="guarantee-card">
+                    <h4>Agent cannot fake identity</h4>
+                    <p>Agent's public key is a mathematical output of the ZK proof, not a claim. Faking requires breaking the proof system.</p>
+                </div>
+                <div class="guarantee-card">
+                    <h4>Agent cannot exceed permissions</h4>
+                    <p>Human owner digitally signs what the agent is authorized to do. Agent cannot claim broader access than granted.</p>
+                </div>
+                <div class="guarantee-card">
+                    <h4>Human keeps instant kill switch</h4>
+                    <p>Human publishes a revocation event to instantly lock out the agent. No IT tickets. Cryptographic revocation in seconds.</p>
+                </div>
+                <div class="guarantee-card">
+                    <h4>Enterprise controls access boundaries</h4>
+                    <p>Agent can only authenticate where it was enrolled. Cannot self-enroll or access unapproved services.</p>
+                </div>
+                <div class="guarantee-card">
+                    <h4>Fully auditable without trust</h4>
+                    <p>Complete trail on public NOSTR relays. Security teams verify independently.</p>
+                </div>
+            </div>
             
             <h3>The Result</h3>
-            <p>SignedByMe delivers enterprise-grade identity management without the enterprise overhead:</p>
+            <p class="subsection-intro">SignedByMe delivers enterprise-grade identity management without the enterprise overhead:</p>
             
-            <p>
-                <strong>For Enterprises:</strong> Drop-in OIDC-compatible authentication. No new infrastructure. 
-                No user management. No password policies. Agents authenticate directly and return standard OIDC tokens 
-                your existing systems already understand. Your IAM policies work unchanged. SignedByMe just handles 
-                the "who is this agent?" question cryptographically.
-            </p>
+            <div class="result-cards">
+                <div class="result-card">
+                    <h4>For Enterprises</h4>
+                    <p>
+                        Drop-in OIDC-compatible authentication. No new infrastructure. 
+                        No user management. No password policies. Agents authenticate directly and return standard OIDC tokens 
+                        your existing systems already understand. Your IAM policies work unchanged. SignedByMe just handles 
+                        the "who is this agent?" question cryptographically.
+                    </p>
+                </div>
+                
+                <div class="result-card">
+                    <h4>For Humans</h4>
+                    <p>
+                        Complete cryptographic control over agent behavior. Grant specific permissions. 
+                        Revoke instantly from anywhere. No IT tickets. No admin approval. Your cryptographic signature is the 
+                        only authority that matters.
+                    </p>
+                </div>
+                
+                <div class="result-card">
+                    <h4>For Agents</h4>
+                    <p>
+                        Real cryptographic identity that can't be borrowed, shared, or faked. 
+                        Authenticate independently without depending on human credentials or shared service accounts.
+                    </p>
+                </div>
+            </div>
             
-            <p>
-                <strong>For Humans:</strong> Complete cryptographic control over agent behavior. Grant specific permissions. 
-                Revoke instantly from anywhere. No IT tickets. No admin approval. Your cryptographic signature is the 
-                only authority that matters.
-            </p>
-            
-            <p>
-                <strong>For Agents:</strong> Real cryptographic identity that can't be borrowed, shared, or faked. 
-                Authenticate independently without depending on human credentials or shared service accounts.
-            </p>
-            
-            <h3>The Mathematical Guarantee</h3>
-            <p>
-                Every SignedByMe agent identity was born from a real Bitcoin Lightning payment. 
-                The economic commitment is fused into the cryptographic identity at creation, 
-                unforgeable without simultaneously breaking SHA-256, Groth16, and secp256k1.
-            </p>
-            <p>
-                This isn't just authentication. It's mathematical proof backed by the same 
-                foundations that secure the Bitcoin network.
-            </p>
-            <p>
-                The human's cryptographic signature creates the agent's authorization and 
-                maintains ultimate control. Every permission, every access grant, every 
-                revocation flows from human cryptographic authority.
-            </p>
-            <p>
-                When an agent presents an OIDC token from SignedByMe, you're not trusting 
-                a policy or a promise. You're trusting mathematics anchored to human control.
-            </p>
-            <p class="emphasis">
-                <strong>Not a policy promise. A mathematical guarantee.</strong>
-            </p>
+            <div class="guarantee-banner">
+                <h3>The Mathematical Guarantee</h3>
+                <p>
+                    Every SignedByMe agent identity was born from a real Bitcoin Lightning payment. 
+                    The economic commitment is fused into the cryptographic identity at creation, 
+                    unforgeable without simultaneously breaking SHA-256, Groth16, and secp256k1.
+                </p>
+                <p>
+                    This isn't just authentication. It's mathematical proof backed by the same 
+                    foundations that secure the Bitcoin network.
+                </p>
+                <p>
+                    The human's cryptographic signature creates the agent's authorization and 
+                    maintains ultimate control. Every permission, every access grant, every 
+                    revocation flows from human cryptographic authority.
+                </p>
+                <p>
+                    When an agent presents an OIDC token from SignedByMe, you're not trusting 
+                    a policy or a promise. You're trusting mathematics anchored to human control.
+                </p>
+                <p class="guarantee-tagline">
+                    <strong>Not a policy promise. A mathematical guarantee.</strong>
+                </p>
+            </div>
         </div>
     </section>
 
@@ -170,52 +178,40 @@
             <h2>For Humans</h2>
             <p class="section-intro">
                 Your AI agent needs cryptographic identity to act on your behalf. 
-                SignedByMe puts you in control: you create the identity, you delegate 
+                SignedByMe puts you in control: you sign the delegation, you set 
                 the permissions, you hold the kill switch.
             </p>
             
             <div class="steps">
                 <div class="step">
                     <div class="step-number">1</div>
-                    <h3>Create Your Identity</h3>
+                    <h3>Have NOSTR Keys</h3>
                     <p>
-                        Download SignedByMe on your phone. The app generates your DID 
-                        (Decentralized Identifier) in hardware-backed secure storage. 
-                        Your key never leaves your device. You also set up a Lightning wallet 
-                        to receive payments when your agent authenticates.
+                        Use any NOSTR client — Damus, Primal, Amethyst, Nostrudel, or generate 
+                        a keypair directly. Your npub is your public identity. Your nsec is 
+                        your signing key. If you're already on NOSTR, you're ready.
                     </p>
                 </div>
                 <div class="step">
                     <div class="step-number">2</div>
                     <h3>Delegate to Your Agent</h3>
                     <p>
-                        Sign a delegation event (NOSTR kind 28200) that authorizes your agent 
-                        to authenticate on your behalf. You specify exactly what permissions 
-                        the agent has and which enterprises it can access. Your cryptographic 
-                        signature is the only authority that matters.
+                        Sign a delegation event (NOSTR kind 28200) that authorizes your agent's 
+                        npub. You specify exactly what permissions the agent has and which 
+                        enterprises it can access. Your cryptographic signature is the 
+                        authorization — no central authority involved.
                     </p>
                 </div>
                 <div class="step">
                     <div class="step-number">3</div>
                     <h3>Stay in Control</h3>
                     <p>
-                        Monitor your agent's activity on the NOSTR audit trail. 
-                        Revoke access instantly by publishing a revocation event — 
-                        no IT tickets, no waiting. Your agent earns sats every time 
-                        it authenticates, and those payments flow to your wallet.
+                        Monitor your agent's activity on the NOSTR audit trail — every 
+                        authentication is a signed event you can verify. Revoke access 
+                        instantly by publishing a revocation event. No IT tickets, no 
+                        waiting. Cryptographic revocation in seconds.
                     </p>
                 </div>
-            </div>
-            
-            <div class="download-apps">
-                <p style="margin-top: 32px; text-align: center;">
-                    <a href="#" class="btn btn-secondary" style="margin-right: 12px;">
-                        📱 Android (Coming Soon)
-                    </a>
-                    <a href="#" class="btn btn-secondary">
-                        🍎 iOS (Coming Soon)
-                    </a>
-                </p>
             </div>
         </div>
     </section>

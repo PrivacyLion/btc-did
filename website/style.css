@@ -1021,3 +1021,164 @@ code {
     color: var(--text-muted);
     font-size: 0.85rem;
 }
+
+/* What is SignedByMe - Restyled */
+.intro-text {
+    max-width: 800px;
+    margin-bottom: var(--space-xl);
+}
+
+.intro-text p {
+    font-size: 1.1rem;
+    line-height: 1.8;
+    margin-bottom: var(--space-md);
+}
+
+.intro-text strong {
+    color: var(--text);
+}
+
+.subsection-intro {
+    color: var(--text-secondary);
+    margin-bottom: var(--space-lg);
+    font-size: 1.05rem;
+}
+
+/* Pillars Grid */
+.pillars-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-lg);
+    margin-bottom: var(--space-xl);
+}
+
+@media (max-width: 900px) {
+    .pillars-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.pillar-card {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: var(--space-lg);
+    transition: border-color 0.2s;
+}
+
+.pillar-card:hover {
+    border-color: var(--primary);
+}
+
+.pillar-card h4 {
+    color: var(--primary-light);
+    font-size: 1.1rem;
+    margin-bottom: var(--space-md);
+}
+
+.pillar-card p {
+    font-size: 0.95rem;
+    line-height: 1.7;
+    margin-bottom: var(--space-md);
+}
+
+.pillar-link {
+    font-size: 0.85rem;
+    color: var(--primary);
+    display: inline-block;
+}
+
+.pillar-link:hover {
+    color: var(--primary-light);
+}
+
+/* Guarantees Grid */
+.guarantees-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-md);
+    margin-bottom: var(--space-xl);
+}
+
+.guarantee-card {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: var(--space-md);
+}
+
+.guarantee-card h4 {
+    color: var(--text);
+    font-size: 1rem;
+    margin-bottom: var(--space-sm);
+}
+
+.guarantee-card p {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* Result Cards */
+.result-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-lg);
+    margin-bottom: var(--space-xl);
+}
+
+@media (max-width: 900px) {
+    .result-cards {
+        grid-template-columns: 1fr;
+    }
+}
+
+.result-card {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: var(--space-lg);
+}
+
+.result-card h4 {
+    color: var(--primary-light);
+    font-size: 1.1rem;
+    margin-bottom: var(--space-md);
+}
+
+.result-card p {
+    font-size: 0.95rem;
+    line-height: 1.7;
+    margin: 0;
+}
+
+/* Guarantee Banner */
+.guarantee-banner {
+    background: linear-gradient(135deg, #18181B 0%, #27272A 100%);
+    border: 1px solid var(--primary);
+    border-radius: 16px;
+    padding: var(--space-xl);
+    text-align: center;
+}
+
+.guarantee-banner h3 {
+    color: var(--primary);
+    font-size: 1.5rem;
+    margin-bottom: var(--space-lg);
+}
+
+.guarantee-banner p {
+    color: var(--text-secondary);
+    font-size: 1.05rem;
+    line-height: 1.8;
+    max-width: 700px;
+    margin: 0 auto var(--space-md);
+}
+
+.guarantee-tagline {
+    font-size: 1.25rem !important;
+    color: var(--text) !important;
+    margin-top: var(--space-lg) !important;
+    padding-top: var(--space-lg);
+    border-top: 1px solid var(--primary);
+}
