@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignedByMe — Identity Layer for Autonomous Agents</title>
+    <title>SignedByMe: Identity for Autonomous Agents</title>
     <meta name="description" content="Cryptographic identity for AI agents. Zero-knowledge proofs. Bitcoin-backed. Human kill switch.">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -12,7 +12,6 @@
     <nav class="nav">
         <div class="nav-container">
             <a href="#" class="nav-logo">
-                <span class="logo-icon">⚡</span>
                 <span class="logo-text">SignedByMe</span>
             </a>
             <div class="nav-links">
@@ -28,11 +27,7 @@
     <!-- Hero Section -->
     <section class="hero">
         <div class="container">
-            <h1>SignedByMe is the identity layer for <span class="highlight">autonomous agents.</span></h1>
-            <div class="hero-cta">
-                <a href="#demo" class="btn btn-primary">Try the Demo</a>
-                <a href="#how-it-works" class="btn btn-secondary">Learn More</a>
-            </div>
+            <h1>SignedByMe: identity for <span class="highlight">autonomous agents.</span></h1>
         </div>
     </section>
 
@@ -42,7 +37,7 @@
             <h2>What is SignedByMe?</h2>
             
             <p class="lead">
-                <strong>SignedByMe is the identity layer for autonomous agents.</strong>
+                <strong>SignedByMe: identity for autonomous agents.</strong>
             </p>
             <p>
                 Agents are flooding the internet with borrowed credentials, escalated privileges 
@@ -59,7 +54,6 @@
             
             <div class="pillar-flow">
                 <div class="pillar-item">
-                    <span class="pillar-icon">🔐</span>
                     <strong>Self-Signing Identity</strong>
                     <p>
                         Every agent has a cryptographic identity created in secure storage. 
@@ -69,7 +63,6 @@
                 </div>
                 
                 <div class="pillar-item">
-                    <span class="pillar-icon">🛡️</span>
                     <strong>Zero-Knowledge Membership Proof</strong>
                     <p>
                         The agent proves it belongs to an authorized group without revealing 
@@ -79,7 +72,6 @@
                 </div>
                 
                 <div class="pillar-item">
-                    <span class="pillar-icon">⚡</span>
                     <strong>Bitcoin-Backed Economic Proof</strong>
                     <p>
                         Real Bitcoin payment required to create each agent identity. 
@@ -129,7 +121,7 @@
             <p>
                 <strong>For Enterprises:</strong> Drop-in OIDC-compatible authentication. No new infrastructure. 
                 No user management. No password policies. Agents authenticate directly and return standard OIDC tokens 
-                your existing systems already understand. Your IAM policies work unchanged — SignedByMe just handles 
+                your existing systems already understand. Your IAM policies work unchanged. SignedByMe just handles 
                 the "who is this agent?" question cryptographically.
             </p>
             
@@ -147,7 +139,7 @@
             <h3>The Mathematical Guarantee</h3>
             <p>
                 Every SignedByMe agent identity was born from a real Bitcoin Lightning payment. 
-                The economic commitment is fused into the cryptographic identity at creation — 
+                The economic commitment is fused into the cryptographic identity at creation, 
                 unforgeable without simultaneously breaking SHA-256, Groth16 over BN254 with 
                 ~101,000 constraints, and secp256k1.
             </p>
@@ -157,7 +149,7 @@
             </p>
             <p>
                 When an agent presents an OIDC token from SignedByMe, you're not trusting 
-                a policy or a promise — you're trusting mathematics.
+                a policy or a promise. You're trusting mathematics.
             </p>
             <p class="emphasis">
                 <strong>Not a policy promise. A mathematical guarantee.</strong>
@@ -172,7 +164,7 @@
             <p class="section-intro">
                 Your AI agent needs to prove it's acting on your behalf. 
                 SignedByMe gives your agent a cryptographic credential 
-                that enterprises can verify — without exposing your identity.
+                that enterprises can verify without exposing your identity.
             </p>
             
             <div class="steps">
@@ -322,7 +314,7 @@ let token = client.login(LoginRequest {
         <div class="container">
             <h2>Live Demo</h2>
             <p class="section-intro">
-                See SignedByMe in action. This demo runs on real infrastructure — 
+                See SignedByMe in action. This demo runs on real infrastructure: 
                 real NOSTR relay, real Lightning, real Groth16 proofs.
             </p>
             
@@ -345,7 +337,6 @@ let token = client.login(LoginRequest {
         <div class="container">
             <div class="footer-content">
                 <div class="footer-brand">
-                    <span class="logo-icon">⚡</span>
                     <span class="logo-text">SignedByMe</span>
                 </div>
                 <div class="footer-links">
