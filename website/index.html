@@ -187,106 +187,100 @@
                 the permissions, you hold the kill switch.
             </p>
             
-            <div class="steps-grid">
-                <div class="step-card">
-                    <div class="step-card-header">
-                        <span class="step-badge">1</span>
+            <div class="steps-stack">
+                <div class="step-panel">
+                    <div class="step-panel-header">
+                        <span class="step-num">1</span>
                         <h3>Get Your NOSTR Keys</h3>
                     </div>
-                    <div class="step-card-body">
-                        <p><strong>Download a client:</strong></p>
-                        <div class="platform-links">
-                            <span><strong>iOS:</strong> <a href="https://apps.apple.com/app/damus/id1628663131">Damus</a>, <a href="https://apps.apple.com/app/primal/id1673134518">Primal</a></span>
-                            <span><strong>Android:</strong> <a href="https://play.google.com/store/apps/details?id=com.vitorpamplona.amethyst">Amethyst</a>, <a href="https://play.google.com/store/apps/details?id=net.primal.android">Primal</a></span>
-                            <span><strong>Web:</strong> <a href="https://nostrudel.ninja">nostrudel.ninja</a></span>
-                        </div>
-                        <div class="key-explainer">
-                            <div><code>npub</code> = public identity (share freely)</div>
-                            <div><code>nsec</code> = signing key (NEVER share)</div>
-                        </div>
-                        <p class="step-note">Back up your nsec in a password manager. Lose it = lose your identity forever.</p>
-                        <p class="step-note">Optional: <a href="https://nostr.how/en/guides/get-verified">NIP-05 verification</a> at your domain.</p>
+                    <div class="step-panel-content">
+                        <p><strong>Download a client:</strong> 
+                            <span class="inline-links">
+                                <strong>iOS:</strong> <a href="https://apps.apple.com/app/damus/id1628663131">Damus</a>, <a href="https://apps.apple.com/app/primal/id1673134518">Primal</a> · 
+                                <strong>Android:</strong> <a href="https://play.google.com/store/apps/details?id=com.vitorpamplona.amethyst">Amethyst</a>, <a href="https://play.google.com/store/apps/details?id=net.primal.android">Primal</a> · 
+                                <strong>Web:</strong> <a href="https://nostrudel.ninja">nostrudel.ninja</a>
+                            </span>
+                        </p>
+                        <p><code>npub</code> = public identity (share freely) · <code>nsec</code> = signing key (NEVER share)</p>
+                        <p>Back up your nsec in a password manager. Lose it = lose your identity forever.</p>
+                        <p>Optional: <a href="https://nostr.how/en/guides/get-verified">NIP-05 verification</a> at your domain.</p>
                     </div>
                 </div>
                 
-                <div class="step-card">
-                    <div class="step-card-header">
-                        <span class="step-badge">2</span>
+                <div class="step-panel">
+                    <div class="step-panel-header">
+                        <span class="step-num">2</span>
                         <h3>Set Up Your Agent</h3>
                     </div>
-                    <div class="step-card-body">
-                        <p><strong>Install SDK:</strong></p>
-                        <div class="sdk-options">
-                            <code>cargo add signedby-sdk</code>
-                            <code>pip install signedby</code>
+                    <div class="step-panel-content">
+                        <p><strong>Install SDK:</strong> 
+                            <code>cargo add signedby-sdk</code> · 
+                            <code>pip install signedby</code> · 
                             <code>npm install @signedby/sdk</code>
-                        </div>
-                        <p><strong>Initialize:</strong></p>
+                        </p>
+                        <div class="code-row">
+                            <div class="code-block">
+                                <p class="code-label">Initialize:</p>
 <pre><code>agent = SignedByAgent.init("./agent_data")
 print(agent.npub)</code></pre>
-                        <p><strong>Map emails:</strong></p>
+                            </div>
+                            <div class="code-block">
+                                <p class="code-label">Map emails:</p>
 <pre><code>agent.set_email_mapping({
   "amazon.com": "you@gmail.com"
 })</code></pre>
-                    </div>
-                </div>
-                
-                <div class="step-card step-card-wide">
-                    <div class="step-card-header">
-                        <span class="step-badge">3</span>
-                        <h3>Genesis Flow</h3>
-                        <span class="step-tag">Runs once per enterprise</span>
-                    </div>
-                    <div class="step-card-body">
-                        <div class="gates-row">
-                            <div class="gate-mini">
-                                <div class="gate-mini-header">
-                                    <span class="gate-badge">1</span>
-                                    <strong>Email Match</strong>
-                                </div>
-                                <p>Log into enterprise, click "Authorize an Agent." Agent responds with email + npub.</p>
-                                <div class="your-role">You: Click "Authorize"</div>
-                            </div>
-                            <div class="gate-mini">
-                                <div class="gate-mini-header">
-                                    <span class="gate-badge">2</span>
-                                    <strong>Cryptographic Consent</strong>
-                                </div>
-                                <p>Agent notifies you. Sign kind 28250 delegation with your NOSTR client.</p>
-                                <div class="your-role">You: Sign with nsec</div>
-                            </div>
-                            <div class="gate-mini">
-                                <div class="gate-mini-header">
-                                    <span class="gate-badge">3</span>
-                                    <strong>ZK Enrollment</strong>
-                                </div>
-                                <p>Agent calls <code>enroll/commit</code>. Server verifies. Leaf added to Merkle tree.</p>
-                                <div class="your-role">You: Nothing</div>
                             </div>
                         </div>
                     </div>
                 </div>
                 
-                <div class="step-card step-card-wide">
-                    <div class="step-card-header">
-                        <span class="step-badge">4</span>
+                <div class="step-panel">
+                    <div class="step-panel-header">
+                        <span class="step-num">3</span>
+                        <h3>Genesis Flow</h3>
+                        <span class="step-subtitle">Runs once per enterprise</span>
+                    </div>
+                    <div class="step-panel-content">
+                        <div class="gates-horizontal">
+                            <div class="gate-col">
+                                <div class="gate-head"><span class="gate-num">1</span> Email Match</div>
+                                <p>Log into enterprise, click "Authorize an Agent." Agent responds with email + npub.</p>
+                                <p class="you-do"><strong>You:</strong> Click "Authorize"</p>
+                            </div>
+                            <div class="gate-col">
+                                <div class="gate-head"><span class="gate-num">2</span> Cryptographic Consent</div>
+                                <p>Agent notifies you. Sign kind 28250 delegation with your NOSTR client.</p>
+                                <p class="you-do"><strong>You:</strong> Sign with nsec</p>
+                            </div>
+                            <div class="gate-col">
+                                <div class="gate-head"><span class="gate-num">3</span> ZK Enrollment</div>
+                                <p>Agent calls <code>enroll/commit</code>. Server verifies. Leaf added to Merkle tree.</p>
+                                <p class="you-do"><strong>You:</strong> Nothing</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="step-panel">
+                    <div class="step-panel-header">
+                        <span class="step-num">4</span>
                         <h3>Stay in Control</h3>
                     </div>
-                    <div class="step-card-body">
-                        <div class="control-grid">
-                            <div class="control-item">
+                    <div class="step-panel-content">
+                        <div class="control-row">
+                            <div class="control-col">
                                 <strong>Monitor</strong>
                                 <p>Subscribe to agent's npub. Watch kinds 28101, 28102, 28103.</p>
                             </div>
-                            <div class="control-item">
+                            <div class="control-col">
                                 <strong>Revoke</strong>
                                 <p>Publish kind 28251 with <code>delegation_id</code>. Instant lockout.</p>
                             </div>
-                            <div class="control-item">
+                            <div class="control-col">
                                 <strong>Renew</strong>
                                 <p>New kind 28250 before expiry. No re-enrollment.</p>
                             </div>
-                            <div class="control-item">
+                            <div class="control-col">
                                 <strong>Pay</strong>
                                 <p>Monthly BTC via Lightning. Preimage binds to DID.</p>
                             </div>

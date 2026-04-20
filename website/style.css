@@ -1426,239 +1426,211 @@ code {
     color: var(--primary-light);
 }
 
-/* Steps Grid - 2x2 layout */
-.steps-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+/* Steps Stack - vertical full-width cards */
+.steps-stack {
+    display: flex;
+    flex-direction: column;
     gap: var(--space-lg);
 }
 
-@media (max-width: 900px) {
-    .steps-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-.step-card {
+.step-panel {
     background: var(--bg-secondary);
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
     overflow: hidden;
 }
 
-.step-card-wide {
-    grid-column: span 2;
-}
-
-@media (max-width: 900px) {
-    .step-card-wide {
-        grid-column: span 1;
-    }
-}
-
-.step-card-header {
+.step-panel-header {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-md);
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
     border-bottom: 1px solid var(--border-color);
-    background: rgba(139, 92, 246, 0.05);
 }
 
-.step-card-header h3 {
+.step-panel-header h3 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 1.25rem;
 }
 
-.step-badge {
+.step-num {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     background: var(--primary);
     color: var(--bg-primary);
     border-radius: 50%;
     font-weight: 700;
-    font-size: 0.9rem;
+    font-size: 1.1rem;
     flex-shrink: 0;
 }
 
-.step-tag {
+.step-subtitle {
     margin-left: auto;
-    font-size: 0.8rem;
+    font-size: 0.9rem;
     color: var(--text-muted);
     font-style: italic;
 }
 
-.step-card-body {
-    padding: var(--space-md);
+.step-panel-content {
+    padding: var(--space-lg);
 }
 
-.step-card-body p {
-    margin: var(--space-xs) 0;
+.step-panel-content p {
+    margin: 0 0 var(--space-sm) 0;
+    line-height: 1.7;
 }
 
-.step-card-body code {
+.step-panel-content p:last-child {
+    margin-bottom: 0;
+}
+
+.step-panel-content code {
     background: var(--bg-primary);
-    padding: 0.1rem 0.4rem;
+    padding: 0.15rem 0.5rem;
     border-radius: 4px;
     font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-    font-size: 0.85em;
+    font-size: 0.9em;
 }
 
-.step-card-body pre {
-    background: var(--bg-primary);
-    padding: var(--space-sm);
-    border-radius: var(--radius-sm);
-    overflow-x: auto;
-    margin: var(--space-sm) 0;
-    font-size: 0.85em;
-}
-
-.step-card-body pre code {
-    background: none;
-    padding: 0;
-}
-
-.step-card-body a {
+.step-panel-content a {
     color: var(--primary);
 }
 
-.step-card-body a:hover {
+.step-panel-content a:hover {
     color: var(--primary-light);
 }
 
-/* Platform links row */
-.platform-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-sm) var(--space-lg);
-    margin: var(--space-sm) 0;
+.inline-links {
+    color: var(--text-secondary);
 }
 
-/* Key explainer */
-.key-explainer {
-    display: flex;
-    gap: var(--space-lg);
-    margin: var(--space-sm) 0;
-    padding: var(--space-sm);
-    background: var(--bg-primary);
-    border-radius: var(--radius-sm);
-}
-
-@media (max-width: 500px) {
-    .key-explainer {
-        flex-direction: column;
-        gap: var(--space-xs);
-    }
-}
-
-/* SDK options */
-.sdk-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
-    margin: var(--space-sm) 0;
-}
-
-.sdk-options code {
-    display: inline-block;
-}
-
-.step-note {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-}
-
-/* Genesis gates - horizontal row */
-.gates-row {
+/* Code blocks side by side */
+.code-row {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-md);
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+    margin-top: var(--space-md);
 }
 
-@media (max-width: 768px) {
-    .gates-row {
+@media (max-width: 700px) {
+    .code-row {
         grid-template-columns: 1fr;
     }
 }
 
-.gate-mini {
+.code-block .code-label {
+    margin: 0 0 var(--space-xs) 0;
+    font-weight: 600;
+}
+
+.code-block pre {
+    background: var(--bg-primary);
+    padding: var(--space-md);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    margin: 0;
+    font-size: 0.9em;
+}
+
+.code-block pre code {
+    background: none;
+    padding: 0;
+}
+
+/* Genesis gates - horizontal */
+.gates-horizontal {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-lg);
+}
+
+@media (max-width: 800px) {
+    .gates-horizontal {
+        grid-template-columns: 1fr;
+    }
+}
+
+.gate-col {
     background: var(--bg-primary);
     border-radius: var(--radius-sm);
     padding: var(--space-md);
     border-top: 3px solid var(--primary);
 }
 
-.gate-mini-header {
+.gate-head {
+    font-weight: 600;
+    font-size: 1.05rem;
+    margin-bottom: var(--space-sm);
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    margin-bottom: var(--space-sm);
 }
 
-.gate-badge {
-    display: flex;
+.gate-num {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     background: var(--primary);
     color: var(--bg-primary);
     border-radius: 50%;
     font-weight: 700;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     flex-shrink: 0;
 }
 
-.gate-mini p {
-    font-size: 0.9rem;
+.gate-col p {
+    font-size: 0.95rem;
     color: var(--text-secondary);
-    margin: 0;
+    margin: 0 0 var(--space-sm) 0;
 }
 
-.your-role {
+.you-do {
     margin-top: var(--space-sm);
     padding-top: var(--space-sm);
     border-top: 1px solid var(--border-color);
-    font-size: 0.85rem;
     color: var(--primary-light);
+    font-size: 0.9rem;
 }
 
-/* Control grid */
-.control-grid {
+/* Control row - 4 columns */
+.control-row {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: var(--space-md);
 }
 
-@media (max-width: 768px) {
-    .control-grid {
+@media (max-width: 800px) {
+    .control-row {
         grid-template-columns: repeat(2, 1fr);
     }
 }
 
 @media (max-width: 500px) {
-    .control-grid {
+    .control-row {
         grid-template-columns: 1fr;
     }
 }
 
-.control-item {
+.control-col {
     background: var(--bg-primary);
     padding: var(--space-md);
     border-radius: var(--radius-sm);
     border-left: 3px solid var(--primary);
 }
 
-.control-item strong {
+.control-col strong {
     display: block;
     margin-bottom: var(--space-xs);
     color: var(--text-primary);
+    font-size: 1rem;
 }
 
-.control-item p {
+.control-col p {
     margin: 0;
     font-size: 0.9rem;
     color: var(--text-secondary);
