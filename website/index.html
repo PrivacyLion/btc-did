@@ -95,22 +95,27 @@
                 <div class="guarantee-card">
                     <h4>Agent cannot fake identity</h4>
                     <p>Agent's public key is a mathematical output of the ZK proof, not a claim. Faking requires breaking the proof system.</p>
+                    <a href="https://github.com/PrivacyLion/SignedByMe/blob/main/circuits/membership.circom" class="pillar-link">Don't trust, verify →</a>
                 </div>
                 <div class="guarantee-card">
                     <h4>Agent cannot exceed permissions</h4>
                     <p>Human owner digitally signs what the agent is authorized to do. Agent cannot claim broader access than granted.</p>
+                    <a href="https://github.com/PrivacyLion/SignedByMe/blob/main/app/routes/enroll.py" class="pillar-link">Don't trust, verify →</a>
                 </div>
                 <div class="guarantee-card">
                     <h4>Human keeps instant kill switch</h4>
                     <p>Human publishes a revocation event to instantly lock out the agent. No IT tickets. Cryptographic revocation in seconds.</p>
+                    <a href="https://github.com/PrivacyLion/SignedByMe/blob/main/app/lib/nostr.py" class="pillar-link">Don't trust, verify →</a>
                 </div>
                 <div class="guarantee-card">
                     <h4>Enterprise controls access boundaries</h4>
                     <p>Agent can only authenticate where it was enrolled. Cannot self-enroll or access unapproved services.</p>
+                    <a href="https://github.com/PrivacyLion/SignedByMe/blob/main/app/routes/enroll.py" class="pillar-link">Don't trust, verify →</a>
                 </div>
                 <div class="guarantee-card">
                     <h4>Fully auditable without trust</h4>
                     <p>Complete trail on public NOSTR relays. Security teams verify independently.</p>
+                    <a href="https://github.com/PrivacyLion/SignedByMe/blob/main/app/lib/nostr.py" class="pillar-link">Don't trust, verify →</a>
                 </div>
             </div>
             
@@ -118,16 +123,6 @@
             <p class="subsection-intro"><span class="brand-name">SignedByMe</span> delivers enterprise-grade identity management without the enterprise overhead:</p>
             
             <div class="result-cards">
-                <div class="result-card">
-                    <h4>For Enterprises</h4>
-                    <p>
-                        Drop-in OIDC-compatible authentication. No new infrastructure. 
-                        No user management. No password policies. Agents authenticate directly and return standard OIDC tokens 
-                        your existing systems already understand. Your IAM policies work unchanged. <span class="brand-name">SignedByMe</span> just handles 
-                        the "who is this agent?" question cryptographically.
-                    </p>
-                </div>
-                
                 <div class="result-card">
                     <h4>For Humans</h4>
                     <p>
@@ -142,6 +137,16 @@
                     <p>
                         Real cryptographic identity that can't be borrowed, shared, or faked. 
                         Authenticate independently without depending on human credentials or shared service accounts.
+                    </p>
+                </div>
+                
+                <div class="result-card">
+                    <h4>For Enterprises</h4>
+                    <p>
+                        Drop-in OIDC-compatible authentication. No new infrastructure. 
+                        No user management. No password policies. Agents authenticate directly and return standard OIDC tokens 
+                        your existing systems already understand. Your IAM policies work unchanged. <span class="brand-name">SignedByMe</span> just handles 
+                        the "who is this agent?" question cryptographically.
                     </p>
                 </div>
             </div>
