@@ -1635,3 +1635,131 @@ code {
     font-size: 0.9rem;
     color: var(--text-secondary);
 }
+
+/* Detail tables inside step panels */
+.detail-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.detail-table td,
+.detail-table th {
+    padding: var(--space-md);
+    vertical-align: top;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+}
+
+.detail-table tr:last-child td {
+    border-bottom: none;
+}
+
+.detail-table td:first-child {
+    width: 200px;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+@media (max-width: 700px) {
+    .detail-table td:first-child {
+        width: auto;
+        white-space: normal;
+    }
+    
+    .detail-table tr {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .detail-table td {
+        padding: var(--space-sm) var(--space-md);
+    }
+    
+    .detail-table td:first-child {
+        padding-bottom: 0;
+        border-bottom: none;
+    }
+}
+
+.detail-table pre {
+    background: var(--bg-primary);
+    padding: var(--space-md);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    margin: var(--space-sm) 0;
+    font-size: 0.9em;
+}
+
+.detail-table pre code {
+    background: none;
+    padding: 0;
+}
+
+.detail-table p {
+    margin: var(--space-sm) 0 0 0;
+    color: var(--text-muted);
+}
+
+/* Genesis table specific */
+.genesis-table th {
+    background: var(--bg-primary);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.genesis-table td:first-child {
+    width: 60px;
+    text-align: center;
+}
+
+.genesis-table td:last-child {
+    width: 200px;
+    color: var(--primary-light);
+    font-weight: 500;
+}
+
+@media (max-width: 800px) {
+    .genesis-table thead {
+        display: none;
+    }
+    
+    .genesis-table tr {
+        display: block;
+        margin-bottom: var(--space-md);
+        padding: var(--space-md);
+        background: var(--bg-primary);
+        border-radius: var(--radius-sm);
+        border-left: 3px solid var(--primary);
+    }
+    
+    .genesis-table td {
+        display: block;
+        padding: var(--space-xs) 0;
+        border-bottom: none;
+        width: auto !important;
+    }
+    
+    .genesis-table td:first-child {
+        text-align: left;
+        margin-bottom: var(--space-sm);
+    }
+    
+    .genesis-table td:last-child {
+        margin-top: var(--space-sm);
+        padding-top: var(--space-sm);
+        border-top: 1px solid var(--border-color);
+    }
+}
+
+.gate-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--primary);
+    color: var(--bg-primary);
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
