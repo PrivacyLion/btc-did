@@ -190,32 +190,106 @@
             <div class="steps">
                 <div class="step">
                     <div class="step-number">1</div>
-                    <h3>Have NOSTR Keys</h3>
-                    <p>
-                        Use any NOSTR client (Damus, Primal, Amethyst, Nostrudel) or generate 
-                        a keypair directly. Your npub is your public identity. Your nsec is 
-                        your signing key. If you're already on NOSTR, you're ready.
-                    </p>
+                    <h3>Get Your NOSTR Keys</h3>
+                    <div class="step-details">
+                        <p><strong>Download a NOSTR client:</strong></p>
+                        <ul>
+                            <li><strong>iOS:</strong> <a href="https://apps.apple.com/app/damus/id1628663131">Damus</a>, <a href="https://apps.apple.com/app/primal/id1673134518">Primal</a></li>
+                            <li><strong>Android:</strong> <a href="https://play.google.com/store/apps/details?id=com.vitorpamplona.amethyst">Amethyst</a>, <a href="https://play.google.com/store/apps/details?id=net.primal.android">Primal</a></li>
+                            <li><strong>Web:</strong> <a href="https://nostrudel.ninja">nostrudel.ninja</a></li>
+                        </ul>
+                        <p><strong>Your keys:</strong></p>
+                        <ul>
+                            <li><strong>npub</strong> = your public identity (share freely)</li>
+                            <li><strong>nsec</strong> = your signing key (NEVER share this)</li>
+                        </ul>
+                        <p><strong>Back up your nsec:</strong> Settings → Keys → Copy nsec → Store in password manager. Lose this = lose your identity forever.</p>
+                        <p><strong>Optional:</strong> Set up <a href="https://nostr.how/en/guides/get-verified">NIP-05 verification</a> at your domain. Enterprises trust NIP-05 verified humans more.</p>
+                    </div>
                 </div>
+                
                 <div class="step">
                     <div class="step-number">2</div>
-                    <h3>Delegate to Your Agent</h3>
-                    <p>
-                        Sign a delegation event (NOSTR kind 28200) that authorizes your agent's 
-                        npub. You specify exactly what permissions the agent has and which 
-                        enterprises it can access. Your cryptographic signature is the 
-                        authorization. No central authority involved.
-                    </p>
+                    <h3>Set Up Your Agent</h3>
+                    <div class="step-details">
+                        <p><strong>Install the SDK:</strong></p>
+                        <ul>
+                            <li><strong>Rust:</strong> <code>cargo add signedby-sdk</code></li>
+                            <li><strong>Python:</strong> <code>pip install signedby</code></li>
+                            <li><strong>TypeScript:</strong> <code>npm install @signedby/sdk</code></li>
+                        </ul>
+                        <p><strong>Initialize your agent:</strong></p>
+<pre><code>from signedby import SignedByAgent
+
+agent = SignedByAgent.init(storage_path="./agent_data")
+print(f"Agent npub: {agent.npub}")</code></pre>
+                        <p><strong>Configure email mapping:</strong></p>
+<pre><code>agent.set_email_mapping({
+    "amazon.com": "you@gmail.com",
+    "acme.com": "you@gmail.com"
+})</code></pre>
+                        <p>This tells the agent which email to present to each enterprise during Gate 1.</p>
+                        <p><strong>Start watching for authorizations:</strong></p>
+<pre><code>agent.connect_relay("wss://relay.privacy-lion.com")
+agent.watch_for_authorizations()</code></pre>
+                    </div>
                 </div>
+                
                 <div class="step">
                     <div class="step-number">3</div>
+                    <h3>Genesis Flow</h3>
+                    <p class="step-subtitle">Runs once per enterprise. Never repeats.</p>
+                    <div class="genesis-gates">
+                        <div class="gate">
+                            <div class="gate-header">
+                                <span class="gate-number">Gate 1</span>
+                                <span class="gate-title">Email Match</span>
+                            </div>
+                            <p>Log into the enterprise (e.g., Amazon) with your own credentials. Click "Authorize an Agent." Enterprise publishes kind 28200. Your agent responds automatically with kind 28202 (email + npub). Enterprise verifies email matches you.</p>
+                            <p class="your-role"><strong>Your role:</strong> Click "Authorize" while logged in.</p>
+                        </div>
+                        <div class="gate">
+                            <div class="gate-header">
+                                <span class="gate-number">Gate 2</span>
+                                <span class="gate-title">Your Cryptographic Consent</span>
+                            </div>
+                            <p>Enterprise publishes addressed kind 28200 with your agent's npub. Agent notifies you. You sign a kind 28250 delegation event with your NOSTR client, specifying scopes and expiration. Publish to relay.</p>
+                            <p class="your-role"><strong>Your role:</strong> Sign delegation with your nsec.</p>
+                        </div>
+                        <div class="gate">
+                            <div class="gate-header">
+                                <span class="gate-number">Gate 3</span>
+                                <span class="gate-title">ZK Proof of Leaf Ownership</span>
+                            </div>
+                            <p>Agent calls <code>enroll/commit</code> with both signed events. Server verifies enterprise and human signatures via NIP-05. Leaf appended to Merkle tree. Agent enrolled.</p>
+                            <p class="your-role"><strong>Your role:</strong> Nothing. Agent handles this.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">4</div>
                     <h3>Stay in Control</h3>
-                    <p>
-                        Monitor your agent's activity on the NOSTR audit trail. Every 
-                        authentication is a signed event you can verify. Revoke access 
-                        instantly by publishing a revocation event. No IT tickets, no 
-                        waiting. Cryptographic revocation in seconds.
-                    </p>
+                    <div class="step-details">
+                        <p><strong>Monitor agent activity:</strong></p>
+                        <p>Subscribe to your agent's npub on any NOSTR client. Watch for kinds 28101 (proof), 28102 (auth complete), 28103 (login complete). Or use:</p>
+<pre><code>agent.get_activity_log()</code></pre>
+                        
+                        <p><strong>Revoke a delegation:</strong></p>
+                        <p>Publish kind 28251 from your NOSTR client with the delegation_id:</p>
+<pre><code>{
+  "kind": 28251,
+  "tags": [["d", "del_abc123"]],
+  "content": ""
+}</code></pre>
+                        <p>Agent is locked out immediately. No IT tickets.</p>
+                        
+                        <p><strong>Renew before expiry:</strong></p>
+                        <p>Publish a new kind 28250 with new <code>expires_at</code> and new <code>delegation_id</code>. Agent's Merkle leaf stays the same. No re-enrollment needed.</p>
+                        
+                        <p><strong>Pay monthly subscription:</strong></p>
+                        <p>Agent SDK prompts when subscription is due. Pay in BTC via Lightning invoice. Preimage binds to your agent's DID.</p>
+                    </div>
                 </div>
             </div>
         </div>

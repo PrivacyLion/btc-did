@@ -1425,3 +1425,99 @@ code {
 .volume-pricing a:hover {
     color: var(--primary-light);
 }
+
+/* Detailed step content */
+.step-details {
+    margin-top: var(--space-md);
+}
+
+.step-details ul {
+    margin: var(--space-sm) 0;
+    padding-left: var(--space-lg);
+}
+
+.step-details li {
+    margin-bottom: var(--space-xs);
+}
+
+.step-details a {
+    color: var(--primary);
+}
+
+.step-details a:hover {
+    color: var(--primary-light);
+}
+
+.step-subtitle {
+    color: var(--text-muted);
+    font-style: italic;
+    margin-bottom: var(--space-md);
+}
+
+/* Code blocks */
+.step-details code,
+.genesis-gates code {
+    background: var(--bg-secondary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 0.9em;
+}
+
+.step-details pre,
+.genesis-gates pre {
+    background: var(--bg-secondary);
+    padding: var(--space-md);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    margin: var(--space-sm) 0;
+}
+
+.step-details pre code,
+.genesis-gates pre code {
+    background: none;
+    padding: 0;
+}
+
+/* Genesis gates */
+.genesis-gates {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    margin-top: var(--space-md);
+}
+
+.gate {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    padding: var(--space-md);
+    border-left: 3px solid var(--primary);
+}
+
+.gate-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+}
+
+.gate-number {
+    background: var(--primary);
+    color: var(--bg-primary);
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.gate-title {
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.your-role {
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--border-color);
+    color: var(--text-muted);
+}
