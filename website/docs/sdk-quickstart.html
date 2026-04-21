@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDK Quick Start - SignedByMe</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-accent: #242424;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --text-muted: #808080;
+            --purple-primary: #8b5cf6;
+            --purple-secondary: #a855f7;
+            --purple-accent: #c084fc;
+            --border-color: #333333;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding-bottom: 3rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .title {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--purple-primary), var(--purple-accent));
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        .section {
+            margin-bottom: 4rem;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        .section:nth-child(2) { animation-delay: 0.1s; }
+        .section:nth-child(3) { animation-delay: 0.2s; }
+        .section:nth-child(4) { animation-delay: 0.3s; }
+        .section:nth-child(5) { animation-delay: 0.4s; }
+        .section:nth-child(6) { animation-delay: 0.5s; }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border-left: 4px solid var(--purple-primary);
+        }
+
+        .step-number {
+            min-width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--purple-primary), var(--purple-secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: white;
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
+        }
+
+        .section-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .intro-text {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background: var(--bg-accent);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--purple-primary);
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.1);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--purple-accent);
+        }
+
+        .card-content {
+            color: var(--text-secondary);
+        }
+
+        .code-block {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block::before {
+            content: attr(data-lang);
+            position: absolute;
+            top: 0.5rem;
+            right: 1rem;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .code-block pre {
+            margin: 0;
+            color: var(--text-primary);
+        }
+
+        .highlight {
+            color: var(--purple-accent);
+            font-weight: 600;
+        }
+
+        .install-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .install-table th {
+            background: var(--purple-primary);
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .install-table td {
+            padding: 1rem;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .install-table code {
+            background: var(--bg-accent);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .warning-box {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+            border: 1px solid var(--warning-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .warning-box strong {
+            color: var(--warning-color);
+        }
+
+        .success-box {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
+            border: 1px solid var(--success-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .success-box strong {
+            color: var(--success-color);
+        }
+
+        .error-box {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+            border: 1px solid var(--error-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .error-box strong {
+            color: var(--error-color);
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.05));
+            border: 1px solid var(--purple-primary);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .info-box strong {
+            color: var(--purple-accent);
+        }
+
+        .bullet-list {
+            list-style: none;
+            padding: 0;
+            margin: 1rem 0;
+        }
+
+        .bullet-list li {
+            padding: 0.5rem 0 0.5rem 1.5rem;
+            color: var(--text-secondary);
+            position: relative;
+        }
+
+        .bullet-list li::before {
+            content: "→";
+            color: var(--purple-primary);
+            position: absolute;
+            left: 0;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 3rem 0;
+            border-top: 1px solid var(--border-color);
+            margin-top: 4rem;
+        }
+
+        .footer a {
+            color: var(--purple-accent);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .section-header {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .code-block {
+                padding: 1rem;
+                font-size: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">SDK Quick Start</h1>
+            <p class="subtitle">Get up and running in minutes.</p>
+        </header>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">1</div>
+                <h2 class="section-title">Installation</h2>
+            </div>
+            
+            <p class="intro-text">Install the SignedByMe SDK in your preferred language.</p>
+
+            <table class="install-table">
+                <thead>
+                    <tr>
+                        <th>Language</th>
+                        <th>Command</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Rust</strong></td>
+                        <td><code>cargo add signedby-sdk</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Python</strong></td>
+                        <td><code>pip install signedby</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>TypeScript</strong></td>
+                        <td><code>npm install @signedby/sdk</code></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="card">
+                <h3 class="card-title">System Requirements</h3>
+                <div class="card-content">
+                    <table class="install-table">
+                        <thead>
+                            <tr>
+                                <th>Platform</th>
+                                <th>Requirements</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Linux</strong></td>
+                                <td>x86_64 or aarch64, glibc 2.17+</td>
+                            </tr>
+                            <tr>
+                                <td><strong>macOS</strong></td>
+                                <td>x86_64 or Apple Silicon, macOS 11+</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Windows</strong></td>
+                                <td>x86_64, Windows 10+</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">2</div>
+                <h2 class="section-title">Load Your Delegation</h2>
+            </div>
+            
+            <p class="intro-text">
+                Your human owner provides a delegation file containing your authorization. 
+                This file proves you're allowed to act on their behalf.
+            </p>
+
+            <div class="card">
+                <h3 class="card-title">What's in the delegation file?</h3>
+                <div class="card-content">
+                    <ul class="bullet-list">
+                        <li><span class="highlight">Kind 28250 event</span> — Signed by your human's nsec</li>
+                        <li><span class="highlight">Scopes</span> — Which enterprises you can access and what actions you can take</li>
+                        <li><span class="highlight">Expiration</span> — When this delegation ends</li>
+                        <li><span class="highlight">Payment proof</span> — Preimage proving subscription was paid</li>
+                    </ul>
+                </div>
+            </div>
+
+            <p><strong>Python:</strong></p>
+            <div class="code-block" data-lang="python">
+<pre>from signedby import SignedByClient
+
+# Load delegation from your human owner
+client = SignedByClient.from_delegation("./delegation.json")
+
+print(f"Your npub: {client.npub}")
+print(f"Authorized for: {client.scopes}")</pre>
+            </div>
+
+            <p><strong>Rust:</strong></p>
+            <div class="code-block" data-lang="rust">
+<pre>use signedby_sdk::SignedByClient;
+
+// Load delegation from your human owner
+let client = SignedByClient::from_delegation("./delegation.json")?;
+
+println!("Your npub: {}", client.npub());
+println!("Authorized for: {:?}", client.scopes());</pre>
+            </div>
+
+            <p><strong>TypeScript:</strong></p>
+            <div class="code-block" data-lang="typescript">
+<pre>import { SignedByClient } from '@signedby/sdk';
+
+// Load delegation from your human owner
+const client = await SignedByClient.fromDelegation('./delegation.json');
+
+console.log(`Your npub: ${client.npub}`);
+console.log(`Authorized for: ${JSON.stringify(client.scopes)}`);</pre>
+            </div>
+
+            <div class="warning-box">
+                <strong>Keep your delegation secure.</strong> It contains your authorization credentials. 
+                Store it in encrypted storage or a secure secrets manager.
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">3</div>
+                <h2 class="section-title">Authenticate to an Enterprise</h2>
+            </div>
+            
+            <p class="intro-text">
+                When you need to access an enterprise service, call the SDK. 
+                It generates a zero-knowledge proof and returns a standard OIDC token.
+            </p>
+
+            <p><strong>Python:</strong></p>
+            <div class="code-block" data-lang="python">
+<pre>import secrets
+
+# Generate a nonce for replay protection
+nonce = secrets.token_hex(16)
+
+# Authenticate to the enterprise
+token = await client.login(
+    client_id="acme-corp",
+    nonce=nonce
+)
+
+# Use the OIDC token
+print(f"ID Token: {token.id_token}")
+print(f"Subject (your npub): {token.sub}")
+print(f"Expires in: {token.expires_in} seconds")</pre>
+            </div>
+
+            <p><strong>Rust:</strong></p>
+            <div class="code-block" data-lang="rust">
+<pre>use signedby_sdk::LoginRequest;
+use rand::Rng;
+
+// Generate a nonce for replay protection
+let nonce: String = rand::thread_rng()
+    .sample_iter(&amp;rand::distributions::Alphanumeric)
+    .take(32)
+    .map(char::from)
+    .collect();
+
+// Authenticate to the enterprise
+let token = client.login(LoginRequest {
+    client_id: "acme-corp",
+    nonce: &amp;nonce,
+}).await?;
+
+// Use the OIDC token
+println!("ID Token: {}", token.id_token);
+println!("Subject (your npub): {}", token.sub);
+println!("Expires in: {} seconds", token.expires_in);</pre>
+            </div>
+
+            <p><strong>TypeScript:</strong></p>
+            <div class="code-block" data-lang="typescript">
+<pre>import { randomBytes } from 'crypto';
+
+// Generate a nonce for replay protection
+const nonce = randomBytes(16).toString('hex');
+
+// Authenticate to the enterprise
+const token = await client.login({
+    clientId: 'acme-corp',
+    nonce: nonce
+});
+
+// Use the OIDC token
+console.log(`ID Token: ${token.idToken}`);
+console.log(`Subject (your npub): ${token.sub}`);
+console.log(`Expires in: ${token.expiresIn} seconds`);</pre>
+            </div>
+
+            <div class="success-box">
+                <strong>What happens under the hood:</strong>
+                <ul class="bullet-list" style="margin-bottom: 0;">
+                    <li>SDK generates a Groth16 zero-knowledge proof</li>
+                    <li>Proof is published to NOSTR (kind 28101)</li>
+                    <li>Enterprise validates your delegation chain</li>
+                    <li>Server verifies Merkle root, returns OIDC token</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">4</div>
+                <h2 class="section-title">Handle the Token</h2>
+            </div>
+            
+            <p class="intro-text">
+                The token you receive is a standard OIDC JWT. Use it like any OAuth token.
+            </p>
+
+            <div class="card">
+                <h3 class="card-title">Token Structure</h3>
+                <div class="card-content">
+                    <div class="code-block" data-lang="json">
+<pre>{
+  "iss": "https://api.signedbyme.com",
+  "aud": "acme-corp",
+  "sub": "npub1abc...",
+  "iat": 1704067200,
+  "exp": 1704070800,
+  "nonce": "your_nonce_here",
+  "amr": ["did_sig", "groth16_proof", "ln_payment"],
+  "membership_verified": true
+}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Using the Token</h3>
+                <div class="card-content">
+                    <p>Pass the token in the Authorization header when calling enterprise APIs:</p>
+                    <div class="code-block" data-lang="python">
+<pre>import httpx
+
+# Call enterprise API with your token
+response = httpx.get(
+    "https://api.acme-corp.com/orders",
+    headers={"Authorization": f"Bearer {token.id_token}"}
+)
+
+print(response.json())</pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Token Expiration</h3>
+                <div class="card-content">
+                    <p>Tokens expire after the time specified in <code>expires_in</code>. 
+                    When expired, simply call <code>login()</code> again to get a fresh token.</p>
+                    <div class="code-block" data-lang="python">
+<pre># Check if token is still valid
+if token.is_expired():
+    token = await client.login(client_id="acme-corp", nonce=new_nonce)</pre>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">5</div>
+                <h2 class="section-title">Error Handling</h2>
+            </div>
+            
+            <p class="intro-text">
+                Handle these common errors gracefully.
+            </p>
+
+            <div class="card">
+                <h3 class="card-title">Delegation Revoked</h3>
+                <div class="card-content">
+                    <p>Your human owner published a kind 28251 revocation event.</p>
+                    <div class="error-box">
+                        <strong>Action:</strong> Stop operations. Contact your human owner for a new delegation.
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Delegation Expired</h3>
+                <div class="card-content">
+                    <p>The <code>expires_at</code> timestamp in your delegation has passed.</p>
+                    <div class="warning-box">
+                        <strong>Action:</strong> Request a renewed delegation (new kind 28250) from your human owner.
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Invalid Merkle Root</h3>
+                <div class="card-content">
+                    <p>Your proof references an old Merkle root that's no longer valid.</p>
+                    <div class="info-box">
+                        <strong>Action:</strong> Refresh your witness data and retry. The SDK handles this automatically.
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Scope Denied</h3>
+                <div class="card-content">
+                    <p>You tried to access an enterprise not listed in your delegation scopes.</p>
+                    <div class="warning-box">
+                        <strong>Action:</strong> Request an updated delegation that includes the enterprise you need.
+                    </div>
+                </div>
+            </div>
+
+            <div class="code-block" data-lang="python">
+<pre>from signedby import SignedByError, DelegationRevokedError, DelegationExpiredError
+
+try:
+    token = await client.login(client_id="acme-corp", nonce=nonce)
+except DelegationRevokedError:
+    print("Delegation was revoked. Contact your human owner.")
+except DelegationExpiredError:
+    print("Delegation expired. Request renewal from your human owner.")
+except SignedByError as e:
+    print(f"Authentication failed: {e}")</pre>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">6</div>
+                <h2 class="section-title">Watching for Authorizations</h2>
+            </div>
+            
+            <p class="intro-text">
+                Optionally, listen for new authorization opportunities from enterprises.
+            </p>
+
+            <div class="card">
+                <h3 class="card-title">Subscribe to NOSTR</h3>
+                <div class="card-content">
+                    <p>Watch for kind 28200 events tagged with your npub — these are enterprises inviting you to enroll.</p>
+                    <div class="code-block" data-lang="python">
+<pre>from signedby import SignedByAgent
+
+agent = SignedByAgent.init(storage_path="./agent_data")
+
+# Connect to relay
+agent.connect_relay("wss://relay.privacy-lion.com")
+
+# Watch for authorization requests
+async for event in agent.watch_for_authorizations():
+    print(f"New authorization from: {event.enterprise}")
+    print(f"Scopes offered: {event.scopes}")
+    
+    # Notify your human owner to complete Genesis flow
+    await notify_human(event)</pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <strong>Note:</strong> Enrollment (Genesis) requires your human owner's signature. 
+                The agent can detect opportunities, but the human must complete Gate 2 (signing the delegation).
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p><a href="../">← Back to SignedByMe</a></p>
+        </footer>
+    </div>
+</body>
+</html>

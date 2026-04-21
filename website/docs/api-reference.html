@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Reference - SignedByMe</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-accent: #242424;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --text-muted: #808080;
+            --purple-primary: #8b5cf6;
+            --purple-secondary: #a855f7;
+            --purple-accent: #c084fc;
+            --border-color: #333333;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            --method-post: #10b981;
+            --method-get: #3b82f6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding-bottom: 3rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .title {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--purple-primary), var(--purple-accent));
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        .section {
+            margin-bottom: 4rem;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        .section:nth-child(2) { animation-delay: 0.1s; }
+        .section:nth-child(3) { animation-delay: 0.2s; }
+        .section:nth-child(4) { animation-delay: 0.3s; }
+        .section:nth-child(5) { animation-delay: 0.4s; }
+        .section:nth-child(6) { animation-delay: 0.5s; }
+        .section:nth-child(7) { animation-delay: 0.6s; }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border-left: 4px solid var(--purple-primary);
+        }
+
+        .step-number {
+            min-width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--purple-primary), var(--purple-secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: white;
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
+        }
+
+        .section-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .intro-text {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background: var(--bg-accent);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--purple-primary);
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.1);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--purple-accent);
+        }
+
+        .card-content {
+            color: var(--text-secondary);
+        }
+
+        .endpoint {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .endpoint-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .method {
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .method-post {
+            background: var(--method-post);
+            color: white;
+        }
+
+        .method-get {
+            background: var(--method-get);
+            color: white;
+        }
+
+        .endpoint-path {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 1rem;
+            color: var(--text-primary);
+        }
+
+        .endpoint-desc {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+        }
+
+        .code-block {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block::before {
+            content: attr(data-lang);
+            position: absolute;
+            top: 0.5rem;
+            right: 1rem;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .code-block pre {
+            margin: 0;
+            color: var(--text-primary);
+        }
+
+        .highlight {
+            color: var(--purple-accent);
+            font-weight: 600;
+        }
+
+        .param-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .param-table th {
+            background: var(--purple-primary);
+            color: white;
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .param-table td {
+            padding: 0.75rem 1rem;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .param-table code {
+            background: var(--bg-accent);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: var(--purple-accent);
+        }
+
+        .param-required {
+            color: var(--error-color);
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .param-optional {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .error-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .error-table th {
+            background: var(--error-color);
+            color: white;
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .error-table td {
+            padding: 0.75rem 1rem;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .warning-box {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+            border: 1px solid var(--warning-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .warning-box strong {
+            color: var(--warning-color);
+        }
+
+        .success-box {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
+            border: 1px solid var(--success-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .success-box strong {
+            color: var(--success-color);
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.05));
+            border: 1px solid var(--purple-primary);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .info-box strong {
+            color: var(--purple-accent);
+        }
+
+        .bullet-list {
+            list-style: none;
+            padding: 0;
+            margin: 1rem 0;
+        }
+
+        .bullet-list li {
+            padding: 0.5rem 0 0.5rem 1.5rem;
+            color: var(--text-secondary);
+            position: relative;
+        }
+
+        .bullet-list li::before {
+            content: "→";
+            color: var(--purple-primary);
+            position: absolute;
+            left: 0;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 3rem 0;
+            border-top: 1px solid var(--border-color);
+            margin-top: 4rem;
+        }
+
+        .footer a {
+            color: var(--purple-accent);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .section-header {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .endpoint-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .code-block {
+                padding: 1rem;
+                font-size: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">API Reference</h1>
+            <p class="subtitle">Complete endpoint documentation.</p>
+        </header>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">1</div>
+                <h2 class="section-title">Base URLs</h2>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Environments</h3>
+                <div class="card-content">
+                    <table class="param-table">
+                        <thead>
+                            <tr>
+                                <th>Environment</th>
+                                <th>Base URL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Production</strong></td>
+                                <td><code>https://api.signedbyme.com</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Beta</strong></td>
+                                <td><code>https://api.beta.privacy-lion.com</code></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <strong>All requests must use HTTPS.</strong> HTTP requests will be rejected.
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">2</div>
+                <h2 class="section-title">OIDC Discovery</h2>
+            </div>
+            
+            <p class="intro-text">
+                Standard OpenID Connect discovery endpoints for token validation.
+            </p>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method method-get">GET</span>
+                    <span class="endpoint-path">/.well-known/openid-configuration</span>
+                </div>
+                <p class="endpoint-desc">Returns the OpenID Connect discovery document.</p>
+                
+                <h4 style="margin-bottom: 0.5rem; color: var(--text-primary);">Response</h4>
+                <div class="code-block" data-lang="json">
+<pre>{
+  "issuer": "https://api.beta.privacy-lion.com",
+  "authorization_endpoint": "https://api.beta.privacy-lion.com/oauth/authorize",
+  "token_endpoint": "https://api.beta.privacy-lion.com/oauth/token",
+  "jwks_uri": "https://api.beta.privacy-lion.com/oidc/jwks.json",
+  "response_types_supported": ["id_token"],
+  "subject_types_supported": ["public"],
+  "id_token_signing_alg_values_supported": ["RS256"],
+  "claims_supported": ["sub", "iss", "aud", "exp", "iat", "nonce"]
+}</pre>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method method-get">GET</span>
+                    <span class="endpoint-path">/oidc/jwks.json</span>
+                </div>
+                <p class="endpoint-desc">Returns the JSON Web Key Set for token signature validation.</p>
+                
+                <h4 style="margin-bottom: 0.5rem; color: var(--text-primary);">Response</h4>
+                <div class="code-block" data-lang="json">
+<pre>{
+  "keys": [
+    {
+      "kty": "RSA",
+      "kid": "signedby-2026",
+      "use": "sig",
+      "alg": "RS256",
+      "n": "...",
+      "e": "AQAB"
+    }
+  ]
+}</pre>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">3</div>
+                <h2 class="section-title">Enrollment</h2>
+            </div>
+            
+            <p class="intro-text">
+                Enroll an agent into the Merkle tree during the Genesis flow.
+            </p>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method method-post">POST</span>
+                    <span class="endpoint-path">/v1/membership/enroll/commit</span>
+                </div>
+                <p class="endpoint-desc">
+                    Commit an agent enrollment. Requires both the enterprise authorization (kind 28200) 
+                    and human delegation (kind 28250) events.
+                </p>
+                
+                <h4 style="margin-bottom: 0.5rem; color: var(--text-primary);">Request Body</h4>
+                <table class="param-table">
+                    <thead>
+                        <tr>
+                            <th>Field</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>leaf_commitment</code> <span class="param-required">required</span></td>
+                            <td>string</td>
+                            <td>Hex-encoded leaf commitment (32 bytes)</td>
+                        </tr>
+                        <tr>
+                            <td><code>authorization_event</code> <span class="param-required">required</span></td>
+                            <td>object</td>
+                            <td>Kind 28200 NOSTR event signed by enterprise</td>
+                        </tr>
+                        <tr>
+                            <td><code>delegation_event</code> <span class="param-required">required</span></td>
+                            <td>object</td>
+                            <td>Kind 28250 NOSTR event signed by human</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4 style="margin: 1rem 0 0.5rem; color: var(--text-primary);">Request Example</h4>
+                <div class="code-block" data-lang="json">
+<pre>{
+  "leaf_commitment": "0x1a2b3c4d5e6f...",
+  "authorization_event": {
+    "kind": 28200,
+    "pubkey": "&lt;enterprise_npub_hex&gt;",
+    "created_at": 1704067200,
+    "tags": [["p", "&lt;agent_npub_hex&gt;"], ["client_id", "acme-corp"]],
+    "content": "{\"scopes\":[\"read\",\"write\"]}",
+    "id": "&lt;event_id&gt;",
+    "sig": "&lt;enterprise_signature&gt;"
+  },
+  "delegation_event": {
+    "kind": 28250,
+    "pubkey": "&lt;human_npub_hex&gt;",
+    "created_at": 1704067200,
+    "tags": [["p", "&lt;agent_npub_hex&gt;"]],
+    "content": "{\"agent_npub\":\"npub1...\",\"scopes\":{...},\"expires_at\":\"...\",\"delegation_id\":\"...\"}",
+    "id": "&lt;event_id&gt;",
+    "sig": "&lt;human_signature&gt;"
+  }
+}</pre>
+                </div>
+
+                <h4 style="margin: 1rem 0 0.5rem; color: var(--text-primary);">Response (200 OK)</h4>
+                <div class="code-block" data-lang="json">
+<pre>{
+  "enrollment_id": "enr_abc123",
+  "status": "committed",
+  "tree_id": "tree_acme_members",
+  "root": "0x7890abcdef...",
+  "leaf_index": 42,
+  "witness": {
+    "siblings": ["0x...", "0x...", ...],
+    "path_bits": [0, 1, 0, 1, ...]
+  },
+  "message": "Enrollment committed successfully"
+}</pre>
+                </div>
+
+                <div class="warning-box">
+                    <strong>Save the witness!</strong> You'll need <code>siblings</code> and <code>path_bits</code> 
+                    to generate proofs later. The SDK handles this automatically.
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">4</div>
+                <h2 class="section-title">Login Verification</h2>
+            </div>
+            
+            <p class="intro-text">
+                Verify a Groth16 proof and receive an OIDC token.
+            </p>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method method-post">POST</span>
+                    <span class="endpoint-path">/v1/login/verify</span>
+                </div>
+                <p class="endpoint-desc">
+                    Verify an agent's proof and return an OIDC id_token. 
+                    Server checks that the Merkle root is valid for the given client.
+                </p>
+                
+                <h4 style="margin-bottom: 0.5rem; color: var(--text-primary);">Request Body</h4>
+                <table class="param-table">
+                    <thead>
+                        <tr>
+                            <th>Field</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>proof</code> <span class="param-required">required</span></td>
+                            <td>string</td>
+                            <td>Groth16 proof (hex-encoded)</td>
+                        </tr>
+                        <tr>
+                            <td><code>public_outputs</code> <span class="param-required">required</span></td>
+                            <td>object</td>
+                            <td>Circuit public outputs</td>
+                        </tr>
+                        <tr>
+                            <td><code>public_outputs.merkle_root</code> <span class="param-required">required</span></td>
+                            <td>string</td>
+                            <td>Merkle root (hex)</td>
+                        </tr>
+                        <tr>
+                            <td><code>public_outputs.npub</code> <span class="param-required">required</span></td>
+                            <td>string</td>
+                            <td>Agent's npub (bech32)</td>
+                        </tr>
+                        <tr>
+                            <td><code>client_id</code> <span class="param-required">required</span></td>
+                            <td>string</td>
+                            <td>Enterprise client ID</td>
+                        </tr>
+                        <tr>
+                            <td><code>nonce</code> <span class="param-optional">optional</span></td>
+                            <td>string</td>
+                            <td>Nonce for replay protection</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4 style="margin: 1rem 0 0.5rem; color: var(--text-primary);">Request Example</h4>
+                <div class="code-block" data-lang="json">
+<pre>{
+  "proof": "0xabcdef123456...",
+  "public_outputs": {
+    "merkle_root": "0x7890abcdef...",
+    "npub": "npub1abc..."
+  },
+  "client_id": "acme-corp",
+  "nonce": "random_nonce_string"
+}</pre>
+                </div>
+
+                <h4 style="margin: 1rem 0 0.5rem; color: var(--text-primary);">Response (200 OK)</h4>
+                <div class="code-block" data-lang="json">
+<pre>{
+  "ok": true,
+  "id_token": "eyJhbGciOiJSUzI1NiIs...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "sub": "npub1abc..."
+}</pre>
+                </div>
+
+                <h4 style="margin: 1rem 0 0.5rem; color: var(--text-primary);">ID Token Claims</h4>
+                <div class="code-block" data-lang="json">
+<pre>{
+  "iss": "https://api.beta.privacy-lion.com",
+  "aud": "acme-corp",
+  "sub": "npub1abc...",
+  "iat": 1704067200,
+  "exp": 1704070800,
+  "nonce": "random_nonce_string",
+  "amr": ["did_sig", "groth16_proof", "ln_payment"],
+  "membership_verified": true
+}</pre>
+                </div>
+
+                <div class="info-box">
+                    <strong>Server checks:</strong> The Merkle root must be in the last 30 valid roots for this client_id. 
+                    This allows for tree updates without immediately invalidating existing proofs.
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">5</div>
+                <h2 class="section-title">Error Codes</h2>
+            </div>
+            
+            <p class="intro-text">
+                All errors return a JSON object with <code>error</code> and <code>message</code> fields.
+            </p>
+
+            <table class="error-table">
+                <thead>
+                    <tr>
+                        <th>HTTP</th>
+                        <th>Error Code</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>400</td>
+                        <td><code>invalid_request</code></td>
+                        <td>Missing or malformed request parameters</td>
+                    </tr>
+                    <tr>
+                        <td>400</td>
+                        <td><code>invalid_proof</code></td>
+                        <td>Groth16 proof verification failed</td>
+                    </tr>
+                    <tr>
+                        <td>400</td>
+                        <td><code>invalid_signature</code></td>
+                        <td>NOSTR event signature verification failed</td>
+                    </tr>
+                    <tr>
+                        <td>400</td>
+                        <td><code>root_expired</code></td>
+                        <td>Merkle root not in last 30 valid roots</td>
+                    </tr>
+                    <tr>
+                        <td>401</td>
+                        <td><code>invalid_client</code></td>
+                        <td>Unknown or unauthorized client_id</td>
+                    </tr>
+                    <tr>
+                        <td>403</td>
+                        <td><code>enrollment_denied</code></td>
+                        <td>Enterprise did not authorize this enrollment</td>
+                    </tr>
+                    <tr>
+                        <td>404</td>
+                        <td><code>tree_not_found</code></td>
+                        <td>No Merkle tree exists for this client</td>
+                    </tr>
+                    <tr>
+                        <td>409</td>
+                        <td><code>already_enrolled</code></td>
+                        <td>This leaf commitment is already in the tree</td>
+                    </tr>
+                    <tr>
+                        <td>429</td>
+                        <td><code>rate_limited</code></td>
+                        <td>Too many requests, slow down</td>
+                    </tr>
+                    <tr>
+                        <td>500</td>
+                        <td><code>internal_error</code></td>
+                        <td>Server error, retry later</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h4 style="margin: 1.5rem 0 0.5rem; color: var(--text-primary);">Error Response Example</h4>
+            <div class="code-block" data-lang="json">
+<pre>{
+  "error": "root_expired",
+  "message": "Merkle root 0x7890... is not in the last 30 valid roots for client acme-corp"
+}</pre>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">6</div>
+                <h2 class="section-title">Rate Limits</h2>
+            </div>
+            
+            <p class="intro-text">
+                Rate limits protect the service from abuse.
+            </p>
+
+            <div class="card">
+                <h3 class="card-title">Default Limits</h3>
+                <div class="card-content">
+                    <table class="param-table">
+                        <thead>
+                            <tr>
+                                <th>Endpoint</th>
+                                <th>Limit</th>
+                                <th>Window</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>/v1/login/verify</code></td>
+                                <td>100 requests</td>
+                                <td>per minute per IP</td>
+                            </tr>
+                            <tr>
+                                <td><code>/v1/membership/enroll/commit</code></td>
+                                <td>10 requests</td>
+                                <td>per minute per IP</td>
+                            </tr>
+                            <tr>
+                                <td>OIDC discovery</td>
+                                <td>1000 requests</td>
+                                <td>per minute per IP</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Rate Limit Headers</h3>
+                <div class="card-content">
+                    <p>Responses include these headers:</p>
+                    <ul class="bullet-list">
+                        <li><code>X-RateLimit-Limit</code> — Maximum requests allowed</li>
+                        <li><code>X-RateLimit-Remaining</code> — Requests remaining in window</li>
+                        <li><code>X-RateLimit-Reset</code> — Unix timestamp when limit resets</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="warning-box">
+                <strong>When rate limited (429):</strong> Wait until <code>X-RateLimit-Reset</code> 
+                before retrying. Implement exponential backoff in your client.
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p><a href="../">← Back to SignedByMe</a></p>
+        </footer>
+    </div>
+</body>
+</html>
