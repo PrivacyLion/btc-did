@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 // Re-export from core
-use signedby_core::sdk::{
+use signedby_sdk::sdk::{
     identity::IdentityManager,
     delegation::DelegationManager,
     enrollment::EnrollmentManager,

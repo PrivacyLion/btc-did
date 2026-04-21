@@ -13,8 +13,8 @@ crate-type = ["cdylib"]
 napi = { version = "2", features = ["async", "napi9"] }
 napi-derive = "2"
 
-# Core SDK (local path)
-signedby_core = { path = "../../../native/signedby_core" }
+# Core SDK (local path) - note: package renamed to signedby-sdk but lib name is signedby_sdk
+signedby_sdk = { path = "../../../native/signedby_core", package = "signedby-sdk" }
 
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread"] }

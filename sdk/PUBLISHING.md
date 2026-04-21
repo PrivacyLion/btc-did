@@ -83,12 +83,15 @@ maturin build --release --target x86_64-pc-windows-msvc
 ```bash
 cd sdk/typescript
 
-# Build native bindings first
+# Install dependencies first!
+npm install
+
+# Build native bindings
 cd native
 cargo build --release
 cd ..
 
-# Build TypeScript
+# Build TypeScript (runs automatically via prepublishOnly)
 npm run build
 
 # Publish to npm

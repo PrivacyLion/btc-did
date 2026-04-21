@@ -14,8 +14,8 @@ crate-type = ["cdylib"]
 pyo3 = { version = "0.20", features = ["extension-module"] }
 pyo3-asyncio = { version = "0.20", features = ["tokio-runtime"] }
 
-# Core SDK (local path)
-signedby_core = { path = "../../native/signedby_core" }
+# Core SDK (local path) - note: package renamed to signedby-sdk but lib name is signedby_sdk
+signedby_sdk = { path = "../../native/signedby_core", package = "signedby-sdk" }
 
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread"] }

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 // Re-export from core
-use signedby_core::sdk::{
+use signedby_sdk::sdk::{
     identity::IdentityManager,
     delegation::DelegationManager,
     enrollment::EnrollmentManager,
