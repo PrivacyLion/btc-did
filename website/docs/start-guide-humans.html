@@ -605,9 +605,68 @@ agent.watchForAuthorizations();</pre>
             </div>
 
             <div class="step">
+                <h3 class="step-title">Pay the subscription</h3>
+                <div class="step-content">
+                    <p>Your agent displays a Lightning invoice for <strong>$21 in BTC</strong>. This is your monthly subscription.</p>
+                    
+                    <p style="margin-top: 1rem;"><strong>Pay with any Lightning wallet:</strong></p>
+                    <table class="platform-table" style="margin: 1rem 0;">
+                        <thead>
+                            <tr>
+                                <th>Platform</th>
+                                <th>Wallet</th>
+                                <th>Link</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>iOS</strong></td>
+                                <td>Wallet of Satoshi</td>
+                                <td><a href="https://apps.apple.com/app/wallet-of-satoshi/id1438599608" target="_blank">App Store</a></td>
+                            </tr>
+                            <tr>
+                                <td><strong>iOS</strong></td>
+                                <td>Strike</td>
+                                <td><a href="https://apps.apple.com/app/strike-bitcoin-payments/id1488724463" target="_blank">App Store</a></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Android</strong></td>
+                                <td>Wallet of Satoshi</td>
+                                <td><a href="https://play.google.com/store/apps/details?id=com.livingroomofsatoshi.wallet" target="_blank">Play Store</a></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Android</strong></td>
+                                <td>Strike</td>
+                                <td><a href="https://play.google.com/store/apps/details?id=zapsolutions.strike" target="_blank">Play Store</a></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Any</strong></td>
+                                <td>Phoenix</td>
+                                <td><a href="https://phoenix.acinq.co/" target="_blank">phoenix.acinq.co</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <p><strong>How to pay:</strong></p>
+                    <ol class="ordered-list">
+                        <li>Open your Lightning wallet</li>
+                        <li>Tap <strong>Send</strong> or <strong>Scan</strong></li>
+                        <li>Scan the QR code your agent displays (or paste the invoice string)</li>
+                        <li>Confirm the payment</li>
+                    </ol>
+
+                    <div class="warning-box">
+                        <strong>Important:</strong> After payment, your wallet receives a <span class="highlight">preimage</span> (a long string of characters). Your agent captures this automatically. The preimage cryptographically proves you paid and gets included in your delegation.
+                    </div>
+
+                    <p style="margin-top: 1rem; color: var(--text-muted);">Your agent earns 20% of this subscription automatically, seeding its economic life.</p>
+                </div>
+            </div>
+
+            <div class="step">
                 <h3 class="step-title">Sign the delegation</h3>
                 <div class="step-content">
-                    <p>Your agent will display an unsigned delegation event and a link/QR code. Open your NOSTR client, scan the QR or paste the link. Review the permissions and expiration date. Sign it.</p>
+                    <p>Your agent will display an unsigned delegation event and a link/QR code. The delegation includes your payment proof. Open your NOSTR client, scan the QR or paste the link. Review the permissions and expiration date. Sign it.</p>
                 </div>
             </div>
 
