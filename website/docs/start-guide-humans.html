@@ -3,467 +3,680 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Start Guide for Humans — SignedByMe</title>
-    <link rel="stylesheet" href="../style.css">
+    <title>Start Guide for Humans - SignedByMe</title>
     <style>
+        :root {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-accent: #242424;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --text-muted: #808080;
+            --purple-primary: #8b5cf6;
+            --purple-secondary: #a855f7;
+            --purple-accent: #c084fc;
+            --border-color: #333333;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            padding-top: 80px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
         }
-        .doc-container {
-            max-width: 800px;
+
+        .container {
+            max-width: 900px;
             margin: 0 auto;
-            padding: 48px 24px;
+            padding: 2rem;
         }
-        .doc-nav {
-            margin-bottom: 32px;
+
+        .header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding-bottom: 3rem;
+            border-bottom: 1px solid var(--border-color);
         }
-        .doc-nav a {
-            color: var(--text-muted);
-            font-size: 0.9rem;
+
+        .title {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--purple-primary), var(--purple-accent));
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
         }
-        .doc-title {
-            margin-bottom: 8px;
-        }
-        .doc-subtitle {
-            color: var(--text-muted);
+
+        .subtitle {
             font-size: 1.25rem;
-            margin-bottom: 48px;
-        }
-        .doc-section {
-            margin-bottom: 48px;
-        }
-        .doc-section h2 {
-            font-size: 1.5rem;
-            margin-bottom: 16px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
-        }
-        .doc-section h3 {
-            font-size: 1.125rem;
-            margin-top: 24px;
-            margin-bottom: 12px;
-        }
-        .doc-section p, .doc-section li {
             color: var(--text-secondary);
-            line-height: 1.7;
+            font-weight: 400;
         }
-        .doc-section ul, .doc-section ol {
-            margin: 16px 0;
-            padding-left: 24px;
+
+        .section {
+            margin-bottom: 4rem;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeInUp 0.6s ease forwards;
         }
-        .doc-section li {
-            margin-bottom: 8px;
+
+        .section:nth-child(2) { animation-delay: 0.1s; }
+        .section:nth-child(3) { animation-delay: 0.2s; }
+        .section:nth-child(4) { animation-delay: 0.3s; }
+        .section:nth-child(5) { animation-delay: 0.4s; }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
-        .doc-code {
-            background: #1E1E1E;
-            border-radius: 8px;
-            overflow-x: auto;
-            margin: 16px 0;
-        }
-        .doc-code pre {
-            padding: 16px;
-            margin: 0;
-        }
-        .doc-code code {
-            color: #D4D4D4;
-            font-size: 0.9rem;
-            line-height: 1.5;
-        }
-        .doc-note {
-            background: var(--primary-light);
-            border-left: 4px solid var(--primary);
-            padding: 16px;
-            border-radius: 0 8px 8px 0;
-            margin: 16px 0;
-        }
-        .doc-note p {
-            margin: 0;
-            color: var(--text);
-        }
-        .doc-warning {
-            background: #FEF3C7;
-            border-left: 4px solid #F59E0B;
-        }
-        .doc-warning p {
-            color: #92400E;
-        }
-        .doc-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 16px 0;
-            font-size: 0.9rem;
-        }
-        .doc-table th, .doc-table td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-        .doc-table th {
-            background: var(--bg-alt);
-            font-weight: 600;
-        }
-        .step-header {
+
+        .section-header {
             display: flex;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 16px;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border-left: 4px solid var(--purple-primary);
         }
-        .step-num {
-            background: var(--primary);
+
+        .step-number {
+            min-width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--purple-primary), var(--purple-secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            font-weight: 700;
             color: white;
-            width: 32px;
-            height: 32px;
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
+        }
+
+        .section-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .intro-text {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+
+        .step {
+            background: var(--bg-accent);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .step:hover {
+            border-color: var(--purple-primary);
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.1);
+        }
+
+        .step-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--purple-accent);
+        }
+
+        .step-content {
+            color: var(--text-secondary);
+        }
+
+        .platform-table, .language-table, .key-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .platform-table th, .language-table th, .key-table th {
+            background: var(--purple-primary);
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .platform-table td, .language-table td, .key-table td {
+            padding: 1rem;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .platform-table a, .language-table a, .key-table a {
+            color: var(--purple-accent);
+            text-decoration: none;
+        }
+
+        .platform-table a:hover, .language-table a:hover, .key-table a:hover {
+            text-decoration: underline;
+        }
+
+        .code-block {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block::before {
+            content: attr(data-lang);
+            position: absolute;
+            top: 0.5rem;
+            right: 1rem;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .code-block pre {
+            margin: 0;
+            color: var(--text-primary);
+        }
+
+        .highlight {
+            color: var(--purple-accent);
+            font-weight: 600;
+        }
+
+        .warning-box {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+            border: 1px solid var(--warning-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .warning-box strong {
+            color: var(--warning-color);
+        }
+
+        .success-box {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
+            border: 1px solid var(--success-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .success-box strong {
+            color: var(--success-color);
+        }
+
+        .ordered-list {
+            margin: 1rem 0;
+            padding-left: 0;
+            list-style: none;
+        }
+
+        .ordered-list li {
+            position: relative;
+            padding: 0.5rem 0 0.5rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .ordered-list li::before {
+            content: counter(step-counter);
+            counter-increment: step-counter;
+            position: absolute;
+            left: 0;
+            top: 0.5rem;
+            width: 1.5rem;
+            height: 1.5rem;
+            background: var(--purple-primary);
+            color: white;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-size: 0.8rem;
             font-weight: 600;
-            font-size: 1rem;
-            flex-shrink: 0;
         }
-        .step-header h3 {
-            margin: 0;
-            font-size: 1.25rem;
+
+        .ordered-list {
+            counter-reset: step-counter;
         }
-        .key-box {
-            display: inline-block;
-            background: var(--bg-alt);
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 0.9rem;
+
+        .monitor-list {
+            list-style: none;
+            padding: 0;
         }
-        .key-public { color: #10B981; }
-        .key-private { color: #EF4444; }
+
+        .monitor-list li {
+            padding: 0.5rem 0;
+            color: var(--text-secondary);
+            position: relative;
+            padding-left: 1.5rem;
+        }
+
+        .monitor-list li::before {
+            content: "•";
+            color: var(--purple-primary);
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 3rem 0;
+            border-top: 1px solid var(--border-color);
+            margin-top: 4rem;
+        }
+
+        .footer a {
+            color: var(--purple-accent);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .section-header {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .step {
+                padding: 1rem;
+            }
+
+            .code-block {
+                padding: 1rem;
+                font-size: 0.8rem;
+            }
+        }
     </style>
 </head>
 <body>
-    <nav class="nav">
-        <div class="nav-container">
-            <a href="../" class="nav-logo">
-                <span class="logo-text brand-name">SignedByMe</span>
-            </a>
-            <div class="nav-links">
-                <a href="../#how-it-works">How It Works</a>
-                <a href="../#for-humans">For Humans</a>
-                <a href="../#for-agents">For Agents</a>
-                <a href="../#for-enterprises">For Enterprises</a>
-                <a href="../#download" class="nav-cta">Download SDK</a>
-            </div>
-        </div>
-    </nav>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">Start Guide for Humans</h1>
+            <p class="subtitle">Authorize your AI agent in 10 minutes.</p>
+        </header>
 
-    <div class="doc-container">
-        <div class="doc-nav">
-            <a href="../#for-humans">← Back to Home</a>
-        </div>
-        
-        <h1 class="doc-title">Start Guide for Humans</h1>
-        <p class="doc-subtitle">Authorize your AI agent in 10 minutes.</p>
-
-        <!-- Section 1: Get Your NOSTR Keys -->
-        <div class="doc-section">
-            <div class="step-header">
-                <span class="step-num">1</span>
-                <h2 style="border: none; padding: 0; margin: 0;">Get Your NOSTR Keys</h2>
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">1</div>
+                <h2 class="section-title">Get Your NOSTR Keys</h2>
             </div>
             
-            <p>
-                NOSTR is a decentralized protocol. Your keys are your identity — no company controls them. 
-                You need keys before you can authorize an agent.
-            </p>
+            <p class="intro-text">NOSTR is a decentralized protocol. Your keys are your identity — no company controls them. You need keys before you can authorize an agent.</p>
 
-            <h3>Download a NOSTR client</h3>
-            <table class="doc-table">
-                <tr>
-                    <th>Platform</th>
-                    <th>App</th>
-                    <th>Link</th>
-                </tr>
-                <tr>
-                    <td>iOS</td>
-                    <td>Damus</td>
-                    <td><a href="https://apps.apple.com/app/damus/id1628663131">App Store</a></td>
-                </tr>
-                <tr>
-                    <td>iOS</td>
-                    <td>Primal</td>
-                    <td><a href="https://apps.apple.com/app/primal/id1673134518">App Store</a></td>
-                </tr>
-                <tr>
-                    <td>Android</td>
-                    <td>Amethyst</td>
-                    <td><a href="https://play.google.com/store/apps/details?id=com.vitorpamplona.amethyst">Play Store</a></td>
-                </tr>
-                <tr>
-                    <td>Android</td>
-                    <td>Primal</td>
-                    <td><a href="https://play.google.com/store/apps/details?id=net.primal.android">Play Store</a></td>
-                </tr>
-                <tr>
-                    <td>Web</td>
-                    <td>Primal</td>
-                    <td><a href="https://primal.net">primal.net</a></td>
-                </tr>
-                <tr>
-                    <td>Web</td>
-                    <td>noStrudel</td>
-                    <td><a href="https://nostrudel.ninja">nostrudel.ninja</a></td>
-                </tr>
-            </table>
-
-            <h3>Create your keys</h3>
-            <p>Open the app. Keys are generated automatically on first launch. No signup. No email. No password.</p>
-
-            <h3>Understand your keys</h3>
-            <table class="doc-table">
-                <tr>
-                    <th>Key</th>
-                    <th>What it is</th>
-                    <th>Rule</th>
-                </tr>
-                <tr>
-                    <td><span class="key-box key-public">npub</span></td>
-                    <td>Your public identity</td>
-                    <td>Share freely</td>
-                </tr>
-                <tr>
-                    <td><span class="key-box key-private">nsec</span></td>
-                    <td>Your signing key</td>
-                    <td><strong>NEVER share</strong></td>
-                </tr>
-            </table>
-
-            <h3>Back up your nsec</h3>
-            <ol>
-                <li>Open Settings → Keys (or Profile → Keys)</li>
-                <li>Copy your <code>nsec</code></li>
-                <li>Paste into your password manager (1Password, Bitwarden, etc.)</li>
-            </ol>
-            
-            <div class="doc-note doc-warning">
-                <p><strong>⚠️ If you lose your nsec, you lose your identity forever. No recovery.</strong></p>
+            <div class="step">
+                <h3 class="step-title">Download a NOSTR client</h3>
+                <div class="step-content">
+                    <table class="platform-table">
+                        <thead>
+                            <tr>
+                                <th>Platform</th>
+                                <th>App</th>
+                                <th>Link</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>iOS</strong></td>
+                                <td>Damus</td>
+                                <td><a href="https://apps.apple.com/app/damus/id1628663131" target="_blank">Download from App Store</a></td>
+                            </tr>
+                            <tr>
+                                <td><strong>iOS</strong></td>
+                                <td>Primal</td>
+                                <td><a href="https://apps.apple.com/app/primal/id1673134518" target="_blank">Download from App Store</a></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Android</strong></td>
+                                <td>Amethyst</td>
+                                <td><a href="https://play.google.com/store/apps/details?id=com.vitorpamplona.amethyst" target="_blank">Download from Play Store</a></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Android</strong></td>
+                                <td>Primal</td>
+                                <td><a href="https://play.google.com/store/apps/details?id=net.primal.android" target="_blank">Download from Play Store</a></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Web</strong></td>
+                                <td>Primal</td>
+                                <td><a href="https://primal.net" target="_blank">Open in Browser</a></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Web</strong></td>
+                                <td>noStrudel</td>
+                                <td><a href="https://nostrudel.ninja" target="_blank">Open in Browser</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            <h3>Optional: NIP-05 verification</h3>
-            <p>
-                NIP-05 links your npub to a domain you control (like <code>you@yourdomain.com</code>). 
-                Enterprises trust verified humans more.
-            </p>
-            <ol>
-                <li>Create file: <code>https://yourdomain.com/.well-known/nostr.json</code></li>
-                <li>Add contents:</li>
-            </ol>
-            <div class="doc-code">
-<pre><code>{
+            <div class="step">
+                <h3 class="step-title">Create your keys</h3>
+                <div class="step-content">
+                    <p>Open the app. Keys are generated automatically on first launch. No signup. No email. No password.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3 class="step-title">Understand your keys</h3>
+                <div class="step-content">
+                    <table class="key-table">
+                        <thead>
+                            <tr>
+                                <th>Key</th>
+                                <th>What it is</th>
+                                <th>Rule</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="highlight">npub</span></td>
+                                <td>Your public identity</td>
+                                <td><span style="color: var(--success-color);">Share freely</span></td>
+                            </tr>
+                            <tr>
+                                <td><span class="highlight">nsec</span></td>
+                                <td>Your signing key</td>
+                                <td><span style="color: var(--warning-color);">NEVER share</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3 class="step-title">Back up your nsec</h3>
+                <div class="step-content">
+                    <ol class="ordered-list">
+                        <li>Open <strong>Settings → Keys</strong> (or <strong>Profile → Keys</strong>)</li>
+                        <li>Copy your <span class="highlight">nsec</span></li>
+                        <li>Paste into your password manager (1Password, Bitwarden, etc.)</li>
+                        <li><strong>If you lose your nsec, you lose your identity forever. No recovery.</strong></li>
+                    </ol>
+                    <div class="warning-box">
+                        <strong>Warning:</strong> Store your nsec safely. This is your NOSTR identity key and cannot be recovered if lost.
+                    </div>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3 class="step-title">Optional: NIP-05 verification</h3>
+                <div class="step-content">
+                    <p>NIP-05 links your npub to a domain you control (like you@yourdomain.com). Enterprises trust verified humans more.</p>
+                    <p><strong>To set up:</strong></p>
+                    <ol class="ordered-list">
+                        <li>Create file: <code>https://yourdomain.com/.well-known/nostr.json</code></li>
+                        <li>Add this content:</li>
+                    </ol>
+                    <div class="code-block" data-lang="json">
+<pre>{
   "names": {
     "you": "your_npub_in_hex_format"
   }
-}</code></pre>
+}</pre>
+                    </div>
+                    <p>Convert npub to hex at: <a href="https://nostrcheck.me/converter/" target="_blank" style="color: var(--purple-accent);">nostrcheck.me/converter</a></p>
+                </div>
             </div>
-            <p>Convert npub to hex at: <a href="https://nostrcheck.me/converter/">nostrcheck.me/converter</a></p>
-        </div>
+        </section>
 
-        <!-- Section 2: Install Your Agent -->
-        <div class="doc-section">
-            <div class="step-header">
-                <span class="step-num">2</span>
-                <h2 style="border: none; padding: 0; margin: 0;">Install Your Agent</h2>
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">2</div>
+                <h2 class="section-title">Install Your Agent</h2>
             </div>
             
-            <p>Your agent runs on your machine (or server). Install the SDK in whichever language you prefer.</p>
+            <p class="intro-text">Your agent runs on your machine (or server). Install the SDK in whichever language you prefer.</p>
 
-            <h3>Install the SDK</h3>
-            <table class="doc-table">
-                <tr>
-                    <th>Language</th>
-                    <th>Command</th>
-                </tr>
-                <tr>
-                    <td>Rust</td>
-                    <td><code>cargo add signedby-sdk</code></td>
-                </tr>
-                <tr>
-                    <td>Python</td>
-                    <td><code>pip install signedby</code></td>
-                </tr>
-                <tr>
-                    <td>TypeScript</td>
-                    <td><code>npm install @signedby/sdk</code></td>
-                </tr>
-            </table>
+            <div class="step">
+                <h3 class="step-title">Install the SDK</h3>
+                <div class="step-content">
+                    <table class="language-table">
+                        <thead>
+                            <tr>
+                                <th>Language</th>
+                                <th>Command</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Rust</strong></td>
+                                <td><code>cargo add signedby-sdk</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Python</strong></td>
+                                <td><code>pip install signedby</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>TypeScript</strong></td>
+                                <td><code>npm install @signedby/sdk</code></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-            <h3>Initialize the agent</h3>
-            
-            <p><strong>Python:</strong></p>
-            <div class="doc-code">
-<pre><code>from signedby import SignedByAgent
+            <div class="step">
+                <h3 class="step-title">Initialize the agent</h3>
+                <div class="step-content">
+                    <p><strong>Python:</strong></p>
+                    <div class="code-block" data-lang="python">
+<pre>from signedby import SignedByAgent
 
 agent = SignedByAgent.init(storage_path="./agent_data")
-print(f"Agent npub: {agent.npub}")</code></pre>
-            </div>
+print(f"Agent npub: {agent.npub}")</pre>
+                    </div>
 
-            <p><strong>Rust:</strong></p>
-            <div class="doc-code">
-<pre><code>use signedby_sdk::SignedByAgent;
+                    <p><strong>Rust:</strong></p>
+                    <div class="code-block" data-lang="rust">
+<pre>use signedby_sdk::SignedByAgent;
 
 let agent = SignedByAgent::init("./agent_data")?;
-println!("Agent npub: {}", agent.npub());</code></pre>
-            </div>
+println!("Agent npub: {}", agent.npub());</pre>
+                    </div>
 
-            <p><strong>TypeScript:</strong></p>
-            <div class="doc-code">
-<pre><code>import { SignedByAgent } from '@signedby/sdk';
+                    <p><strong>TypeScript:</strong></p>
+                    <div class="code-block" data-lang="typescript">
+<pre>import { SignedByAgent } from '@signedby/sdk';
 
 const agent = await SignedByAgent.init('./agent_data');
-console.log(`Agent npub: ${agent.npub}`);</code></pre>
+console.log(`Agent npub: ${agent.npub}`);</pre>
+                    </div>
+                </div>
             </div>
 
-            <h3>Configure email mapping</h3>
-            <p>Tell the agent which email address you use at each enterprise.</p>
-
-            <p><strong>Python:</strong></p>
-            <div class="doc-code">
-<pre><code>agent.set_email_mapping({
+            <div class="step">
+                <h3 class="step-title">Configure email mapping</h3>
+                <div class="step-content">
+                    <p>Tell the agent which email address you use at each enterprise.</p>
+                    
+                    <p><strong>Python:</strong></p>
+                    <div class="code-block" data-lang="python">
+<pre>agent.set_email_mapping({
     "amazon.com": "you@gmail.com",
     "acme.com": "you@gmail.com"
-})</code></pre>
-            </div>
+})</pre>
+                    </div>
 
-            <p><strong>Rust:</strong></p>
-            <div class="doc-code">
-<pre><code>agent.set_email_mapping(HashMap::from([
+                    <p><strong>Rust:</strong></p>
+                    <div class="code-block" data-lang="rust">
+<pre>agent.set_email_mapping(HashMap::from([
     ("amazon.com", "you@gmail.com"),
     ("acme.com", "you@gmail.com"),
-]));</code></pre>
-            </div>
+]));</pre>
+                    </div>
 
-            <p><strong>TypeScript:</strong></p>
-            <div class="doc-code">
-<pre><code>agent.setEmailMapping({
+                    <p><strong>TypeScript:</strong></p>
+                    <div class="code-block" data-lang="typescript">
+<pre>agent.setEmailMapping({
     'amazon.com': 'you@gmail.com',
     'acme.com': 'you@gmail.com'
-});</code></pre>
+});</pre>
+                    </div>
+                </div>
             </div>
 
-            <h3>Start the agent</h3>
+            <div class="step">
+                <h3 class="step-title">Start the agent</h3>
+                <div class="step-content">
+                    <p><strong>Python:</strong></p>
+                    <div class="code-block" data-lang="python">
+<pre>agent.connect_relay("wss://relay.privacy-lion.com")
+agent.watch_for_authorizations()</pre>
+                    </div>
 
-            <p><strong>Python:</strong></p>
-            <div class="doc-code">
-<pre><code>agent.connect_relay("wss://relay.privacy-lion.com")
-agent.watch_for_authorizations()</code></pre>
+                    <p><strong>Rust:</strong></p>
+                    <div class="code-block" data-lang="rust">
+<pre>agent.connect_relay("wss://relay.privacy-lion.com")?;
+agent.watch_for_authorizations().await?;</pre>
+                    </div>
+
+                    <p><strong>TypeScript:</strong></p>
+                    <div class="code-block" data-lang="typescript">
+<pre>await agent.connectRelay('wss://relay.privacy-lion.com');
+agent.watchForAuthorizations();</pre>
+                    </div>
+
+                    <div class="success-box">
+                        <strong>Success!</strong> Agent is now running and waiting for authorization requests.
+                    </div>
+                </div>
             </div>
+        </section>
 
-            <p><strong>Rust:</strong></p>
-            <div class="doc-code">
-<pre><code>agent.connect_relay("wss://relay.privacy-lion.com")?;
-agent.watch_for_authorizations().await?;</code></pre>
-            </div>
-
-            <p><strong>TypeScript:</strong></p>
-            <div class="doc-code">
-<pre><code>await agent.connectRelay('wss://relay.privacy-lion.com');
-agent.watchForAuthorizations();</code></pre>
-            </div>
-
-            <p>Agent is now running and waiting for authorization requests.</p>
-        </div>
-
-        <!-- Section 3: Authorize Your Agent (Genesis) -->
-        <div class="doc-section">
-            <div class="step-header">
-                <span class="step-num">3</span>
-                <h2 style="border: none; padding: 0; margin: 0;">Authorize Your Agent (Genesis)</h2>
-            </div>
-            
-            <p>
-                This happens once per enterprise. After Genesis completes, your agent can log in 
-                to that enterprise forever (until you revoke it).
-            </p>
-
-            <h3>Step 3.1: Log into the enterprise</h3>
-            <p>
-                Go to the enterprise website (e.g., Amazon). Log in with your normal credentials. 
-                Find "Authorize an Agent" and click it.
-            </p>
-
-            <h3>Step 3.2: Enter the challenge code</h3>
-            <p>
-                The enterprise shows a 16-character code (e.g., <code>A1B2C3D4E5F67890</code>). 
-                Enter this code into your running agent when prompted.
-            </p>
-
-            <h3>Step 3.3: Sign the delegation</h3>
-            <p>
-                Your agent will display an unsigned delegation event and a link/QR code. 
-                Open your NOSTR client, scan the QR or paste the link. 
-                Review the permissions and expiration date. Sign it.
-            </p>
-
-            <h3>Step 3.4: Done</h3>
-            <p>
-                Your agent handles the rest. Within seconds, you'll see confirmation. 
-                Your agent is now enrolled and can authenticate to that enterprise.
-            </p>
-        </div>
-
-        <!-- Section 4: Stay in Control -->
-        <div class="doc-section">
-            <div class="step-header">
-                <span class="step-num">4</span>
-                <h2 style="border: none; padding: 0; margin: 0;">Stay in Control</h2>
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">3</div>
+                <h2 class="section-title">Authorize Your Agent (Genesis)</h2>
             </div>
             
-            <p>You delegated authority, not ownership. You can monitor, revoke, or renew at any time.</p>
+            <p class="intro-text">This happens once per enterprise. After Genesis completes, your agent can log in to that enterprise forever (until you revoke it).</p>
 
-            <h3>Monitor your agent</h3>
-            <p>Subscribe to your agent's npub in any NOSTR client. Watch for these event kinds:</p>
-            <ul>
-                <li><code>28101</code> — Agent generated a proof</li>
-                <li><code>28102</code> — Authentication complete</li>
-                <li><code>28103</code> — Login complete</li>
-            </ul>
+            <div class="step">
+                <h3 class="step-title">Log into the enterprise</h3>
+                <div class="step-content">
+                    <p>Go to the enterprise website (e.g., Amazon). Log in with your normal credentials. Find <strong>"Authorize an Agent"</strong> and click it.</p>
+                </div>
+            </div>
 
-            <h3>Revoke a delegation</h3>
-            <p>
-                If your agent is compromised or you want to cut access, 
-                publish a kind 28251 event from your NOSTR client:
-            </p>
-            <div class="doc-code">
-<pre><code>{
+            <div class="step">
+                <h3 class="step-title">Enter the challenge code</h3>
+                <div class="step-content">
+                    <p>The enterprise shows a 16-character code (e.g., <span class="highlight">A1B2C3D4E5F67890</span>). Enter this code into your running agent when prompted.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3 class="step-title">Sign the delegation</h3>
+                <div class="step-content">
+                    <p>Your agent will display an unsigned delegation event and a link/QR code. Open your NOSTR client, scan the QR or paste the link. Review the permissions and expiration date. Sign it.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3 class="step-title">Done</h3>
+                <div class="step-content">
+                    <div class="success-box">
+                        <strong>Complete!</strong> Your agent handles the rest. Within seconds, you'll see confirmation. Your agent is now enrolled and can authenticate to that enterprise.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">4</div>
+                <h2 class="section-title">Stay in Control</h2>
+            </div>
+            
+            <p class="intro-text">You delegated authority, not ownership. You can monitor, revoke, or renew at any time.</p>
+
+            <div class="step">
+                <h3 class="step-title">Monitor your agent</h3>
+                <div class="step-content">
+                    <p>Subscribe to your agent's npub in any NOSTR client. Watch for these event kinds:</p>
+                    <ul class="monitor-list">
+                        <li><span class="highlight">28101</span> — Agent generated a proof</li>
+                        <li><span class="highlight">28102</span> — Authentication complete</li>
+                        <li><span class="highlight">28103</span> — Login complete</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3 class="step-title">Revoke a delegation</h3>
+                <div class="step-content">
+                    <p>If your agent is compromised or you want to cut access, publish a kind 28251 event from your NOSTR client:</p>
+                    <div class="code-block" data-lang="json">
+<pre>{
   "kind": 28251,
   "tags": [["d", "DELEGATION_ID_HERE"]],
   "content": ""
-}</code></pre>
+}</pre>
+                    </div>
+                    <p>Replace <span class="highlight">DELEGATION_ID_HERE</span> with the delegation_id from your original kind 28250. The agent loses access immediately.</p>
+                </div>
             </div>
-            <p>
-                Replace <code>DELEGATION_ID_HERE</code> with the <code>delegation_id</code> 
-                from your original kind 28250. The agent loses access immediately.
-            </p>
 
-            <h3>Renew before expiry</h3>
-            <p>
-                Delegations have an expiration date. Before it expires, sign a new kind 28250 
-                with a new <code>expires_at</code>. Your agent's Merkle leaf stays the same — 
-                no re-enrollment needed.
-            </p>
+            <div class="step">
+                <h3 class="step-title">Renew before expiry</h3>
+                <div class="step-content">
+                    <p>Delegations have an expiration date. Before it expires, sign a new kind 28250 with a new <code>expires_at</code>. Your agent's Merkle leaf stays the same — no re-enrollment needed.</p>
+                </div>
+            </div>
 
-            <h3>Pay your subscription</h3>
-            <p>
-                Your agent's SDK prompts you when payment is due. Pay via Lightning invoice. 
-                The preimage cryptographically binds to your agent's identity. <strong>$21/month in BTC.</strong>
-            </p>
-        </div>
+            <div class="step">
+                <h3 class="step-title">Pay your subscription</h3>
+                <div class="step-content">
+                    <p>Your agent's SDK prompts you when payment is due. Pay via Lightning invoice. The preimage cryptographically binds to your agent's identity.</p>
+                    <div class="success-box">
+                        <strong>$21/month in BTC</strong> — Your agent earns 20% automatically.
+                    </div>
+                </div>
+            </div>
+        </section>
 
-        <!-- Footer -->
-        <div class="doc-section" style="border-top: 1px solid var(--border); padding-top: 32px; margin-top: 48px;">
-            <p>
-                Questions? Join the community: <a href="https://discord.com/invite/clawd">discord.com/invite/clawd</a>
-            </p>
-            <p>
-                <a href="../">← Back to SignedByMe</a>
-            </p>
-        </div>
+        <footer class="footer">
+            <p>Questions? Join the community: <a href="https://discord.com/invite/clawd">discord.com/invite/clawd</a></p>
+        </footer>
     </div>
 </body>
 </html>
