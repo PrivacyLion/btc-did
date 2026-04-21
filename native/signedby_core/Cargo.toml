@@ -1,9 +1,19 @@
 [package]
-name = "signedby_core"
-version = "0.3.0"
+name = "signedby-sdk"
+version = "0.1.0"
 edition = "2021"
+description = "SignedByMe SDK - Human-controlled identity for autonomous agents"
+license = "LicenseRef-SSAL-1.0"
+license-file = "../../LICENSE"
+repository = "https://github.com/PrivacyLion/SignedByMe"
+homepage = "https://signedbyme.com"
+documentation = "https://signedbyme.com/docs"
+readme = "README.md"
+keywords = ["identity", "zk-proofs", "nostr", "bitcoin", "authentication"]
+categories = ["authentication", "cryptography"]
 
 [lib]
+name = "signedby_sdk"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
