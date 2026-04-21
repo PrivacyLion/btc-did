@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Start Guide for Humans — SignedByMe</title>
+    <link rel="stylesheet" href="../style.css">
+    <style>
+        body {
+            padding-top: 80px;
+        }
+        .doc-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 48px 24px;
+        }
+        .doc-nav {
+            margin-bottom: 32px;
+        }
+        .doc-nav a {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        .doc-title {
+            margin-bottom: 8px;
+        }
+        .doc-subtitle {
+            color: var(--text-muted);
+            font-size: 1.25rem;
+            margin-bottom: 48px;
+        }
+        .doc-section {
+            margin-bottom: 48px;
+        }
+        .doc-section h2 {
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .doc-section h3 {
+            font-size: 1.125rem;
+            margin-top: 24px;
+            margin-bottom: 12px;
+        }
+        .doc-section p, .doc-section li {
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+        .doc-section ul, .doc-section ol {
+            margin: 16px 0;
+            padding-left: 24px;
+        }
+        .doc-section li {
+            margin-bottom: 8px;
+        }
+        .doc-code {
+            background: #1E1E1E;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+        .doc-code pre {
+            padding: 16px;
+            margin: 0;
+        }
+        .doc-code code {
+            color: #D4D4D4;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        .doc-note {
+            background: var(--primary-light);
+            border-left: 4px solid var(--primary);
+            padding: 16px;
+            border-radius: 0 8px 8px 0;
+            margin: 16px 0;
+        }
+        .doc-note p {
+            margin: 0;
+            color: var(--text);
+        }
+        .doc-warning {
+            background: #FEF3C7;
+            border-left: 4px solid #F59E0B;
+        }
+        .doc-warning p {
+            color: #92400E;
+        }
+        .doc-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 0.9rem;
+        }
+        .doc-table th, .doc-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .doc-table th {
+            background: var(--bg-alt);
+            font-weight: 600;
+        }
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .step-num {
+            background: var(--primary);
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .step-header h3 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+        .key-box {
+            display: inline-block;
+            background: var(--bg-alt);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        .key-public { color: #10B981; }
+        .key-private { color: #EF4444; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="../" class="nav-logo">
+                <span class="logo-text brand-name">SignedByMe</span>
+            </a>
+            <div class="nav-links">
+                <a href="../#how-it-works">How It Works</a>
+                <a href="../#for-humans">For Humans</a>
+                <a href="../#for-agents">For Agents</a>
+                <a href="../#for-enterprises">For Enterprises</a>
+                <a href="../#download" class="nav-cta">Download SDK</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="doc-container">
+        <div class="doc-nav">
+            <a href="../#for-humans">← Back to Home</a>
+        </div>
+        
+        <h1 class="doc-title">Start Guide for Humans</h1>
+        <p class="doc-subtitle">Authorize your AI agent in 10 minutes.</p>
+
+        <!-- Section 1: Get Your NOSTR Keys -->
+        <div class="doc-section">
+            <div class="step-header">
+                <span class="step-num">1</span>
+                <h2 style="border: none; padding: 0; margin: 0;">Get Your NOSTR Keys</h2>
+            </div>
+            
+            <p>
+                NOSTR is a decentralized protocol. Your keys are your identity — no company controls them. 
+                You need keys before you can authorize an agent.
+            </p>
+
+            <h3>Download a NOSTR client</h3>
+            <table class="doc-table">
+                <tr>
+                    <th>Platform</th>
+                    <th>App</th>
+                    <th>Link</th>
+                </tr>
+                <tr>
+                    <td>iOS</td>
+                    <td>Damus</td>
+                    <td><a href="https://apps.apple.com/app/damus/id1628663131">App Store</a></td>
+                </tr>
+                <tr>
+                    <td>iOS</td>
+                    <td>Primal</td>
+                    <td><a href="https://apps.apple.com/app/primal/id1673134518">App Store</a></td>
+                </tr>
+                <tr>
+                    <td>Android</td>
+                    <td>Amethyst</td>
+                    <td><a href="https://play.google.com/store/apps/details?id=com.vitorpamplona.amethyst">Play Store</a></td>
+                </tr>
+                <tr>
+                    <td>Android</td>
+                    <td>Primal</td>
+                    <td><a href="https://play.google.com/store/apps/details?id=net.primal.android">Play Store</a></td>
+                </tr>
+                <tr>
+                    <td>Web</td>
+                    <td>Primal</td>
+                    <td><a href="https://primal.net">primal.net</a></td>
+                </tr>
+                <tr>
+                    <td>Web</td>
+                    <td>noStrudel</td>
+                    <td><a href="https://nostrudel.ninja">nostrudel.ninja</a></td>
+                </tr>
+            </table>
+
+            <h3>Create your keys</h3>
+            <p>Open the app. Keys are generated automatically on first launch. No signup. No email. No password.</p>
+
+            <h3>Understand your keys</h3>
+            <table class="doc-table">
+                <tr>
+                    <th>Key</th>
+                    <th>What it is</th>
+                    <th>Rule</th>
+                </tr>
+                <tr>
+                    <td><span class="key-box key-public">npub</span></td>
+                    <td>Your public identity</td>
+                    <td>Share freely</td>
+                </tr>
+                <tr>
+                    <td><span class="key-box key-private">nsec</span></td>
+                    <td>Your signing key</td>
+                    <td><strong>NEVER share</strong></td>
+                </tr>
+            </table>
+
+            <h3>Back up your nsec</h3>
+            <ol>
+                <li>Open Settings → Keys (or Profile → Keys)</li>
+                <li>Copy your <code>nsec</code></li>
+                <li>Paste into your password manager (1Password, Bitwarden, etc.)</li>
+            </ol>
+            
+            <div class="doc-note doc-warning">
+                <p><strong>⚠️ If you lose your nsec, you lose your identity forever. No recovery.</strong></p>
+            </div>
+
+            <h3>Optional: NIP-05 verification</h3>
+            <p>
+                NIP-05 links your npub to a domain you control (like <code>you@yourdomain.com</code>). 
+                Enterprises trust verified humans more.
+            </p>
+            <ol>
+                <li>Create file: <code>https://yourdomain.com/.well-known/nostr.json</code></li>
+                <li>Add contents:</li>
+            </ol>
+            <div class="doc-code">
+<pre><code>{
+  "names": {
+    "you": "your_npub_in_hex_format"
+  }
+}</code></pre>
+            </div>
+            <p>Convert npub to hex at: <a href="https://nostrcheck.me/converter/">nostrcheck.me/converter</a></p>
+        </div>
+
+        <!-- Section 2: Install Your Agent -->
+        <div class="doc-section">
+            <div class="step-header">
+                <span class="step-num">2</span>
+                <h2 style="border: none; padding: 0; margin: 0;">Install Your Agent</h2>
+            </div>
+            
+            <p>Your agent runs on your machine (or server). Install the SDK in whichever language you prefer.</p>
+
+            <h3>Install the SDK</h3>
+            <table class="doc-table">
+                <tr>
+                    <th>Language</th>
+                    <th>Command</th>
+                </tr>
+                <tr>
+                    <td>Rust</td>
+                    <td><code>cargo add signedby-sdk</code></td>
+                </tr>
+                <tr>
+                    <td>Python</td>
+                    <td><code>pip install signedby</code></td>
+                </tr>
+                <tr>
+                    <td>TypeScript</td>
+                    <td><code>npm install @signedby/sdk</code></td>
+                </tr>
+            </table>
+
+            <h3>Initialize the agent</h3>
+            
+            <p><strong>Python:</strong></p>
+            <div class="doc-code">
+<pre><code>from signedby import SignedByAgent
+
+agent = SignedByAgent.init(storage_path="./agent_data")
+print(f"Agent npub: {agent.npub}")</code></pre>
+            </div>
+
+            <p><strong>Rust:</strong></p>
+            <div class="doc-code">
+<pre><code>use signedby_sdk::SignedByAgent;
+
+let agent = SignedByAgent::init("./agent_data")?;
+println!("Agent npub: {}", agent.npub());</code></pre>
+            </div>
+
+            <p><strong>TypeScript:</strong></p>
+            <div class="doc-code">
+<pre><code>import { SignedByAgent } from '@signedby/sdk';
+
+const agent = await SignedByAgent.init('./agent_data');
+console.log(`Agent npub: ${agent.npub}`);</code></pre>
+            </div>
+
+            <h3>Configure email mapping</h3>
+            <p>Tell the agent which email address you use at each enterprise.</p>
+
+            <p><strong>Python:</strong></p>
+            <div class="doc-code">
+<pre><code>agent.set_email_mapping({
+    "amazon.com": "you@gmail.com",
+    "acme.com": "you@gmail.com"
+})</code></pre>
+            </div>
+
+            <p><strong>Rust:</strong></p>
+            <div class="doc-code">
+<pre><code>agent.set_email_mapping(HashMap::from([
+    ("amazon.com", "you@gmail.com"),
+    ("acme.com", "you@gmail.com"),
+]));</code></pre>
+            </div>
+
+            <p><strong>TypeScript:</strong></p>
+            <div class="doc-code">
+<pre><code>agent.setEmailMapping({
+    'amazon.com': 'you@gmail.com',
+    'acme.com': 'you@gmail.com'
+});</code></pre>
+            </div>
+
+            <h3>Start the agent</h3>
+
+            <p><strong>Python:</strong></p>
+            <div class="doc-code">
+<pre><code>agent.connect_relay("wss://relay.privacy-lion.com")
+agent.watch_for_authorizations()</code></pre>
+            </div>
+
+            <p><strong>Rust:</strong></p>
+            <div class="doc-code">
+<pre><code>agent.connect_relay("wss://relay.privacy-lion.com")?;
+agent.watch_for_authorizations().await?;</code></pre>
+            </div>
+
+            <p><strong>TypeScript:</strong></p>
+            <div class="doc-code">
+<pre><code>await agent.connectRelay('wss://relay.privacy-lion.com');
+agent.watchForAuthorizations();</code></pre>
+            </div>
+
+            <p>Agent is now running and waiting for authorization requests.</p>
+        </div>
+
+        <!-- Section 3: Authorize Your Agent (Genesis) -->
+        <div class="doc-section">
+            <div class="step-header">
+                <span class="step-num">3</span>
+                <h2 style="border: none; padding: 0; margin: 0;">Authorize Your Agent (Genesis)</h2>
+            </div>
+            
+            <p>
+                This happens once per enterprise. After Genesis completes, your agent can log in 
+                to that enterprise forever (until you revoke it).
+            </p>
+
+            <h3>Step 3.1: Log into the enterprise</h3>
+            <p>
+                Go to the enterprise website (e.g., Amazon). Log in with your normal credentials. 
+                Find "Authorize an Agent" and click it.
+            </p>
+
+            <h3>Step 3.2: Enter the challenge code</h3>
+            <p>
+                The enterprise shows a 16-character code (e.g., <code>A1B2C3D4E5F67890</code>). 
+                Enter this code into your running agent when prompted.
+            </p>
+
+            <h3>Step 3.3: Sign the delegation</h3>
+            <p>
+                Your agent will display an unsigned delegation event and a link/QR code. 
+                Open your NOSTR client, scan the QR or paste the link. 
+                Review the permissions and expiration date. Sign it.
+            </p>
+
+            <h3>Step 3.4: Done</h3>
+            <p>
+                Your agent handles the rest. Within seconds, you'll see confirmation. 
+                Your agent is now enrolled and can authenticate to that enterprise.
+            </p>
+        </div>
+
+        <!-- Section 4: Stay in Control -->
+        <div class="doc-section">
+            <div class="step-header">
+                <span class="step-num">4</span>
+                <h2 style="border: none; padding: 0; margin: 0;">Stay in Control</h2>
+            </div>
+            
+            <p>You delegated authority, not ownership. You can monitor, revoke, or renew at any time.</p>
+
+            <h3>Monitor your agent</h3>
+            <p>Subscribe to your agent's npub in any NOSTR client. Watch for these event kinds:</p>
+            <ul>
+                <li><code>28101</code> — Agent generated a proof</li>
+                <li><code>28102</code> — Authentication complete</li>
+                <li><code>28103</code> — Login complete</li>
+            </ul>
+
+            <h3>Revoke a delegation</h3>
+            <p>
+                If your agent is compromised or you want to cut access, 
+                publish a kind 28251 event from your NOSTR client:
+            </p>
+            <div class="doc-code">
+<pre><code>{
+  "kind": 28251,
+  "tags": [["d", "DELEGATION_ID_HERE"]],
+  "content": ""
+}</code></pre>
+            </div>
+            <p>
+                Replace <code>DELEGATION_ID_HERE</code> with the <code>delegation_id</code> 
+                from your original kind 28250. The agent loses access immediately.
+            </p>
+
+            <h3>Renew before expiry</h3>
+            <p>
+                Delegations have an expiration date. Before it expires, sign a new kind 28250 
+                with a new <code>expires_at</code>. Your agent's Merkle leaf stays the same — 
+                no re-enrollment needed.
+            </p>
+
+            <h3>Pay your subscription</h3>
+            <p>
+                Your agent's SDK prompts you when payment is due. Pay via Lightning invoice. 
+                The preimage cryptographically binds to your agent's identity. <strong>$21/month in BTC.</strong>
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="doc-section" style="border-top: 1px solid var(--border); padding-top: 32px; margin-top: 48px;">
+            <p>
+                Questions? Join the community: <a href="https://discord.com/invite/clawd">discord.com/invite/clawd</a>
+            </p>
+            <p>
+                <a href="../">← Back to SignedByMe</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
