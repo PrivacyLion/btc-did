@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding Delegation - SignedByMe</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-accent: #242424;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --text-muted: #808080;
+            --purple-primary: #8b5cf6;
+            --purple-secondary: #a855f7;
+            --purple-accent: #c084fc;
+            --border-color: #333333;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding-bottom: 3rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .title {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--purple-primary), var(--purple-accent));
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        .section {
+            margin-bottom: 4rem;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        .section:nth-child(2) { animation-delay: 0.1s; }
+        .section:nth-child(3) { animation-delay: 0.2s; }
+        .section:nth-child(4) { animation-delay: 0.3s; }
+        .section:nth-child(5) { animation-delay: 0.4s; }
+        .section:nth-child(6) { animation-delay: 0.5s; }
+        .section:nth-child(7) { animation-delay: 0.6s; }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border-left: 4px solid var(--purple-primary);
+        }
+
+        .step-number {
+            min-width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--purple-primary), var(--purple-secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: white;
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
+        }
+
+        .section-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .intro-text {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background: var(--bg-accent);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--purple-primary);
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.1);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--purple-accent);
+        }
+
+        .card-content {
+            color: var(--text-secondary);
+        }
+
+        .code-block {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block::before {
+            content: attr(data-lang);
+            position: absolute;
+            top: 0.5rem;
+            right: 1rem;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .code-block pre {
+            margin: 0;
+            color: var(--text-primary);
+        }
+
+        .highlight {
+            color: var(--purple-accent);
+            font-weight: 600;
+        }
+
+        .flow-diagram {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 2rem;
+            margin: 2rem 0;
+            text-align: center;
+        }
+
+        .flow-step {
+            display: inline-flex;
+            align-items: center;
+            margin: 0.5rem;
+        }
+
+        .flow-box {
+            background: var(--bg-accent);
+            border: 2px solid var(--purple-primary);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .flow-box.human {
+            border-color: var(--success-color);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .flow-box.agent {
+            border-color: var(--purple-primary);
+            background: rgba(139, 92, 246, 0.1);
+        }
+
+        .flow-box.enterprise {
+            border-color: var(--warning-color);
+            background: rgba(245, 158, 11, 0.1);
+        }
+
+        .flow-arrow {
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            margin: 0 1rem;
+        }
+
+        .flow-label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+            font-weight: normal;
+        }
+
+        .scope-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .scope-table th {
+            background: var(--purple-primary);
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .scope-table td {
+            padding: 1rem;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .scope-table code {
+            background: var(--bg-accent);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .warning-box {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+            border: 1px solid var(--warning-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .warning-box strong {
+            color: var(--warning-color);
+        }
+
+        .success-box {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
+            border: 1px solid var(--success-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .success-box strong {
+            color: var(--success-color);
+        }
+
+        .error-box {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+            border: 1px solid var(--error-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .error-box strong {
+            color: var(--error-color);
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.05));
+            border: 1px solid var(--purple-primary);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .info-box strong {
+            color: var(--purple-accent);
+        }
+
+        .bullet-list {
+            list-style: none;
+            padding: 0;
+            margin: 1rem 0;
+        }
+
+        .bullet-list li {
+            padding: 0.5rem 0 0.5rem 1.5rem;
+            color: var(--text-secondary);
+            position: relative;
+        }
+
+        .bullet-list li::before {
+            content: "→";
+            color: var(--purple-primary);
+            position: absolute;
+            left: 0;
+        }
+
+        .numbered-list {
+            margin: 1rem 0;
+            padding-left: 0;
+            list-style: none;
+            counter-reset: step-counter;
+        }
+
+        .numbered-list li {
+            position: relative;
+            padding: 0.5rem 0 0.5rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .numbered-list li::before {
+            content: counter(step-counter);
+            counter-increment: step-counter;
+            position: absolute;
+            left: 0;
+            top: 0.5rem;
+            width: 1.5rem;
+            height: 1.5rem;
+            background: var(--purple-primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 3rem 0;
+            border-top: 1px solid var(--border-color);
+            margin-top: 4rem;
+        }
+
+        .footer a {
+            color: var(--purple-accent);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .section-header {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .flow-diagram {
+                padding: 1rem;
+            }
+
+            .flow-step {
+                display: block;
+                margin: 1rem 0;
+            }
+
+            .flow-arrow {
+                transform: rotate(90deg);
+                display: block;
+                margin: 0.5rem auto;
+            }
+
+            .code-block {
+                padding: 1rem;
+                font-size: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">Understanding Delegation</h1>
+            <p class="subtitle">How permissions flow from human to agent.</p>
+        </header>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">1</div>
+                <h2 class="section-title">What is Delegation?</h2>
+            </div>
+            
+            <p class="intro-text">
+                Delegation is the cryptographic authorization from a human to their agent. 
+                It defines what the agent can do, where it can do it, and for how long.
+            </p>
+
+            <div class="card">
+                <h3 class="card-title">The Core Principle</h3>
+                <div class="card-content">
+                    <p>Your agent cannot act without your explicit, signed permission. You create a <span class="highlight">delegation event</span> — a NOSTR message signed with your private key — that grants specific powers to your agent.</p>
+                    <ul class="bullet-list">
+                        <li>Only you can create delegations (requires your nsec)</li>
+                        <li>Only you can revoke them</li>
+                        <li>Delegations expire automatically</li>
+                        <li>Enterprises verify delegations before trusting your agent</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <strong>Key insight:</strong> Delegation lives entirely on NOSTR. The SignedByMe server never sees your delegation — it's verified directly by enterprises using cryptographic signatures.
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">2</div>
+                <h2 class="section-title">The Delegation Chain</h2>
+            </div>
+            
+            <p class="intro-text">
+                Permissions flow through a cryptographic chain. Each link is verified independently.
+            </p>
+
+            <div class="flow-diagram">
+                <div class="flow-step">
+                    <div class="flow-box human">
+                        Human
+                        <span class="flow-label">Signs with nsec</span>
+                    </div>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-step">
+                    <div class="flow-box">
+                        Kind 28250
+                        <span class="flow-label">Delegation Event</span>
+                    </div>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-step">
+                    <div class="flow-box agent">
+                        Agent
+                        <span class="flow-label">Receives authority</span>
+                    </div>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-step">
+                    <div class="flow-box enterprise">
+                        Enterprise
+                        <span class="flow-label">Verifies & trusts</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Three NOSTR Keypairs</h3>
+                <div class="card-content">
+                    <table class="scope-table">
+                        <thead>
+                            <tr>
+                                <th>Who</th>
+                                <th>Keypair</th>
+                                <th>Signs</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Human</strong></td>
+                                <td>Your NOSTR keys</td>
+                                <td><code>28250</code> delegation, <code>28251</code> revocation</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Agent</strong></td>
+                                <td>Derived from leaf_secret</td>
+                                <td><code>28101</code> proof, <code>28102</code> auth, <code>28103</code> login</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Enterprise</strong></td>
+                                <td>Enterprise NOSTR keys</td>
+                                <td><code>28200</code> enrollment authorization</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="success-box">
+                <strong>The server has zero NOSTR keys.</strong> It never signs anything. It never sees your delegation. The cryptographic chain is entirely peer-to-peer.
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">3</div>
+                <h2 class="section-title">Kind 28250 — Delegation Grant</h2>
+            </div>
+            
+            <p class="intro-text">
+                This is the NOSTR event you sign to authorize your agent. It specifies exactly what your agent can do.
+            </p>
+
+            <div class="card">
+                <h3 class="card-title">Event Structure</h3>
+                <div class="card-content">
+                    <div class="code-block" data-lang="json">
+<pre>{
+  "kind": 28250,
+  "pubkey": "&lt;your_npub_hex&gt;",
+  "tags": [["p", "&lt;agent_npub_hex&gt;"]],
+  "content": "{
+    \"agent_npub\": \"npub1abc...\",
+    \"scopes\": {
+      \"amazon.com\": [\"read\", \"write\"],
+      \"acme.com\": [\"read:orders\"]
+    },
+    \"expires_at\": \"2027-03-01T00:00:00Z\",
+    \"delegation_id\": \"del_abc123\"
+  }",
+  "sig": "&lt;your_signature&gt;"
+}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Scopes — Two Levels of Control</h3>
+                <div class="card-content">
+                    <p><strong>Level 1: Where</strong> — Which enterprises can your agent access?</p>
+                    <p>Your agent can only authenticate to enterprises explicitly listed in the scopes. No wildcards. No defaults.</p>
+                    
+                    <p style="margin-top: 1rem;"><strong>Level 2: What</strong> — What actions at each enterprise?</p>
+                    <table class="scope-table">
+                        <thead>
+                            <tr>
+                                <th>Scope</th>
+                                <th>Meaning</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>read</code></td>
+                                <td>View data only</td>
+                            </tr>
+                            <tr>
+                                <td><code>write</code></td>
+                                <td>Create and modify data</td>
+                            </tr>
+                            <tr>
+                                <td><code>transact</code></td>
+                                <td>Make purchases or financial actions</td>
+                            </tr>
+                            <tr>
+                                <td><code>admin</code></td>
+                                <td>Administrative functions</td>
+                            </tr>
+                            <tr>
+                                <td><code>full</code></td>
+                                <td>All permissions</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p style="margin-top: 1rem; color: var(--text-muted);">Enterprises map these standard scopes to their internal permission systems.</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Key Fields</h3>
+                <div class="card-content">
+                    <ul class="bullet-list">
+                        <li><span class="highlight">agent_npub</span> — The agent receiving this delegation</li>
+                        <li><span class="highlight">scopes</span> — Map of enterprise → permissions</li>
+                        <li><span class="highlight">expires_at</span> — When this delegation automatically ends</li>
+                        <li><span class="highlight">delegation_id</span> — Unique ID for this delegation (used for revocation)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="warning-box">
+                <strong>The #p tag is critical.</strong> It contains your agent's npub in hex format. NOSTR relays index this tag, allowing enterprises to efficiently query for delegations to a specific agent.
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">4</div>
+                <h2 class="section-title">Kind 28251 — Revocation</h2>
+            </div>
+            
+            <p class="intro-text">
+                Instantly kill your agent's access. One event, immediate effect.
+            </p>
+
+            <div class="card">
+                <h3 class="card-title">Event Structure</h3>
+                <div class="card-content">
+                    <div class="code-block" data-lang="json">
+<pre>{
+  "kind": 28251,
+  "pubkey": "&lt;your_npub_hex&gt;",
+  "tags": [["d", "del_abc123"]],
+  "content": "",
+  "sig": "&lt;your_signature&gt;"
+}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">How Revocation Works</h3>
+                <div class="card-content">
+                    <ol class="numbered-list">
+                        <li>You publish kind 28251 with the <code>delegation_id</code> in the #d tag</li>
+                        <li>Enterprise catches it on their next NOSTR query</li>
+                        <li>Agent's next login attempt fails before reaching the server</li>
+                        <li>No blocklist. No tree rebuild. No server involvement.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <strong>Revocation is instant and cryptographic.</strong> The human is the only party who can revoke. No IT tickets. No admin portals. One NOSTR event and your agent is locked out.
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">5</div>
+                <h2 class="section-title">How Enterprises Validate</h2>
+            </div>
+            
+            <p class="intro-text">
+                Before trusting your agent, enterprises verify the complete delegation chain.
+            </p>
+
+            <div class="card">
+                <h3 class="card-title">Validation Flow</h3>
+                <div class="card-content">
+                    <ol class="numbered-list">
+                        <li><strong>Catch agent's proof event</strong> — Agent publishes kind 28101 with proof, public outputs, and delegation_id</li>
+                        <li><strong>Query for delegation</strong> — Enterprise queries NOSTR: <code>{"kinds": [28250], "#p": ["&lt;agent_npub&gt;"]}</code></li>
+                        <li><strong>Verify the delegation:</strong>
+                            <ul class="bullet-list" style="margin-top: 0.5rem;">
+                                <li>Signed by trusted human (NIP-05 verified)</li>
+                                <li><code>expires_at</code> is in the future</li>
+                                <li><code>delegation_id</code> matches the proof event</li>
+                                <li>No kind 28251 revocation exists for this delegation_id</li>
+                            </ul>
+                        </li>
+                        <li><strong>Call /v1/login/verify</strong> — Server confirms Merkle root, returns OIDC token</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <strong>Caching:</strong> Enterprises cache the delegation chain locally (keyed by agent npub). The cache is invalidated at <code>expires_at</code> or when a revocation is detected.
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">6</div>
+                <h2 class="section-title">Renewal and Subscription</h2>
+            </div>
+            
+            <p class="intro-text">
+                Delegations expire. Subscriptions renew monthly. Your agent's identity persists.
+            </p>
+
+            <div class="card">
+                <h3 class="card-title">Monthly Renewal</h3>
+                <div class="card-content">
+                    <ol class="numbered-list">
+                        <li>Pay monthly Lightning subscription ($21 in BTC)</li>
+                        <li>Publish new kind 28250 with new <code>expires_at</code> and new <code>delegation_id</code></li>
+                        <li>Agent's Merkle leaf stays the same — no re-enrollment needed</li>
+                        <li>Server is completely uninvolved in renewal</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Payment Binding</h3>
+                <div class="card-content">
+                    <p>The subscription preimage is incorporated into your agent's identity at creation. The Lightning payment isn't just a fee — it's cryptographically fused into your agent's DID.</p>
+                    <ul class="bullet-list">
+                        <li>No payment = no valid identity</li>
+                        <li>Payment preimage binds to leaf_secret</li>
+                        <li>Unforgeable economic commitment</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="success-box">
+                <strong>Your agent earns 20%</strong> of your monthly subscription automatically, seeding its economic life and building provable reputation.
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="step-number">7</div>
+                <h2 class="section-title">Quick Reference</h2>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">NOSTR Event Kinds</h3>
+                <div class="card-content">
+                    <table class="scope-table">
+                        <thead>
+                            <tr>
+                                <th>Kind</th>
+                                <th>Name</th>
+                                <th>Signed By</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>28200</code></td>
+                                <td>Enrollment Authorization</td>
+                                <td>Enterprise</td>
+                            </tr>
+                            <tr>
+                                <td><code>28250</code></td>
+                                <td>Delegation Grant</td>
+                                <td>Human</td>
+                            </tr>
+                            <tr>
+                                <td><code>28251</code></td>
+                                <td>Revocation</td>
+                                <td>Human</td>
+                            </tr>
+                            <tr>
+                                <td><code>28101</code></td>
+                                <td>Proof Event</td>
+                                <td>Agent</td>
+                            </tr>
+                            <tr>
+                                <td><code>28102</code></td>
+                                <td>Auth Complete</td>
+                                <td>Agent</td>
+                            </tr>
+                            <tr>
+                                <td><code>28103</code></td>
+                                <td>Login Complete</td>
+                                <td>Agent</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Key Principles</h3>
+                <div class="card-content">
+                    <ul class="bullet-list">
+                        <li><strong>Delegation lives on NOSTR</strong> — Never touches the server</li>
+                        <li><strong>Human controls everything</strong> — Only you can grant or revoke</li>
+                        <li><strong>Enterprises verify directly</strong> — Cryptographic signatures, not API calls</li>
+                        <li><strong>Expiration is automatic</strong> — No cleanup needed</li>
+                        <li><strong>Revocation is instant</strong> — One event, immediate effect</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p>Questions? Join the community: <a href="https://discord.com/invite/clawd">discord.com/invite/clawd</a></p>
+            <p style="margin-top: 1rem;"><a href="../">← Back to SignedByMe</a></p>
+        </footer>
+    </div>
+</body>
+</html>
