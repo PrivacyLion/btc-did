@@ -51,3 +51,9 @@ keys/oidc_rs256.pem
 !circuits/build/membership_cpp/*.asm
 !circuits/build/.gitignore
 node_modules/
+
+# SDK build artifacts
+sdk/rust/target/
+sdk/python/target/
+sdk/typescript/node_modules/
+sdk/typescript/dist/

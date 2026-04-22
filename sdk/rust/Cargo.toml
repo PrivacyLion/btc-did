@@ -1,0 +1,60 @@
+[package]
+name = "signedby-sdk"
+version = "0.1.0"
+edition = "2021"
+authors = ["Privacy Lion <contact@privacy-lion.com>"]
+description = "SignedByMe SDK - Self-signing digital signatures with zero-knowledge proofs"
+license = "MIT"
+repository = "https://github.com/PrivacyLion/SignedByMe"
+documentation = "https://docs.signedbyme.com"
+keywords = ["identity", "zkp", "groth16", "nostr", "bitcoin"]
+categories = ["authentication", "cryptography"]
+readme = "README.md"
+
+[lib]
+name = "signedby_sdk"
+crate-type = ["lib"]
+
+[dependencies]
+# Arkworks for Groth16 / BN254 verification
+ark-ff = "0.4.1"
+ark-bn254 = "0.4.0"
+ark-ec = "0.4.1"
+ark-std = "0.4.0"
+ark-groth16 = "0.4.0"
+ark-snark = "0.4.0"
+ark-serialize = "0.4.1"
+
+# Cryptographic primitives
+sha2 = "0.10"
+hex = "0.4"
+k256 = { version = "0.13", features = ["ecdsa"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+
+# Bech32 encoding (for npub)
+bech32 = "0.11"
+
+# Big integer parsing
+num-bigint = "0.4"
+
+# HTTP client for optional OIDC discovery
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false, optional = true }
+tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
+
+# JWT validation
+jsonwebtoken = "9"
+base64 = "0.21"
+
+[features]
+default = ["oidc"]
+oidc = ["reqwest", "tokio"]  # Enable OIDC discovery (requires network)
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
