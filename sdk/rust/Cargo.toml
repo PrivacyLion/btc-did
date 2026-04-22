@@ -51,6 +51,9 @@ tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 jsonwebtoken = "9"
 base64 = "0.21"
 
+# Pin time to version compatible with rustc 1.86
+time = "=0.3.36"
+
 [features]
 default = ["oidc"]
 oidc = ["reqwest", "tokio"]  # Enable OIDC discovery (requires network)
