@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "SignedByMe SDK - Human-controlled identity for autonomous agents"
 license = "LicenseRef-SSAL-1.0"
-license-file = "../../LICENSE"
+# license-file removed - causes issues with maturin builds
 repository = "https://github.com/PrivacyLion/SignedByMe"
 homepage = "https://signedbyme.com"
 documentation = "https://signedbyme.com/docs"
