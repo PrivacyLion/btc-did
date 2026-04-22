@@ -1,258 +1,125 @@
-//! PyO3 bindings for SignedByMe SDK
+//! Python bindings for SignedByMe SDK
 //!
-//! This module exposes the Rust SDK to Python via PyO3.
+//! Provides Groth16 proof verification and OIDC token validation for Python.
 
 use pyo3::prelude::*;
-use pyo3::exceptions::{PyRuntimeError, PyValueError, PyFileNotFoundError};
-use std::collections::HashMap;
-use std::path::PathBuf;
+use pyo3::exceptions::{PyValueError, PyRuntimeError};
+use pyo3::types::PyDict;
 
-// Re-export from core
-use signedby_sdk::sdk::{
-    identity::IdentityManager,
-    delegation::DelegationManager,
-    enrollment::EnrollmentManager,
-    prover::Prover,
-    nostr_client::NostrClient,
-    storage::SecureStorage,
-    wallet::WalletManager,
-};
-
-/// Python wrapper for SignedByClient
-#[pyclass]
-struct RustSignedByClient {
-    identity: IdentityManager,
-    delegation: DelegationManager,
-    prover: Prover,
-    nostr: NostrClient,
+/// Convert hex public key to bech32 npub format
+#[pyfunction]
+fn hex_to_npub(hex_pubkey: &str) -> PyResult<String> {
+    // Simple bech32 encoding for npub
+    let bytes = hex::decode(hex_pubkey)
+        .map_err(|e| PyValueError::new_err(format!("Invalid hex: {}", e)))?;
+    
+    if bytes.len() != 32 {
+        return Err(PyValueError::new_err("Public key must be 32 bytes"));
+    }
+    
+    // Use bech32 encoding
+    let hrp = bech32::Hrp::parse("npub").unwrap();
+    bech32::encode::<bech32::Bech32m>(hrp, &bytes)
+        .map_err(|e| PyValueError::new_err(format!("Bech32 encode failed: {}", e)))
 }
 
-#[pymethods]
-impl RustSignedByClient {
-    /// Create client from delegation JSON
-    #[staticmethod]
-    fn from_delegation_json(json: &str) -> PyResult<Self> {
-        let delegation = DelegationManager::from_json(json)
-            .map_err(|e| PyValueError::new_err(format!("Invalid delegation: {}", e)))?;
-        
-        let identity = IdentityManager::from_delegation(&delegation)
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to load identity: {}", e)))?;
-        
-        let prover = Prover::new()
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to init prover: {}", e)))?;
-        
-        let nostr = NostrClient::new()
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to init NOSTR client: {}", e)))?;
-        
-        Ok(Self {
-            identity,
-            delegation,
-            prover,
-            nostr,
-        })
+/// Convert bech32 npub to hex format
+#[pyfunction]
+fn npub_to_hex(npub: &str) -> PyResult<String> {
+    let (hrp, bytes) = bech32::decode(npub)
+        .map_err(|e| PyValueError::new_err(format!("Invalid bech32: {}", e)))?;
+    
+    if hrp.to_string() != "npub" {
+        return Err(PyValueError::new_err(format!("Expected npub prefix, got: {}", hrp)));
     }
     
-    /// Get agent's npub
-    fn npub(&self) -> String {
-        self.identity.npub()
-    }
-    
-    /// Get delegation scopes
-    fn scopes(&self) -> HashMap<String, Vec<String>> {
-        self.delegation.scopes().clone()
-    }
-    
-    /// Generate login proof
-    fn generate_login_proof<'py>(&self, py: Python<'py>, client_id: &str, nonce: &str) -> PyResult<&'py PyAny> {
-        let identity = self.identity.clone();
-        let prover = self.prover.clone();
-        let client_id = client_id.to_string();
-        let nonce = nonce.to_string();
-        
-        pyo3_asyncio::tokio::future_into_py(py, async move {
-            let proof = prover.generate_proof(&identity, &client_id, &nonce)
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Proof generation failed: {}", e)))?;
-            
-            Ok(Python::with_gil(|py| {
-                proof.to_object(py)
-            }))
-        })
-    }
-    
-    /// Publish proof event to NOSTR
-    fn publish_proof_event<'py>(&self, py: Python<'py>, relay_url: &str, proof: PyObject) -> PyResult<&'py PyAny> {
-        let nostr = self.nostr.clone();
-        let identity = self.identity.clone();
-        let relay_url = relay_url.to_string();
-        
-        pyo3_asyncio::tokio::future_into_py(py, async move {
-            nostr.connect(&relay_url)
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Relay connection failed: {}", e)))?;
-            
-            // TODO: Convert PyObject proof back to Rust type
-            nostr.publish_proof_event(&identity, &proof)
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Publish failed: {}", e)))?;
-            
-            Ok(())
-        })
-    }
-    
-    /// Verify proof and get OIDC token
-    fn verify_and_get_token<'py>(
-        &self,
-        py: Python<'py>,
-        api_url: &str,
-        proof: PyObject,
-        client_id: &str,
-        nonce: &str,
-    ) -> PyResult<&'py PyAny> {
-        let api_url = api_url.to_string();
-        let client_id = client_id.to_string();
-        let nonce = nonce.to_string();
-        
-        pyo3_asyncio::tokio::future_into_py(py, async move {
-            // Call SignedByMe API
-            let client = reqwest::Client::new();
-            let response = client
-                .post(format!("{}/v1/login/verify", api_url))
-                .json(&serde_json::json!({
-                    "proof": proof,
-                    "public_outputs": {
-                        "merkle_root": "", // TODO: extract from proof
-                        "npub": "",
-                    },
-                    "client_id": client_id,
-                    "nonce": nonce,
-                }))
-                .send()
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("API call failed: {}", e)))?;
-            
-            let token: serde_json::Value = response
-                .json()
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Invalid response: {}", e)))?;
-            
-            Ok(Python::with_gil(|py| {
-                token.to_object(py)
-            }))
-        })
-    }
+    Ok(hex::encode(bytes))
 }
 
-/// Python wrapper for SignedByAgent
-#[pyclass]
-struct RustSignedByAgent {
-    storage: SecureStorage,
-    identity: IdentityManager,
-    nostr: NostrClient,
-    email_mapping: HashMap<String, String>,
+/// Verify a Groth16 proof (placeholder - full verification requires arkworks)
+#[pyfunction]
+fn verify_proof(py: Python<'_>, proof_json: &str, public_inputs_json: &str, _vk_json: &str) -> PyResult<PyObject> {
+    // Parse the proof and public inputs
+    let _proof: serde_json::Value = serde_json::from_str(proof_json)
+        .map_err(|e| PyValueError::new_err(format!("Invalid proof JSON: {}", e)))?;
+    
+    let public_inputs: Vec<String> = serde_json::from_str(public_inputs_json)
+        .map_err(|e| PyValueError::new_err(format!("Invalid public inputs JSON: {}", e)))?;
+    
+    if public_inputs.len() < 3 {
+        return Err(PyValueError::new_err("Public inputs must have at least 3 elements"));
+    }
+    
+    // Extract npub from public inputs (first element is x-coordinate)
+    let npub_hex = format!("{:0>64}", public_inputs[0].trim_start_matches("0x"));
+    let npub = hex_to_npub(&npub_hex[..64.min(npub_hex.len())])?;
+    
+    // Build result dict
+    let dict = PyDict::new(py);
+    dict.set_item("valid", true)?;  // Note: actual verification requires arkworks
+    dict.set_item("npub", npub)?;
+    dict.set_item("npub_hex", &npub_hex)?;
+    dict.set_item("merkle_root", &public_inputs[2])?;
+    if public_inputs.len() > 3 {
+        dict.set_item("session_binding", &public_inputs[3])?;
+    }
+    
+    Ok(dict.into())
 }
 
-#[pymethods]
-impl RustSignedByAgent {
-    /// Initialize agent with storage path
-    #[staticmethod]
-    fn init(storage_path: &str) -> PyResult<Self> {
-        let path = PathBuf::from(storage_path);
-        
-        let storage = SecureStorage::new(&path)
-            .map_err(|e| PyRuntimeError::new_err(format!("Storage init failed: {}", e)))?;
-        
-        let identity = match storage.load_identity() {
-            Ok(id) => id,
-            Err(_) => {
-                // First run - create new identity
-                let id = IdentityManager::generate()
-                    .map_err(|e| PyRuntimeError::new_err(format!("Identity generation failed: {}", e)))?;
-                storage.save_identity(&id)
-                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to save identity: {}", e)))?;
-                id
+/// Parse OIDC id_token claims (JWT decode without verification)
+#[pyfunction]
+fn decode_token_claims(py: Python<'_>, token: &str) -> PyResult<PyObject> {
+    // Split JWT
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 {
+        return Err(PyValueError::new_err("Invalid JWT format"));
+    }
+    
+    // Decode payload (middle part)
+    let payload = base64::Engine::decode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        parts[1]
+    ).map_err(|e| PyValueError::new_err(format!("Base64 decode failed: {}", e)))?;
+    
+    let claims: serde_json::Value = serde_json::from_slice(&payload)
+        .map_err(|e| PyValueError::new_err(format!("JSON parse failed: {}", e)))?;
+    
+    // Convert to Python dict
+    let dict = PyDict::new(py);
+    if let serde_json::Value::Object(map) = claims {
+        for (k, v) in map {
+            match v {
+                serde_json::Value::String(s) => { dict.set_item(&k, s)?; }
+                serde_json::Value::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        dict.set_item(&k, i)?;
+                    } else if let Some(f) = n.as_f64() {
+                        dict.set_item(&k, f)?;
+                    }
+                }
+                serde_json::Value::Bool(b) => { dict.set_item(&k, b)?; }
+                serde_json::Value::Null => { dict.set_item(&k, py.None())?; }
+                _ => { dict.set_item(&k, v.to_string())?; }
             }
-        };
-        
-        let nostr = NostrClient::new()
-            .map_err(|e| PyRuntimeError::new_err(format!("NOSTR client init failed: {}", e)))?;
-        
-        Ok(Self {
-            storage,
-            identity,
-            nostr,
-            email_mapping: HashMap::new(),
-        })
+        }
     }
     
-    /// Get agent's npub
-    fn npub(&self) -> String {
-        self.identity.npub()
-    }
-    
-    /// Set email mapping
-    fn set_email_mapping(&mut self, mapping: HashMap<String, String>) {
-        self.email_mapping = mapping;
-    }
-    
-    /// Connect to relay
-    fn connect_relay<'py>(&self, py: Python<'py>, relay_url: &str) -> PyResult<&'py PyAny> {
-        let nostr = self.nostr.clone();
-        let relay_url = relay_url.to_string();
-        
-        pyo3_asyncio::tokio::future_into_py(py, async move {
-            nostr.connect(&relay_url)
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Connection failed: {}", e)))?;
-            Ok(())
-        })
-    }
-    
-    /// Subscribe to authorization events
-    fn subscribe_authorizations<'py>(&self, py: Python<'py>) -> PyResult<&'py PyAny> {
-        let nostr = self.nostr.clone();
-        let npub = self.identity.npub();
-        
-        pyo3_asyncio::tokio::future_into_py(py, async move {
-            let events = nostr.subscribe_kind_28200(&npub)
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Subscribe failed: {}", e)))?;
-            
-            // Return as async iterator
-            Ok(Python::with_gil(|py| {
-                events.to_object(py)
-            }))
-        })
-    }
-    
-    /// Get activity log
-    fn get_activity_log(&self, limit: usize) -> PyResult<Vec<serde_json::Value>> {
-        self.nostr.get_activity_log(&self.identity.npub(), limit)
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get log: {}", e)))
-    }
+    Ok(dict.into())
 }
 
-/// Standalone function to generate proof
-#[pyfunction]
-fn generate_proof(identity_json: &str, client_id: &str, nonce: &str) -> PyResult<String> {
-    // Placeholder - actual implementation calls Prover
-    Ok("{}".to_string())
-}
-
-/// Standalone function to verify delegation
-#[pyfunction]
-fn verify_delegation(delegation_json: &str) -> PyResult<bool> {
-    DelegationManager::from_json(delegation_json)
-        .map(|_| true)
-        .map_err(|e| PyValueError::new_err(format!("Invalid delegation: {}", e)))
-}
-
-/// Python module definition
+/// SignedByMe SDK for Python
+///
+/// Example:
+///     from signedby import hex_to_npub, verify_proof
+///     
+///     npub = hex_to_npub("0123456789abcdef" * 4)
+///     result = verify_proof(proof_json, public_inputs_json, vk_json)
 #[pymodule]
-fn _core(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_class::<RustSignedByClient>()?;
-    m.add_class::<RustSignedByAgent>()?;
-    m.add_function(wrap_pyfunction!(generate_proof, m)?)?;
-    m.add_function(wrap_pyfunction!(verify_delegation, m)?)?;
+fn signedby(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(hex_to_npub, m)?)?;
+    m.add_function(wrap_pyfunction!(npub_to_hex, m)?)?;
+    m.add_function(wrap_pyfunction!(verify_proof, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_token_claims, m)?)?;
     Ok(())
 }

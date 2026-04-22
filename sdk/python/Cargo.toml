@@ -3,26 +3,21 @@ name = "signedby-python"
 version = "0.1.0"
 edition = "2021"
 description = "Python bindings for SignedByMe SDK"
-license = "SSAL-1.0"
+license = "MIT"
 
 [lib]
-name = "_core"
+name = "signedby"
 crate-type = ["cdylib"]
 
 [dependencies]
 # PyO3 for Python bindings
 pyo3 = { version = "0.20", features = ["extension-module"] }
-pyo3-asyncio = { version = "0.20", features = ["tokio-runtime"] }
-
-# Core SDK (local path) - note: package renamed to signedby-sdk but lib name is signedby_sdk
-signedby_sdk = { path = "../../native/signedby_core", package = "signedby-sdk" }
-
-# Async runtime
-tokio = { version = "1", features = ["rt-multi-thread"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# HTTP client
-reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+# Encoding
+hex = "0.4"
+bech32 = "0.11"
+base64 = "0.21"

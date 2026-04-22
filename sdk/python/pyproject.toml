@@ -5,35 +5,30 @@ build-backend = "maturin"
 [project]
 name = "signedby"
 version = "0.1.0"
-description = "SignedByMe SDK - Human-controlled identity for autonomous agents"
+description = "SignedByMe SDK - Self-signing digital signatures with zero-knowledge proofs"
 readme = "README.md"
-license = { text = "SSAL-1.0" }
+license = { text = "MIT" }
 authors = [
     { name = "Privacy Lion", email = "contact@privacy-lion.com" }
 ]
-keywords = ["signedby", "identity", "zk-proofs", "nostr", "bitcoin", "authentication"]
 classifiers = [
     "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "Topic :: Security :: Cryptography",
-    "Topic :: System :: Systems Administration :: Authentication/Directory",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Rust",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Security :: Cryptography",
 ]
+keywords = ["identity", "zkp", "groth16", "nostr", "bitcoin", "authentication"]
 requires-python = ">=3.9"
-dependencies = []
 
 [project.urls]
 Homepage = "https://signedbyme.com"
-Documentation = "https://signedbyme.com/docs"
+Documentation = "https://docs.signedbyme.com"
 Repository = "https://github.com/PrivacyLion/SignedByMe"
-Issues = "https://github.com/PrivacyLion/SignedByMe/issues"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-python-source = "python"
-module-name = "signedby._core"
