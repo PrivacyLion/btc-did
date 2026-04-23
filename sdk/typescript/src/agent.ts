@@ -3,7 +3,7 @@
  */
 
 import { mkdirSync, existsSync } from 'fs';
-import type { AuthorizationEvent, Scopes } from './types';
+import type { AuthorizationEvent } from './types';
 import { RelayConnectionError } from './errors';
 
 // Native binding (loaded via napi-rs)
@@ -27,7 +27,7 @@ const native = require('./native');
 export class SignedByAgent {
   private readonly nativeAgent: unknown;
   private relayConnected = false;
-  private emailMapping: Record<string, string> = {};
+  private _emailMapping: Record<string, string> = {};
 
   private constructor(nativeAgent: unknown) {
     this.nativeAgent = nativeAgent;
@@ -67,7 +67,7 @@ export class SignedByAgent {
    * @param mapping - Dict of enterprise domain -> email address
    */
   setEmailMapping(mapping: Record<string, string>): void {
-    this.emailMapping = mapping;
+    this._emailMapping = mapping;
     native.setEmailMapping(this.nativeAgent, mapping);
   }
 
