@@ -823,3 +823,190 @@ def delete_enrollment_session(*args, **kwargs): return False
 def add_root_to_history(tree_id: str, root_hash: str, leaf_index: int) -> None:
     """Alias for add_merkle_root (backward compat)."""
     add_merkle_root(tree_id, root_hash, leaf_index)
+
+
+# =============================================================================
+# ROOT REGISTRY FUNCTIONS (for routes/roots.py)
+# =============================================================================
+
+def create_root(
+    root_id: str,
+    client_id: str,
+    purpose: str,
+    root_hash: str,
+    tree_depth: int = 20,
+    not_before: Optional[int] = None,
+    expires_at: Optional[int] = None,
+    description: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Create a new root entry.
+    
+    This creates/updates a merkle_tree and adds the root to merkle_roots.
+    root_id becomes tree_id.
+    """
+    import time
+    conn = get_connection()
+    now = int(time.time())
+    
+    # Ensure tree exists
+    existing_tree = get_merkle_tree(root_id)
+    if not existing_tree:
+        # Create tree
+        conn.execute(
+            """INSERT INTO merkle_trees (id, client_id, purpose, depth, next_leaf_index, state_json)
+               VALUES (?, ?, ?, ?, 0, '[]')""",
+            (root_id, client_id, purpose, tree_depth)
+        )
+    
+    # Add root to merkle_roots
+    cursor = conn.execute(
+        """INSERT INTO merkle_roots (tree_id, root_hash, leaf_index, created_at)
+           VALUES (?, ?, 0, ?)""",
+        (root_id, root_hash, now)
+    )
+    conn.commit()
+    
+    return {
+        "id": root_id,
+        "client_id": client_id,
+        "purpose": purpose,
+        "root_hash": root_hash,
+        "tree_depth": tree_depth,
+        "created_at": now,
+        "superseded_at": None,
+    }
+
+
+def get_root_by_id(root_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a root by its ID (tree_id).
+    
+    Returns the most recent root for this tree along with tree metadata.
+    """
+    conn = get_connection()
+    
+    # Get tree metadata
+    tree = get_merkle_tree(root_id)
+    if not tree:
+        return None
+    
+    # Get most recent root for this tree
+    row = conn.execute(
+        """SELECT root_hash, created_at FROM merkle_roots 
+           WHERE tree_id = ? ORDER BY created_at DESC LIMIT 1""",
+        (root_id,)
+    ).fetchone()
+    
+    if not row:
+        return None
+    
+    return {
+        "id": root_id,
+        "client_id": tree["client_id"],
+        "purpose": tree["purpose"],
+        "root_hash": row["root_hash"],
+        "tree_depth": tree["depth"],
+        "created_at": row["created_at"],
+        "superseded_at": None,  # Most recent is never superseded
+    }
+
+
+def get_active_root(client_id: str, purpose: str = "allowlist") -> Optional[Dict[str, Any]]:
+    """
+    Get the active root for a client and purpose.
+    
+    Returns the most recently created root for matching trees.
+    """
+    conn = get_connection()
+    
+    # Find trees for this client+purpose
+    tree_row = conn.execute(
+        """SELECT id, client_id, purpose, depth FROM merkle_trees 
+           WHERE client_id = ? AND purpose = ?
+           ORDER BY created_at DESC LIMIT 1""",
+        (client_id, purpose)
+    ).fetchone()
+    
+    if not tree_row:
+        return None
+    
+    tree_id = tree_row["id"]
+    
+    # Get most recent root for this tree
+    root_row = conn.execute(
+        """SELECT root_hash, created_at FROM merkle_roots 
+           WHERE tree_id = ? ORDER BY created_at DESC LIMIT 1""",
+        (tree_id,)
+    ).fetchone()
+    
+    if not root_row:
+        return None
+    
+    return {
+        "id": tree_id,
+        "client_id": tree_row["client_id"],
+        "purpose": tree_row["purpose"],
+        "root_hash": root_row["root_hash"],
+        "tree_depth": tree_row["depth"],
+        "created_at": root_row["created_at"],
+        "superseded_at": None,
+    }
+
+
+def list_roots(
+    client_id: Optional[str] = None,
+    active_only: bool = False,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    """
+    List roots, optionally filtered by client_id.
+    
+    If active_only=True, returns only the most recent root per tree.
+    """
+    conn = get_connection()
+    results = []
+    
+    # Build query for trees
+    tree_query = "SELECT id, client_id, purpose, depth FROM merkle_trees WHERE 1=1"
+    tree_params = []
+    
+    if client_id:
+        tree_query += " AND client_id = ?"
+        tree_params.append(client_id)
+    
+    tree_rows = conn.execute(tree_query, tree_params).fetchall()
+    
+    for tree in tree_rows:
+        tree_id = tree["id"]
+        
+        # Get roots for this tree
+        if active_only:
+            # Only most recent
+            root_rows = conn.execute(
+                """SELECT root_hash, created_at FROM merkle_roots 
+                   WHERE tree_id = ? ORDER BY created_at DESC LIMIT 1""",
+                (tree_id,)
+            ).fetchall()
+        else:
+            # All roots
+            root_rows = conn.execute(
+                """SELECT root_hash, created_at FROM merkle_roots 
+                   WHERE tree_id = ? ORDER BY created_at DESC LIMIT ?""",
+                (tree_id, limit)
+            ).fetchall()
+        
+        for root in root_rows:
+            results.append({
+                "id": tree_id,
+                "client_id": tree["client_id"],
+                "purpose": tree["purpose"],
+                "root_hash": root["root_hash"],
+                "tree_depth": tree["depth"],
+                "created_at": root["created_at"],
+                "superseded_at": None,
+            })
+    
+    # Sort by created_at descending
+    results.sort(key=lambda x: x["created_at"], reverse=True)
+    return results[:limit]
