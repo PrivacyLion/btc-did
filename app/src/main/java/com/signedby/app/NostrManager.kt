@@ -28,11 +28,19 @@ class NostrManager(private val context: Context) {
         const val KIND_PAYMENT_RECEIPT = 28102
         const val KIND_LOGIN_COMPLETE = 28103
         
-        // Default relays (SignedByMe audit relay is primary)
-        val DEFAULT_RELAYS = listOf(
-            "wss://relay.privacy-lion.com",  // SignedByMe audit relay (primary)
-            "wss://relay.damus.io",          // Public relay (redundancy)
-            "wss://nos.lol"                  // Public relay (redundancy)
+        // SignedByMe relay infrastructure (Phase 29: Multi-relay)
+        // Events are published to ALL SignedByMe relays for geographic redundancy
+        val SIGNEDBY_RELAYS = listOf(
+            "wss://relay.privacy-lion.com",      // US East (ATL) - primary
+            "wss://relay-sfo.privacy-lion.com",  // US West (SFO)
+            "wss://relay-ams.privacy-lion.com",  // Europe (AMS)
+            "wss://relay-sgp.privacy-lion.com",  // Asia (SGP)
+        )
+        
+        // Full relay list including public fallbacks
+        val DEFAULT_RELAYS = SIGNEDBY_RELAYS + listOf(
+            "wss://relay.damus.io",          // Public relay (fallback)
+            "wss://nos.lol"                  // Public relay (fallback)
         )
     }
 

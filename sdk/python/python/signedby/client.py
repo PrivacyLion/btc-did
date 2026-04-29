@@ -15,6 +15,14 @@ from signedby._core import (
     verify_delegation,
 )
 
+# SignedByMe relay infrastructure (Phase 29: Multi-relay)
+SIGNEDBY_RELAYS = [
+    "wss://relay.privacy-lion.com",      # US East (ATL) - primary
+    "wss://relay-sfo.privacy-lion.com",  # US West (SFO)
+    "wss://relay-ams.privacy-lion.com",  # Europe (AMS)
+    "wss://relay-sgp.privacy-lion.com",  # Asia (SGP)
+]
+
 
 @dataclass
 class LoginToken:
@@ -89,7 +97,7 @@ class SignedByClient:
         client_id: str,
         nonce: str,
         *,
-        relay_url: str = "wss://relay.privacy-lion.com",
+        relay_urls: list[str] | None = None,
         api_url: str = "https://api.beta.privacy-lion.com",
     ) -> LoginToken:
         """
@@ -98,7 +106,7 @@ class SignedByClient:
         Args:
             client_id: The enterprise's client ID
             nonce: Random nonce for replay protection
-            relay_url: NOSTR relay URL (optional)
+            relay_urls: NOSTR relay URLs (defaults to SIGNEDBY_RELAYS)
             api_url: SignedByMe API URL (optional)
             
         Returns:
@@ -113,8 +121,20 @@ class SignedByClient:
         # Generate Groth16 proof
         proof_result = await self._rust.generate_login_proof(client_id, nonce)
         
-        # Publish proof event to NOSTR (kind 28101)
-        await self._rust.publish_proof_event(relay_url, proof_result)
+        # Publish proof event to all NOSTR relays (Phase 29: multi-relay)
+        relays = relay_urls or SIGNEDBY_RELAYS
+        publish_errors = []
+        published = False
+        
+        for relay_url in relays:
+            try:
+                await self._rust.publish_proof_event(relay_url, proof_result)
+                published = True
+            except Exception as e:
+                publish_errors.append(f"{relay_url}: {e}")
+        
+        if not published:
+            raise RuntimeError(f"Failed to publish to any relay: {publish_errors}")
         
         # Call API to verify and get token
         token_response = await self._rust.verify_and_get_token(

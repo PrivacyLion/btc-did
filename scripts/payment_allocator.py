@@ -40,7 +40,15 @@ logger = logging.getLogger(__name__)
 MIN_PAYOUT_SATS = int(os.environ.get('SBM_MIN_PAYOUT_SATS', '1000'))
 STRIKE_API_KEY = os.environ.get('STRIKE_BUSINESS_API_KEY', '')
 STRIKE_API_URL = 'https://api.strike.me/v1'
-RELAY_URL = os.environ.get('SBM_RELAY_URL', 'wss://relay.privacy-lion.com')
+# SignedByMe relay infrastructure (Phase 29: Multi-relay)
+SIGNEDBY_RELAYS = [
+    "wss://relay.privacy-lion.com",      # US East (ATL) - primary
+    "wss://relay-sfo.privacy-lion.com",  # US West (SFO)
+    "wss://relay-ams.privacy-lion.com",  # Europe (AMS)
+    "wss://relay-sgp.privacy-lion.com",  # Asia (SGP)
+]
+# Legacy env var for backwards compatibility
+RELAY_URL = os.environ.get('SBM_RELAY_URL', SIGNEDBY_RELAYS[0])
 DB_PATH = os.environ.get('SBM_DB_PATH', '/opt/sbm-api/signedby.db')
 CLIENTS_JSON = os.environ.get('CLIENTS_JSON', '/opt/sbm-api/clients.json')
 DRY_RUN = os.environ.get('SBM_DRY_RUN', 'false').lower() == 'true'

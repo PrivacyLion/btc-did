@@ -31,8 +31,17 @@ logger = logging.getLogger(__name__)
 # NIP-05 base URL (no trailing slash)
 NIP05_BASE_URL = "https://beta.privacy-lion.com"
 
-# NOSTR relay for publishing (Phase 26)
-NOSTR_RELAY_URL = os.getenv("SIGNEDBYME_RELAY_URL", "wss://relay.privacy-lion.com")
+# NOSTR relays for publishing (Phase 29: Multi-relay infrastructure)
+# Primary relay list - events are published to ALL relays for redundancy
+SIGNEDBY_RELAYS = [
+    "wss://relay.privacy-lion.com",      # US East (ATL) - primary
+    "wss://relay-sfo.privacy-lion.com",  # US West (SFO)
+    "wss://relay-ams.privacy-lion.com",  # Europe (AMS)
+    "wss://relay-sgp.privacy-lion.com",  # Asia (SGP)
+]
+
+# Legacy single-relay env var (backwards compatibility)
+NOSTR_RELAY_URL = os.getenv("SIGNEDBYME_RELAY_URL", SIGNEDBY_RELAYS[0])
 
 # Event kinds
 KIND_ENROLLMENT_AUTHORIZATION = 28200
@@ -857,7 +866,7 @@ async def publish_event_to_relay(
     timeout: float = 10.0,
 ) -> Tuple[bool, Optional[str]]:
     """
-    Publish a signed NOSTR event to the relay.
+    Publish a signed NOSTR event to a single relay.
     
     Args:
         event: Signed event dict with id, pubkey, sig, etc.
@@ -905,3 +914,59 @@ async def publish_event_to_relay(
         return False, f"WebSocket error: {e}"
     except Exception as e:
         return False, f"Failed to publish: {e}"
+
+
+async def publish_event_to_all_relays(
+    event: Dict[str, Any],
+    relay_urls: Optional[List[str]] = None,
+    timeout: float = 10.0,
+    require_all: bool = False,
+) -> Tuple[bool, Dict[str, Optional[str]]]:
+    """
+    Publish a signed NOSTR event to all SignedByMe relays (Phase 29).
+    
+    Events are published concurrently to all relays for redundancy.
+    Success requires at least one relay to accept (unless require_all=True).
+    
+    Args:
+        event: Signed event dict with id, pubkey, sig, etc.
+        relay_urls: List of relay URLs (defaults to SIGNEDBY_RELAYS)
+        timeout: Per-relay connection timeout in seconds
+        require_all: If True, fail if any relay rejects
+        
+    Returns:
+        (overall_success, {relay_url: error_or_none})
+    """
+    urls = relay_urls or SIGNEDBY_RELAYS
+    results: Dict[str, Optional[str]] = {}
+    
+    # Publish concurrently to all relays
+    async def publish_one(url: str) -> Tuple[str, bool, Optional[str]]:
+        success, error = await publish_event_to_relay(event, url, timeout)
+        return url, success, error
+    
+    tasks = [publish_one(url) for url in urls]
+    completed = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    successes = 0
+    for result in completed:
+        if isinstance(result, Exception):
+            # Task raised an exception
+            logger.error(f"Relay publish task failed: {result}")
+            continue
+        url, success, error = result
+        results[url] = error
+        if success:
+            successes += 1
+    
+    if require_all:
+        overall_success = successes == len(urls)
+    else:
+        overall_success = successes > 0
+    
+    if overall_success:
+        logger.info(f"Published event to {successes}/{len(urls)} relays")
+    else:
+        logger.error(f"Failed to publish event to any relay")
+    
+    return overall_success, results

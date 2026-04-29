@@ -14,6 +14,14 @@ from signedby._core import (
     init_agent_storage,
 )
 
+# SignedByMe relay infrastructure (Phase 29: Multi-relay)
+SIGNEDBY_RELAYS = [
+    "wss://relay.privacy-lion.com",      # US East (ATL) - primary
+    "wss://relay-sfo.privacy-lion.com",  # US West (SFO)
+    "wss://relay-ams.privacy-lion.com",  # Europe (AMS)
+    "wss://relay-sgp.privacy-lion.com",  # Asia (SGP)
+]
+
 
 @dataclass
 class AuthorizationEvent:
@@ -32,7 +40,7 @@ class SignedByAgent:
     Usage:
         agent = SignedByAgent.init(storage_path="./agent_data")
         agent.set_email_mapping({"amazon.com": "me@gmail.com"})
-        agent.connect_relay("wss://relay.privacy-lion.com")
+        agent.connect_relays()  # Connects to all SignedByMe relays
         agent.watch_for_authorizations()
     """
     
@@ -82,13 +90,29 @@ class SignedByAgent:
     
     def connect_relay(self, relay_url: str) -> None:
         """
-        Connect to a NOSTR relay.
+        Connect to a single NOSTR relay.
         
         Args:
             relay_url: WebSocket URL of the relay
                        e.g., "wss://relay.privacy-lion.com"
         """
         self._rust.connect_relay(relay_url)
+        self._relay_connected = True
+    
+    def connect_relays(self, relay_urls: list[str] | None = None) -> None:
+        """
+        Connect to multiple NOSTR relays (Phase 29: multi-relay).
+        
+        Args:
+            relay_urls: List of relay URLs (defaults to SIGNEDBY_RELAYS)
+        """
+        urls = relay_urls or SIGNEDBY_RELAYS
+        for url in urls:
+            try:
+                self._rust.connect_relay(url)
+            except Exception as e:
+                # Log but continue - some relays may be down
+                pass
         self._relay_connected = True
     
     async def watch_for_authorizations(self) -> AsyncIterator[AuthorizationEvent]:
