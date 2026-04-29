@@ -17,10 +17,19 @@
 // Configuration
 const CONFIG = {
     API_BASE: 'https://api.beta.privacy-lion.com',
-    RELAY_URL: 'wss://relay.privacy-lion.com',
     CLIENT_ID: 'signedbyme-demo',
     AMOUNT_SATS: 100
 };
+
+// SignedByMe relay infrastructure (Phase 29: Multi-relay)
+const SIGNEDBY_RELAYS = [
+    'wss://relay.privacy-lion.com',      // US East (ATL) - primary
+    'wss://relay-sfo.privacy-lion.com',  // US West (SFO)
+    'wss://relay-ams.privacy-lion.com',  // Europe (AMS)
+    'wss://relay-sgp.privacy-lion.com',  // Asia (SGP)
+];
+// Legacy single URL for backwards compatibility  
+CONFIG.RELAY_URL = SIGNEDBY_RELAYS[0];
 
 // Demo State
 const state = {

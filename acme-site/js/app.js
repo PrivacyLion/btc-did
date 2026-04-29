@@ -19,9 +19,18 @@
 
 // Configuration
 const API_BASE = 'https://api.beta.privacy-lion.com';
-const RELAY_URL = 'wss://relay.privacy-lion.com';
 const CLIENT_ID = 'acme';
 const AMOUNT_SATS = 100;
+
+// SignedByMe relay infrastructure (Phase 29: Multi-relay)
+const SIGNEDBY_RELAYS = [
+    'wss://relay.privacy-lion.com',      // US East (ATL) - primary
+    'wss://relay-sfo.privacy-lion.com',  // US West (SFO)
+    'wss://relay-ams.privacy-lion.com',  // Europe (AMS)
+    'wss://relay-sgp.privacy-lion.com',  // Asia (SGP)
+];
+// Legacy single URL for backwards compatibility
+const RELAY_URL = SIGNEDBY_RELAYS[0];
 
 // Acme Enterprise NOSTR Keys (Phase 26.9)
 // Public key published at https://acme.beta.privacy-lion.com/.well-known/nostr.json
@@ -38,7 +47,9 @@ const ACME_API_KEY = 'acme-test-key-2026';
 // State
 let currentNonce = null;
 let currentMode = 'login'; // 'login' or 'enroll'
-let relayWs = null;
+let relayWs = null;  // Legacy single WS (deprecated)
+let relayPool = null;  // Phase 29: SimplePool for multi-relay
+let activeSubscription = null;  // Phase 29: Track active subscription
 let enrollmentInterval = null;
 
 // DOM Elements
@@ -288,11 +299,56 @@ async function generateEnrollmentQR() {
 }
 
 /**
- * Publish event to NOSTR relay
+ * Publish event to all NOSTR relays (Phase 29: Multi-relay)
+ * Uses SimplePool for concurrent publishing with automatic deduplication.
  */
 async function publishToRelay(event) {
+    // Check if SimplePool is available (loaded from nostr-tools)
+    if (window.SimplePool) {
+        return publishToRelaysPool(event);
+    }
+    // Fallback to legacy single-relay WebSocket
+    return publishToRelaySingle(event, RELAY_URL);
+}
+
+/**
+ * Publish to all relays using SimplePool (Phase 29)
+ */
+async function publishToRelaysPool(event) {
+    const pool = new window.SimplePool();
+    
+    try {
+        console.log(`Publishing event to ${SIGNEDBY_RELAYS.length} relays...`);
+        
+        // Publish to all relays concurrently
+        const results = await Promise.allSettled(
+            pool.publish(SIGNEDBY_RELAYS, event)
+        );
+        
+        // Check results
+        const successes = results.filter(r => r.status === 'fulfilled').length;
+        const failures = results.filter(r => r.status === 'rejected');
+        
+        if (successes > 0) {
+            console.log(`Event published to ${successes}/${SIGNEDBY_RELAYS.length} relays`);
+            if (failures.length > 0) {
+                console.warn('Some relays failed:', failures.map(f => f.reason));
+            }
+            return event.id;
+        } else {
+            throw new Error('Failed to publish to any relay');
+        }
+    } finally {
+        pool.close(SIGNEDBY_RELAYS);
+    }
+}
+
+/**
+ * Legacy single-relay publish (fallback)
+ */
+async function publishToRelaySingle(event, relayUrl) {
     return new Promise((resolve, reject) => {
-        const ws = new WebSocket(RELAY_URL);
+        const ws = new WebSocket(relayUrl);
         
         ws.onopen = () => {
             console.log('Publishing event to relay...');
@@ -336,11 +392,18 @@ async function publishToRelay(event) {
 }
 
 /**
- * Subscribe to relay for enrollment completion events
+ * Subscribe to relays for enrollment completion events (Phase 29: Multi-relay)
  */
 function subscribeToEnrollmentCompletion() {
     closeRelay();
     
+    // Use SimplePool if available
+    if (window.SimplePool) {
+        subscribeToEnrollmentPool();
+        return;
+    }
+    
+    // Fallback to legacy single-relay
     console.log('Connecting to relay for enrollment:', RELAY_URL);
     relayWs = new WebSocket(RELAY_URL);
     
@@ -386,6 +449,39 @@ function subscribeToEnrollmentCompletion() {
     relayWs.onclose = () => {
         console.log('Relay connection closed');
     };
+}
+
+/**
+ * Subscribe to all relays for enrollment using SimplePool (Phase 29)
+ */
+function subscribeToEnrollmentPool() {
+    console.log(`Subscribing to ${SIGNEDBY_RELAYS.length} relays for enrollment events`);
+    
+    relayPool = new window.SimplePool();
+    
+    activeSubscription = relayPool.subscribeMany(
+        SIGNEDBY_RELAYS,
+        [{
+            kinds: [28200],
+            authors: [ACME_PUBKEY_HEX]
+        }],
+        {
+            onevent(nostrEvent) {
+                console.log('Enrollment event from pool:', nostrEvent);
+                
+                if (nostrEvent.kind === 28200) {
+                    // Verify nonce tag matches current enrollment
+                    const nonceTag = nostrEvent.tags.find(t => t[0] === 'nonce');
+                    if (!nonceTag || nonceTag[1] !== currentNonce) return;
+                    
+                    handleEnrollmentEvent(nostrEvent);
+                }
+            },
+            oneose() {
+                console.log('End of stored events (pool)');
+            }
+        }
+    );
 }
 
 /**
@@ -524,11 +620,18 @@ function startExpiryTimer(seconds) {
 }
 
 /**
- * Subscribe to NOSTR relay for proof events
+ * Subscribe to NOSTR relays for proof events (Phase 29: Multi-relay)
  */
 function subscribeToRelay(nonce) {
     closeRelay();
     
+    // Use SimplePool if available
+    if (window.SimplePool) {
+        subscribeToRelayPool(nonce);
+        return;
+    }
+    
+    // Fallback to legacy single-relay
     console.log('Connecting to relay:', RELAY_URL);
     relayWs = new WebSocket(RELAY_URL);
     
@@ -582,9 +685,59 @@ function subscribeToRelay(nonce) {
 }
 
 /**
- * Close relay connection
+ * Subscribe to all relays for login using SimplePool (Phase 29)
+ */
+function subscribeToRelayPool(nonce) {
+    console.log(`Subscribing to ${SIGNEDBY_RELAYS.length} relays for nonce:`, nonce);
+    
+    relayPool = new window.SimplePool();
+    statusText.textContent = 'Waiting for scan...';
+    
+    activeSubscription = relayPool.subscribeMany(
+        SIGNEDBY_RELAYS,
+        [{
+            kinds: [28101],
+            '#nonce': [nonce]
+        }],
+        {
+            onevent(nostrEvent) {
+                console.log('Proof event from pool:', nostrEvent);
+                if (nostrEvent.kind === 28101) {
+                    handleProofEvent(nostrEvent);
+                }
+            },
+            oneose() {
+                console.log('End of stored events (pool)');
+            },
+            onclose(reasons) {
+                console.log('Pool subscription closed:', reasons);
+                // Retry on disconnect if still in login mode
+                if (currentNonce && currentMode === 'login') {
+                    console.log('Retrying subscription in 3s...');
+                    setTimeout(() => subscribeToRelayPool(currentNonce), 3000);
+                }
+            }
+        }
+    );
+}
+
+/**
+ * Close relay connections (Phase 29: handles both pool and legacy WS)
  */
 function closeRelay() {
+    // Close SimplePool subscription
+    if (activeSubscription) {
+        activeSubscription.close();
+        activeSubscription = null;
+    }
+    
+    // Close SimplePool
+    if (relayPool) {
+        relayPool.close(SIGNEDBY_RELAYS);
+        relayPool = null;
+    }
+    
+    // Close legacy WebSocket
     if (relayWs) {
         relayWs.close();
         relayWs = null;

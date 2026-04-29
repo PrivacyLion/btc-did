@@ -7,11 +7,12 @@
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script type="module">
-        import { finalizeEvent } from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/+esm';
+        import { finalizeEvent, SimplePool } from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/+esm';
         import { decode } from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/nip19/+esm';
         window.nostrFinalizeEvent = finalizeEvent;
+        window.SimplePool = SimplePool;
         window.nip19 = { decode };
-        console.log('nostr-tools ready');
+        console.log('nostr-tools ready (Phase 29: multi-relay)');
     </script>
 </head>
 <body>
