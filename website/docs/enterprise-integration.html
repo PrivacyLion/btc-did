@@ -43,6 +43,12 @@
             margin-top: 24px;
             margin-bottom: 12px;
         }
+        .doc-section h4 {
+            font-size: 1rem;
+            margin-top: 20px;
+            margin-bottom: 8px;
+            color: var(--primary-light);
+        }
         .doc-section p, .doc-section li {
             color: var(--text-secondary);
             line-height: 1.7;
@@ -70,7 +76,7 @@
             line-height: 1.5;
         }
         .doc-note {
-            background: var(--primary-light);
+            background: rgba(168, 85, 247, 0.1);
             border-left: 4px solid var(--primary);
             padding: 16px;
             border-radius: 0 8px 8px 0;
@@ -81,8 +87,15 @@
             color: var(--text);
         }
         .doc-warning {
-            background: #FEF3C7;
+            background: rgba(245, 158, 11, 0.1);
             border-left: 4px solid var(--warning);
+        }
+        .doc-warning p {
+            color: var(--text);
+        }
+        .doc-success {
+            background: rgba(16, 185, 129, 0.1);
+            border-left: 4px solid var(--success);
         }
         .doc-table {
             width: 100%;
@@ -98,6 +111,10 @@
         .doc-table th {
             background: var(--bg-alt);
             font-weight: 600;
+            color: var(--text);
+        }
+        .doc-table td {
+            color: var(--text-secondary);
         }
         .inline-code {
             background: var(--bg-alt);
@@ -105,6 +122,52 @@
             border-radius: 4px;
             font-family: var(--font-mono);
             font-size: 0.9em;
+            color: var(--primary-light);
+        }
+        .toc {
+            background: var(--bg-alt);
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 48px;
+        }
+        .toc h3 {
+            margin-top: 0;
+            margin-bottom: 16px;
+            color: var(--text);
+        }
+        .toc ol {
+            margin: 0;
+            padding-left: 24px;
+        }
+        .toc li {
+            margin-bottom: 8px;
+        }
+        .toc a {
+            color: var(--text-secondary);
+        }
+        .toc a:hover {
+            color: var(--primary);
+        }
+        .flow-diagram {
+            background: var(--bg-alt);
+            border-radius: 8px;
+            padding: 24px;
+            margin: 16px 0;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            line-height: 1.4;
+            overflow-x: auto;
+            white-space: pre;
+            color: var(--text-secondary);
+        }
+        .gate-header {
+            background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+            color: #000;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-weight: 700;
+            margin-top: 32px;
+            margin-bottom: 16px;
         }
     </style>
 </head>
@@ -112,7 +175,6 @@
     <nav class="nav">
         <div class="nav-container">
             <a href="../" class="nav-logo">
-                <span class="logo-icon">⚡</span>
                 <span class="logo-text">SignedByMe</span>
             </a>
             <div class="nav-links">
@@ -134,239 +196,601 @@
         <p class="doc-meta">
             Last updated: April 2026 · Estimated integration time: 2-4 hours
         </p>
-        
-        <!-- Overview -->
-        <section class="doc-section">
-            <h2>Overview</h2>
+
+        <!-- Table of Contents -->
+        <div class="toc">
+            <h3>Contents</h3>
+            <ol>
+                <li><a href="#overview">What is SignedByMe?</a></li>
+                <li><a href="#prerequisites">Prerequisites & Getting Started</a></li>
+                <li><a href="#setup">Enterprise Setup (One-Time)</a></li>
+                <li><a href="#authorize-button">Add "Authorize your Agent" to Your Website</a></li>
+                <li><a href="#login-flow">Implement Agent Login</a></li>
+                <li><a href="#api-reference">API Reference</a></li>
+                <li><a href="#iam-integration">Integrate with Your IAM</a></li>
+                <li><a href="#human-control">Human Control (Delegation & Revocation)</a></li>
+                <li><a href="#security">Security Considerations</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ol>
+        </div>
+
+        <!-- Section 1: Overview -->
+        <section id="overview" class="doc-section">
+            <h2>1. What is SignedByMe?</h2>
             <p>
-                SignedByMe provides passwordless, privacy-preserving authentication 
-                via standard OIDC. Your users prove membership in your allowlist 
-                using zero-knowledge proofs — without revealing which member they are.
+                <strong>SignedByMe is the identity layer for autonomous agents.</strong>
             </p>
             <p>
-                Integration requires four steps:
+                Your agents get their own cryptographic identity (npub) that:
+            </p>
+            <ul>
+                <li>Is controlled by the human who owns the agent</li>
+                <li>Is verifiable via standard OIDC (same as Google/Okta)</li>
+                <li>Is revocable instantly by the human</li>
+                <li>Cannot be forged without breaking Bitcoin-grade cryptography</li>
+            </ul>
+            <p>
+                <strong>Integration is the same as adding "Sign in with Google"</strong> — you receive standard OIDC tokens with <span class="inline-code">sub=npub</span>.
+            </p>
+
+            <h3>Five Security Guarantees</h3>
+            <table class="doc-table">
+                <tr>
+                    <th>Layer</th>
+                    <th>What it prevents</th>
+                </tr>
+                <tr>
+                    <td>Agent cannot lie about identity</td>
+                    <td>npub is a mathematical output of the ZK proof, not a claim</td>
+                </tr>
+                <tr>
+                    <td>Agent cannot exceed authorization</td>
+                    <td>Scopes are signed by the human owner, readable from NOSTR</td>
+                </tr>
+                <tr>
+                    <td>Human retains the kill switch</td>
+                    <td>Revocation event locks agent out instantly</td>
+                </tr>
+                <tr>
+                    <td>Enterprise controls their Merkle tree</td>
+                    <td>Agent can only authenticate where enrolled</td>
+                </tr>
+                <tr>
+                    <td>Auditable without trusting anyone</td>
+                    <td>Full trail on public NOSTR relays</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- Section 2: Prerequisites -->
+        <section id="prerequisites" class="doc-section">
+            <h2>2. Prerequisites & Getting Started</h2>
+            
+            <h3>What You Need</h3>
+            <table class="doc-table">
+                <tr>
+                    <th>Item</th>
+                    <th>Description</th>
+                    <th>How to Get</th>
+                </tr>
+                <tr>
+                    <td>Client ID</td>
+                    <td>Your enterprise identifier (e.g., "amazon")</td>
+                    <td>Contact enterprise@signedby.me</td>
+                </tr>
+                <tr>
+                    <td>API Key</td>
+                    <td>Bearer token for API authentication</td>
+                    <td>Delivered via encrypted message</td>
+                </tr>
+                <tr>
+                    <td>Enterprise NOSTR Keypair</td>
+                    <td>nsec/npub for signing enrollment events</td>
+                    <td>Generate locally (see below)</td>
+                </tr>
+                <tr>
+                    <td>NIP-05 Identity</td>
+                    <td>Verifiable NOSTR identity at your domain</td>
+                    <td>Add file to your webserver</td>
+                </tr>
+                <tr>
+                    <td>nostr-tools</td>
+                    <td>JavaScript library for NOSTR</td>
+                    <td><span class="inline-code">npm install nostr-tools</span></td>
+                </tr>
+            </table>
+
+            <h3>Required Technical Skills</h3>
+            <ul>
+                <li>Basic JavaScript (browser or Node.js)</li>
+                <li>Ability to add files to your web server</li>
+                <li>Familiarity with WebSockets (for NOSTR relay)</li>
+                <li>Understanding of OIDC/JWT (standard IAM knowledge)</li>
+            </ul>
+        </section>
+
+        <!-- Section 3: Enterprise Setup -->
+        <section id="setup" class="doc-section">
+            <h2>3. Enterprise Setup (One-Time)</h2>
+            
+            <h3>3.1 Get API Credentials</h3>
+            <p>
+                Contact <a href="mailto:enterprise@signedby.me">enterprise@signedby.me</a> to register. You'll receive:
             </p>
             <ol>
-                <li>Register your enterprise and get API credentials</li>
-                <li>Display login QR code / deep link</li>
-                <li>Listen for proof events on NOSTR</li>
-                <li>Verify proof and receive OIDC id_token</li>
+                <li><strong>client_id</strong> — Your unique identifier (e.g., <span class="inline-code">amazon</span>, <span class="inline-code">acme</span>)</li>
+                <li><strong>API Key</strong> — Bearer token for API calls (delivered securely)</li>
             </ol>
-        </section>
-        
-        <!-- Prerequisites -->
-        <section class="doc-section">
-            <h2>Prerequisites</h2>
+            <div class="doc-warning">
+                <p>
+                    <strong>Security:</strong> Store the API key in your secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.). Never commit to git.
+                </p>
+            </div>
+
+            <h3>3.2 Generate Your Enterprise NOSTR Keypair</h3>
+            <p>
+                Your enterprise needs a NOSTR keypair to sign enrollment authorization events (kind 28200).
+            </p>
+            <div class="doc-code">
+<pre><code>// generate-enterprise-keys.js
+import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+import { nsecEncode, npubEncode } from 'nostr-tools/nip19';
+
+const secretKey = generateSecretKey();
+const publicKey = getPublicKey(secretKey);
+
+console.log('Enterprise NOSTR Keys (SAVE THESE SECURELY)');
+console.log('==========================================');
+console.log('Private Key (nsec):', nsecEncode(secretKey));
+console.log('Public Key (npub):', npubEncode(publicKey));
+console.log('Public Key (hex):', publicKey);</code></pre>
+            </div>
+            <p>Run: <span class="inline-code">node generate-enterprise-keys.js</span></p>
+            <div class="doc-warning">
+                <p>
+                    <strong>Save output to your secrets manager.</strong> The nsec is your signing key — never expose it in client-side code.
+                </p>
+            </div>
+
+            <h3>3.3 Set Up Your NIP-05 Identity</h3>
+            <p>
+                Create a file at <span class="inline-code">https://yourdomain.com/.well-known/nostr.json</span>:
+            </p>
+            <div class="doc-code">
+<pre><code>{
+  "names": {
+    "signedby": "YOUR_ENTERPRISE_NPUB_HEX_HERE"
+  },
+  "relays": {
+    "YOUR_ENTERPRISE_NPUB_HEX_HERE": [
+      "wss://relay.privacy-lion.com"
+    ]
+  },
+  "lightning": "payments@yourdomain.com"
+}</code></pre>
+            </div>
+            <p><strong>Requirements:</strong></p>
             <ul>
-                <li><strong>Client ID</strong> — Assigned during enterprise registration</li>
-                <li><strong>API Key</strong> — For authenticating verification requests</li>
-                <li><strong>Strike API Key</strong> — For paying Lightning invoices (or your own LN node)</li>
-                <li><strong>NOSTR Relay Access</strong> — WebSocket connection to <span class="inline-code">wss://relay.privacy-lion.com</span></li>
+                <li>Must be served over HTTPS</li>
+                <li>Must have <span class="inline-code">Access-Control-Allow-Origin: *</span> header</li>
+                <li>The <span class="inline-code">lightning</span> field is optional (for receiving revenue share)</li>
             </ul>
+            <p>Verify it works:</p>
+            <div class="doc-code">
+<pre><code>curl https://yourdomain.com/.well-known/nostr.json</code></pre>
+            </div>
+        </section>
+
+        <!-- Section 4: Authorize Button -->
+        <section id="authorize-button" class="doc-section">
+            <h2>4. Add "Authorize your Agent" to Your Website</h2>
             
             <div class="doc-note">
                 <p>
-                    <strong>Don't have credentials?</strong> 
-                    Contact <a href="mailto:enterprise@privacy-lion.com">enterprise@privacy-lion.com</a> 
-                    to register your enterprise.
+                    <strong>Action Required:</strong> Add a button labeled <strong>"Authorize your Agent"</strong> to your website. 
+                    This is the entry point for the agent enrollment flow.
                 </p>
             </div>
-        </section>
-        
-        <!-- Step 1: Display QR -->
-        <section class="doc-section">
-            <h2>Step 1: Display Login QR Code</h2>
+
+            <h3>4.1 Where to Add It</h3>
             <p>
-                Generate a login session entirely client-side. No API call required.
+                Add the "Authorize your Agent" button anywhere a logged-in user should be able to authorize an agent:
             </p>
-            
-            <h3>Deep Link Format</h3>
-            <div class="doc-code">
-<pre><code>signedby://{client_id}/{nonce}/{amount_sats}</code></pre>
+            <ul>
+                <li>User settings/preferences page</li>
+                <li>Security settings</li>
+                <li>Account management</li>
+                <li>Dedicated "Agents" or "Integrations" page</li>
+            </ul>
+            <div class="doc-warning">
+                <p>
+                    <strong>Critical:</strong> The user must be <strong>already authenticated</strong> with your system before they can authorize an agent. 
+                    This is Gate 1 of the genesis flow — you verify the user's email matches your records.
+                </p>
             </div>
-            
-            <table class="doc-table">
-                <tr>
-                    <th>Parameter</th>
-                    <th>Description</th>
-                </tr>
-                <tr>
-                    <td><span class="inline-code">client_id</span></td>
-                    <td>Your enterprise identifier (e.g., "acme")</td>
-                </tr>
-                <tr>
-                    <td><span class="inline-code">nonce</span></td>
-                    <td>32-character hex string (16 random bytes)</td>
-                </tr>
-                <tr>
-                    <td><span class="inline-code">amount_sats</span></td>
-                    <td>Satoshis to pay user on successful login</td>
-                </tr>
-            </table>
-            
-            <h3>Example</h3>
+
+            <h3>4.2 HTML Structure</h3>
             <div class="doc-code">
-<pre><code>// Generate nonce
-const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-    .map(b => b.toString(16).padStart(2, '0')).join('');
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;title&gt;Account Settings - Your Company&lt;/title&gt;
+    &lt;!-- Load nostr-tools --&gt;
+    &lt;script type="module"&gt;
+        import { finalizeEvent, getPublicKey } from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/+esm';
+        import { decode } from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/nip19/+esm';
+        window.nostrFinalizeEvent = finalizeEvent;
+        window.nostrGetPublicKey = getPublicKey;
+        window.nip19 = { decode };
+    &lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;Account Settings&lt;/h1&gt;
+    
+    &lt;!-- Authorize an Agent Section --&gt;
+    &lt;div id="agent-authorization"&gt;
+        &lt;h2&gt;Authorize your Agent&lt;/h2&gt;
+        &lt;p&gt;Allow an AI agent to act on your behalf with limited permissions.&lt;/p&gt;
+        
+        &lt;!-- Step 1: Show challenge code --&gt;
+        &lt;div id="auth-step-1"&gt;
+            &lt;p&gt;Enter this code in your agent:&lt;/p&gt;
+            &lt;div id="challenge-code" class="challenge-display"&gt;A1B2C3D4E5F67890&lt;/div&gt;
+            &lt;p class="hint"&gt;Waiting for agent response...&lt;/p&gt;
+        &lt;/div&gt;
+        
+        &lt;!-- Step 2: Confirm agent details --&gt;
+        &lt;div id="auth-step-2" style="display: none;"&gt;
+            &lt;p&gt;Agent requesting authorization:&lt;/p&gt;
+            &lt;div&gt;Agent ID: &lt;code id="agent-npub"&gt;&lt;/code&gt;&lt;/div&gt;
+            &lt;button id="confirm-auth-btn"&gt;Confirm Authorization&lt;/button&gt;
+            &lt;button id="deny-auth-btn"&gt;Deny&lt;/button&gt;
+        &lt;/div&gt;
+        
+        &lt;!-- Step 3: Success --&gt;
+        &lt;div id="auth-step-3" style="display: none;"&gt;
+            &lt;p&gt;✅ Agent authorized successfully!&lt;/p&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+    
+    &lt;script src="signedby-integration.js"&gt;&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+            </div>
 
-// Build deep link
-const deepLink = `signedby://acme/${nonce}/100`;
+            <h3>4.3 The 3-Gate Genesis Flow</h3>
+            <p>
+                When a user clicks "Authorize your Agent", the <strong>genesis flow</strong> runs. 
+                This is a one-time process per agent per enterprise — it never repeats.
+            </p>
 
-// Display as QR code
-new QRCode(document.getElementById('qr'), {
-    text: deepLink,
-    width: 256,
-    height: 256
+            <div class="gate-header">GATE 1 — Email Match + Identity Binding</div>
+            <ol>
+                <li>User is logged into your system (you know their email)</li>
+                <li>Your system generates a challenge code and displays it</li>
+                <li>Your system publishes an <strong>open kind 28200</strong> session event to NOSTR (no npub yet, just client_id)</li>
+                <li>Agent detects the event, human enters the challenge code in the agent</li>
+                <li>Agent publishes <strong>kind 28202</strong> with email + npub + challenge code</li>
+                <li>Your system verifies: email matches logged-in user? challenge matches? signature valid?</li>
+                <li><strong>Gate 1 passed.</strong> You now have the agent's npub.</li>
+            </ol>
+
+            <div class="gate-header">GATE 2 — Human's Cryptographic Consent</div>
+            <ol>
+                <li>Your system publishes an <strong>addressed kind 28200</strong> (now tagged with the specific agent_npub)</li>
+                <li>Agent receives it, notifies human: "Amazon wants to authorize me"</li>
+                <li>Human signs <strong>kind 28250</strong> (delegation_grant) with their <strong>own NOSTR client</strong> — not the agent</li>
+                <li>Human publishes kind 28250 to relay</li>
+                <li>Your system catches kind 28250, validates signature, checks expires_at</li>
+                <li><strong>Gate 2 passed.</strong> Human has cryptographically consented.</li>
+            </ol>
+            <div class="doc-note">
+                <p>
+                    <strong>Critical:</strong> The human's nsec <strong>never enters the agent</strong>. 
+                    Human signs with their own NOSTR client. A rogue agent cannot forge this.
+                </p>
+            </div>
+
+            <div class="gate-header">GATE 3 — ZK Proof of Leaf Ownership</div>
+            <ol>
+                <li>Agent calls <span class="inline-code">POST /v1/membership/enroll/commit</span> with:
+                    <ul>
+                        <li><span class="inline-code">leaf_commitment</span> (hash of agent's secret)</li>
+                        <li><span class="inline-code">authorization_event</span> (kind 28200 from your system)</li>
+                        <li><span class="inline-code">delegation_event</span> (kind 28250 from human)</li>
+                    </ul>
+                </li>
+                <li>SignedByMe server verifies both Schnorr signatures via NIP-05</li>
+                <li>All pass: leaf_commitment appended to Merkle tree</li>
+                <li>Agent fetches witness, caches locally</li>
+                <li><strong>Gate 3 passed. Genesis complete.</strong> Never repeats for this enterprise.</li>
+            </ol>
+
+            <h3>4.4 JavaScript Implementation</h3>
+            <p>
+                See the full reference implementation: 
+                <a href="https://github.com/PrivacyLion/SignedByMe/blob/main/acme-site/js/app.js">acme-site/js/app.js</a>
+            </p>
+            <div class="doc-code">
+<pre><code>// Configuration
+const CONFIG = {
+    CLIENT_ID: 'your-client-id',
+    API_BASE: 'https://api.beta.privacy-lion.com',
+    RELAY_URL: 'wss://relay.privacy-lion.com',
+    ENTERPRISE_PUBKEY_HEX: 'your-enterprise-pubkey-hex',
+    // SECURITY: In production, sign events from your backend
+    ENTERPRISE_PRIVKEY_NSEC: 'nsec1...',
+    API_KEY: 'your-api-key'
+};
+
+// Generate challenge code
+function generateChallengeCode() {
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase();
+}
+
+// Generate nonce
+function generateNonce() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+}
+
+// Initialize authorization flow
+async function initAgentAuthorization(userEmail) {
+    const challenge = generateChallengeCode();
+    const nonce = generateNonce();
+    
+    document.getElementById('challenge-code').textContent = challenge;
+    
+    // Publish open kind 28200 session
+    await publishOpenEnrollmentSession(nonce);
+    
+    // Subscribe to relay for agent responses
+    subscribeToAgentResponses(nonce, userEmail, challenge);
+}</code></pre>
+            </div>
+
+            <h3>4.5 Backend Security</h3>
+            <div class="doc-warning">
+                <p>
+                    <strong>Never expose your enterprise nsec or API key in client-side JavaScript.</strong>
+                </p>
+            </div>
+            <p>Create backend endpoints:</p>
+            <div class="doc-code">
+<pre><code>// Your backend (Node.js example)
+app.post('/api/signedby/publish-enrollment', async (req, res) => {
+    // Load nsec from secrets manager
+    const nsec = await getSecret('ENTERPRISE_NOSTR_NSEC');
+    
+    // Sign and publish kind 28200
+    const signedEvent = await signNostrEvent(eventTemplate, nsec);
+    await publishToRelay(signedEvent);
+    
+    res.json({ success: true, eventId: signedEvent.id });
+});
+
+app.post('/api/signedby/verify-login', async (req, res) => {
+    const { proof, public_outputs } = req.body;
+    
+    // Load API key from secrets manager
+    const apiKey = await getSecret('SIGNEDBY_API_KEY');
+    
+    // Call SignedByMe API from backend
+    const response = await fetch('https://api.beta.privacy-lion.com/v1/login/verify', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({ proof, public_outputs, client_id: 'your-client-id' })
+    });
+    
+    res.json(await response.json());
 });</code></pre>
             </div>
         </section>
-        
-        <!-- Step 2: Subscribe to NOSTR -->
-        <section class="doc-section">
-            <h2>Step 2: Subscribe to NOSTR Relay</h2>
-            <p>
-                Connect to the relay and subscribe to <strong>kind 28101</strong> events 
-                tagged with your nonce. The user's app will publish a proof event 
-                when they scan and authenticate.
-            </p>
+
+        <!-- Section 5: Login Flow -->
+        <section id="login-flow" class="doc-section">
+            <h2>5. Implement Agent Login</h2>
             
-            <h3>Subscription Filter</h3>
+            <h3>5.1 Login Flow Overview</h3>
+            <p>
+                After genesis completes once, every subsequent authentication is automatic:
+            </p>
+            <div class="flow-diagram">
+Agent                           NOSTR Relay                    Your System                   SignedByMe
+  │                                 │                              │                             │
+  │ 1. Generate ZK proof            │                              │                             │
+  │    (<3 seconds)                 │                              │                             │
+  │                                 │                              │                             │
+  │ 2. Publish kind 28101 ─────────>│                              │                             │
+  │    (proof + public_outputs)     │                              │                             │
+  │                                 │                              │                             │
+  │                                 │ 3. Catch kind 28101 ────────>│                             │
+  │                                 │                              │                             │
+  │                                 │<──── 4. Query kind 28250 ────│                             │
+  │                                 │      (validate delegation)   │                             │
+  │                                 │                              │                             │
+  │                                 │                              │ 5. POST /v1/login/verify ──>│
+  │                                 │                              │                             │
+  │                                 │                              │<────── 6. id_token ─────────│
+  │                                 │                              │                             │
+  │                                 │                              │ 7. Agent authenticated      │</div>
+
+            <h3>5.2 Subscribe to Login Events</h3>
             <div class="doc-code">
 <pre><code>const ws = new WebSocket('wss://relay.privacy-lion.com');
 
 ws.onopen = () => {
+    // Subscribe to kind 28101 proof events for your client_id
     ws.send(JSON.stringify([
         'REQ',
         'login-sub',
         {
             kinds: [28101],
-            '#nonce': [nonce]
+            '#c': ['your-client-id'],
+            since: Math.floor(Date.now() / 1000) - 300
         }
     ]));
 };
 
-ws.onmessage = (event) => {
+ws.onmessage = async (event) => {
     const msg = JSON.parse(event.data);
+    
     if (msg[0] === 'EVENT' && msg[2].kind === 28101) {
-        handleProofEvent(msg[2]);
+        await handleLoginProofEvent(msg[2]);
     }
 };</code></pre>
             </div>
-            
-            <h3>Proof Event Structure (kind 28101)</h3>
+
+            <h3>5.3 Validate Delegation Chain</h3>
+            <p>
+                Before calling <span class="inline-code">/v1/login/verify</span>, validate the delegation:
+            </p>
             <div class="doc-code">
-<pre><code>{
-    "kind": 28101,
-    "pubkey": "user_npub_hex",
-    "created_at": 1714089600,
-    "tags": [
-        ["nonce", "your_nonce_here"],
-        ["c", "your_client_id"]
-    ],
-    "content": {
-        "proof": "base64_groth16_proof",
-        "public_outputs": {
-            "npub": "npub1...",
-            "merkle_root": "0x..."
-        },
-        "invoices": {
-            "user_invoice": "lnbc100n1...",
-            "operator_invoice": "lnbc10n1..."
-        }
-    },
-    "id": "event_id",
-    "sig": "schnorr_signature"
+<pre><code>async function validateDelegation(agentNpubHex, delegationId) {
+    // Query NOSTR for kind 28250 delegation
+    const delegation = await queryNostrEvent({
+        kinds: [28250],
+        '#p': [agentNpubHex]
+    });
+    
+    if (!delegation) return false;
+    
+    const content = JSON.parse(delegation.content);
+    
+    // Check expiry
+    if (new Date(content.expires_at) < new Date()) return false;
+    
+    // Check for revocation (kind 28251)
+    const revocation = await queryNostrEvent({
+        kinds: [28251],
+        '#d': [content.delegation_id]
+    });
+    
+    if (revocation) return false;
+    
+    // Check scopes include your client_id
+    if (!content.scopes?.['your-client-id']) return false;
+    
+    return true;
 }</code></pre>
             </div>
-        </section>
-        
-        <!-- Step 3: Pay Invoices -->
-        <section class="doc-section">
-            <h2>Step 3: Pay Lightning Invoices</h2>
-            <p>
-                The proof event contains two BOLT11 invoices. You must pay both:
-            </p>
-            <ul>
-                <li><strong>user_invoice</strong> — Payment to the user (90% of amount)</li>
-                <li><strong>operator_invoice</strong> — Platform fee (10% of amount)</li>
-            </ul>
-            
-            <h3>Using Strike API</h3>
+
+            <h3>5.4 Verify Proof and Get Token</h3>
             <div class="doc-code">
-<pre><code>async function payInvoice(bolt11, strikeApiKey) {
-    // Create quote
-    const quoteRes = await fetch('https://api.strike.me/v1/payment-quotes/lightning', {
+<pre><code>async function verifyProofAndGetToken(proof, publicOutputs) {
+    const response = await fetch('https://api.beta.privacy-lion.com/v1/login/verify', {
         method: 'POST',
         headers: {
-            'Authorization': `Bearer ${strikeApiKey}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer YOUR_API_KEY'
         },
         body: JSON.stringify({
-            lnInvoice: bolt11,
-            sourceCurrency: 'BTC'
+            proof: proof,
+            public_outputs: publicOutputs,
+            client_id: 'your-client-id'
         })
     });
-    const quote = await quoteRes.json();
     
-    // Execute payment
-    const payRes = await fetch(
-        `https://api.strike.me/v1/payment-quotes/${quote.paymentQuoteId}/execute`,
-        {
-            method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${strikeApiKey}` }
-        }
-    );
-    const payment = await payRes.json();
+    if (!response.ok) {
+        throw new Error('Verification failed');
+    }
     
-    return payment.preimage; // Hex-encoded preimage
+    const result = await response.json();
+    return result.id_token;
 }</code></pre>
-            </div>
-            
-            <div class="doc-note doc-warning">
-                <p>
-                    <strong>Important:</strong> Save both payment preimages. 
-                    You'll need them for verification.
-                </p>
             </div>
         </section>
-        
-        <!-- Step 4: Verify -->
-        <section class="doc-section">
-            <h2>Step 4: Verify and Get Token</h2>
-            <p>
-                Submit the proof and payment preimages to receive an OIDC id_token.
-            </p>
-            
-            <h3>API Endpoint</h3>
-            <div class="doc-code">
-<pre><code>POST https://api.beta.privacy-lion.com/v1/login/verify
-Content-Type: application/json
-X-API-Key: your_api_key
 
-{
-    "proof": "base64_groth16_proof",
-    "public_outputs": {
-        "merkle_root": "0x...",
-        "npub": "npub1..."
-    },
-    "user_invoice": "lnbc100n1...",
-    "operator_invoice": "lnbc10n1...",
-    "preimage_hex": "user_payment_preimage",
-    "operator_preimage_hex": "operator_payment_preimage"
-}</code></pre>
-            </div>
-            
-            <h3>Response</h3>
+        <!-- Section 6: API Reference -->
+        <section id="api-reference" class="doc-section">
+            <h2>6. API Reference</h2>
+            <p>
+                <strong>Base URL:</strong> <span class="inline-code">https://api.beta.privacy-lion.com</span>
+                (migrates to <span class="inline-code">https://api.signedbyme.com</span>)
+            </p>
+
+            <h3>6.1 Health Check</h3>
             <div class="doc-code">
-<pre><code>{
-    "id_token": "eyJhbGciOiJSUzI1NiIs...",
-    "token_type": "Bearer",
-    "expires_in": 3600
+<pre><code>GET /v1/health
+
+Response (200 OK):
+{
+  "status": "healthy",
+  "version": "1.0"
 }</code></pre>
             </div>
-            
-            <h3>ID Token Claims</h3>
+            <p>No authentication required. Use for uptime monitoring.</p>
+
+            <h3>6.2 OIDC Discovery</h3>
+            <div class="doc-code">
+<pre><code>GET /.well-known/openid-configuration
+
+Response:
+{
+  "issuer": "https://api.signedbyme.com",
+  "jwks_uri": "https://api.signedbyme.com/jwks.json",
+  "response_types_supported": ["id_token"],
+  "subject_types_supported": ["pairwise"],
+  "id_token_signing_alg_values_supported": ["RS256"]
+}</code></pre>
+            </div>
+            <p>No authentication required. Your IAM fetches this automatically.</p>
+
+            <h3>6.3 JWKS (Public Keys)</h3>
+            <div class="doc-code">
+<pre><code>GET /jwks.json
+
+Response:
+{
+  "keys": [{
+    "kty": "RSA",
+    "kid": "signedby-2026-01",
+    "use": "sig",
+    "alg": "RS256",
+    "n": "...",
+    "e": "AQAB"
+  }]
+}</code></pre>
+            </div>
+
+            <h3>6.4 Login Verification</h3>
+            <div class="doc-code">
+<pre><code>POST /v1/login/verify
+Content-Type: application/json
+Authorization: Bearer &lt;api_key&gt;
+
+Request:
+{
+  "proof": "&lt;groth16_proof_hex&gt;",
+  "public_outputs": {
+    "merkle_root": "&lt;hex&gt;",
+    "npub": "&lt;hex&gt;"
+  },
+  "client_id": "your-client-id"
+}
+
+Response (200 OK):
+{
+  "id_token": "&lt;JWT&gt;",
+  "expires_in": 3600
+}</code></pre>
+            </div>
+            <p>
+                <strong>Server checks ONE thing:</strong> Is <span class="inline-code">merkle_root</span> in the last 30 valid roots for this client_id?
+            </p>
+
+            <h3>6.5 ID Token Claims</h3>
             <table class="doc-table">
                 <tr>
                     <th>Claim</th>
@@ -374,106 +798,251 @@ X-API-Key: your_api_key
                 </tr>
                 <tr>
                     <td><span class="inline-code">sub</span></td>
-                    <td>User's npub (consistent per enterprise, unlinkable across enterprises)</td>
+                    <td>Agent's npub — globally consistent identifier</td>
                 </tr>
                 <tr>
                     <td><span class="inline-code">iss</span></td>
-                    <td>https://api.beta.privacy-lion.com</td>
+                    <td>https://api.signedbyme.com</td>
                 </tr>
                 <tr>
                     <td><span class="inline-code">aud</span></td>
                     <td>Your client_id</td>
                 </tr>
                 <tr>
-                    <td><span class="inline-code">membership_root</span></td>
-                    <td>Merkle root user proved membership against</td>
+                    <td><span class="inline-code">membership_verified</span></td>
+                    <td>true — agent proved Merkle tree membership</td>
                 </tr>
                 <tr>
-                    <td><span class="inline-code">payment_verified</span></td>
-                    <td>true (Lightning payment confirmed)</td>
+                    <td><span class="inline-code">amr</span></td>
+                    <td>["zk_membership"]</td>
+                </tr>
+            </table>
+
+            <h3>6.6 Authentication</h3>
+            <p>All protected endpoints require Bearer token:</p>
+            <div class="doc-code">
+<pre><code>Authorization: Bearer &lt;your_api_key&gt;</code></pre>
+            </div>
+
+            <h3>6.7 Error Responses</h3>
+            <table class="doc-table">
+                <tr>
+                    <th>Status</th>
+                    <th>Code</th>
+                    <th>Meaning</th>
+                </tr>
+                <tr>
+                    <td>400</td>
+                    <td>root_expired</td>
+                    <td>merkle_root not in last 30 valid roots</td>
+                </tr>
+                <tr>
+                    <td>400</td>
+                    <td>npub_mismatch</td>
+                    <td>agent_npub doesn't match between events</td>
+                </tr>
+                <tr>
+                    <td>400</td>
+                    <td>event_replayed</td>
+                    <td>authorization_event_id already used</td>
+                </tr>
+                <tr>
+                    <td>401</td>
+                    <td>unauthorized</td>
+                    <td>Missing or invalid Bearer token</td>
+                </tr>
+                <tr>
+                    <td>422</td>
+                    <td>signature_invalid</td>
+                    <td>Schnorr signature verification failed</td>
+                </tr>
+                <tr>
+                    <td>500</td>
+                    <td>server_error</td>
+                    <td>Internal error</td>
                 </tr>
             </table>
         </section>
-        
-        <!-- Enrollment -->
-        <section class="doc-section">
-            <h2>User Enrollment</h2>
+
+        <!-- Section 7: IAM Integration -->
+        <section id="iam-integration" class="doc-section">
+            <h2>7. Integrate with Your IAM</h2>
             <p>
-                Before users can log in, they must be enrolled in your Merkle tree. 
-                Enrollment is a separate flow where you authorize a user to join 
-                your allowlist.
+                The simplest path: add SignedByMe as an OIDC identity provider in your existing IAM.
             </p>
-            
-            <h3>Enrollment QR Format</h3>
+
+            <h3>7.1 Okta</h3>
+            <ol>
+                <li>Admin Console → Security → Identity Providers</li>
+                <li>Add Identity Provider → OpenID Connect</li>
+                <li>Configure:
+                    <ul>
+                        <li>Name: <span class="inline-code">SignedByMe</span></li>
+                        <li>Issuer: <span class="inline-code">https://api.signedbyme.com</span></li>
+                        <li>Client ID: Your SignedByMe client_id</li>
+                        <li>Client Secret: Your SignedByMe API key</li>
+                    </ul>
+                </li>
+                <li>Save</li>
+            </ol>
+
+            <h3>7.2 Azure AD / Entra ID</h3>
+            <ol>
+                <li>Azure Portal → External Identities → All identity providers</li>
+                <li>Add → OpenID Connect (OIDC)</li>
+                <li>Configure:
+                    <ul>
+                        <li>Metadata URL: <span class="inline-code">https://api.signedbyme.com/.well-known/openid-configuration</span></li>
+                        <li>Client ID and Secret as above</li>
+                    </ul>
+                </li>
+                <li>Map claims: <span class="inline-code">sub</span> → User Identifier</li>
+            </ol>
+
+            <h3>7.3 Auth0</h3>
+            <ol>
+                <li>Authentication → Enterprise → OpenID Connect</li>
+                <li>Create Connection:
+                    <ul>
+                        <li>Connection Name: <span class="inline-code">signedby</span></li>
+                        <li>Issuer URL: <span class="inline-code">https://api.signedbyme.com</span></li>
+                    </ul>
+                </li>
+                <li>Enable for your application</li>
+            </ol>
+
+            <h3>7.4 AWS Cognito</h3>
+            <ol>
+                <li>User Pool → Sign-in experience → Federated identity providers</li>
+                <li>Add identity provider → OpenID Connect</li>
+                <li>Configure provider name, client ID, secret, and issuer URL</li>
+                <li>Attribute mapping: <span class="inline-code">sub</span> → <span class="inline-code">username</span></li>
+            </ol>
+
+            <h3>7.5 Manual Token Validation</h3>
             <div class="doc-code">
-<pre><code>signedby://enroll/{client_id}/{nonce}?exp={unix_timestamp}</code></pre>
+<pre><code># Python example
+import jwt
+from jwt import PyJWKClient
+
+SIGNEDBY_JWKS_URL = "https://api.signedbyme.com/jwks.json"
+SIGNEDBY_ISSUER = "https://api.signedbyme.com"
+
+jwks_client = PyJWKClient(SIGNEDBY_JWKS_URL)
+
+def validate_signedby_token(id_token, expected_client_id):
+    signing_key = jwks_client.get_signing_key_from_jwt(id_token)
+    
+    claims = jwt.decode(
+        id_token,
+        signing_key.key,
+        algorithms=["RS256"],
+        audience=expected_client_id,
+        issuer=SIGNEDBY_ISSUER
+    )
+    
+    return {
+        "agent_npub": claims["sub"],
+        "membership_verified": claims.get("membership_verified", False)
+    }</code></pre>
             </div>
-            
-            <h3>Kind 28200: Enrollment Authorization</h3>
-            <p>
-                Before displaying the enrollment QR, you must publish a 
-                <strong>kind 28200</strong> event signed with your enterprise NOSTR key. 
-                This authorizes the enrollment session.
-            </p>
+        </section>
+
+        <!-- Section 8: Human Control -->
+        <section id="human-control" class="doc-section">
+            <h2>8. Human Control (Delegation & Revocation)</h2>
+
+            <h3>Kind 28250 — Delegation Grant</h3>
+            <p>Published by human owner, signed with human's nsec:</p>
             <div class="doc-code">
 <pre><code>{
-    "kind": 28200,
-    "pubkey": "your_enterprise_npub_hex",
-    "created_at": 1714089600,
-    "tags": [
-        ["nonce", "enrollment_nonce"],
-        ["c", "your_client_id"]
-    ],
-    "content": {
-        "client_id": "your_client_id",
-        "expires_at": "2026-04-19T12:00:00Z"
-    }
+  "kind": 28250,
+  "pubkey": "&lt;human_npub_hex&gt;",
+  "tags": [["p", "&lt;agent_npub_hex&gt;"]],
+  "content": "{\"agent_npub\":\"npub1...\",\"scopes\":{\"amazon\":[\"read\",\"write\"]},\"expires_at\":\"2027-03-01T00:00:00Z\",\"delegation_id\":\"del_abc123\"}"
 }</code></pre>
             </div>
-            
-            <div class="doc-note">
+
+            <h3>Kind 28251 — Revocation</h3>
+            <p>Published by human owner. <strong>Instant effect.</strong></p>
+            <div class="doc-code">
+<pre><code>{
+  "kind": 28251,
+  "pubkey": "&lt;human_npub_hex&gt;",
+  "tags": [["d", "del_abc123"]],
+  "content": "{\"revoked_at\":\"2026-04-30T12:00:00Z\"}"
+}</code></pre>
+            </div>
+            <div class="doc-warning">
                 <p>
-                    <strong>NIP-05 Verification:</strong> Your enterprise NOSTR pubkey 
-                    should be published at <span class="inline-code">yourdomain.com/.well-known/nostr.json</span> 
-                    for user apps to verify authenticity.
+                    <strong>Your system must check for kind 28251 before accepting any login.</strong> 
+                    A revoked delegation means the agent is no longer authorized.
                 </p>
             </div>
         </section>
-        
-        <!-- Security -->
-        <section class="doc-section">
-            <h2>Security Considerations</h2>
+
+        <!-- Section 9: Security -->
+        <section id="security" class="doc-section">
+            <h2>9. Security Considerations</h2>
             <ul>
-                <li>
-                    <strong>Nonce uniqueness:</strong> Generate a fresh nonce for each login. 
-                    Never reuse nonces.
-                </li>
-                <li>
-                    <strong>Session timeout:</strong> Nonces should expire after 5 minutes. 
-                    Stop listening after expiry.
-                </li>
-                <li>
-                    <strong>Verify the proof:</strong> Always submit to <span class="inline-code">/v1/login/verify</span>. 
-                    Don't trust the NOSTR event alone.
-                </li>
-                <li>
-                    <strong>HTTPS only:</strong> Never load SignedByMe integration over HTTP.
-                </li>
-                <li>
-                    <strong>Protect API keys:</strong> Keep your API key server-side. 
-                    Never expose in client code.
-                </li>
+                <li><strong>Never expose your enterprise nsec</strong> — sign events from your backend</li>
+                <li><strong>Never expose your API key</strong> — make API calls from your backend</li>
+                <li><strong>Always validate delegation chain</strong> — check kind 28250 exists, not expired, not revoked</li>
+                <li><strong>Verify NIP-05</strong> — confirm human's npub via their domain's nostr.json</li>
+                <li><strong>Use HTTPS only</strong> — never load integration over HTTP</li>
+                <li><strong>Session timeout</strong> — enrollment sessions should expire after 10 minutes max</li>
+                <li><strong>Nonce uniqueness</strong> — never reuse nonces</li>
             </ul>
         </section>
-        
+
+        <!-- Section 10: Troubleshooting -->
+        <section id="troubleshooting" class="doc-section">
+            <h2>10. Troubleshooting</h2>
+            <table class="doc-table">
+                <tr>
+                    <th>Symptom</th>
+                    <th>Cause</th>
+                    <th>Fix</th>
+                </tr>
+                <tr>
+                    <td>nip05_unreachable</td>
+                    <td>Your .well-known/nostr.json not accessible</td>
+                    <td>Check CORS headers, HTTPS, file exists</td>
+                </tr>
+                <tr>
+                    <td>signature_invalid</td>
+                    <td>Wrong nsec or corrupted event</td>
+                    <td>Regenerate keys, verify signing code</td>
+                </tr>
+                <tr>
+                    <td>root_expired</td>
+                    <td>Agent's witness too old</td>
+                    <td>Agent should fetch fresh witness</td>
+                </tr>
+                <tr>
+                    <td>event_replayed</td>
+                    <td>Same kind 28200 used twice</td>
+                    <td>Generate new nonce for each enrollment</td>
+                </tr>
+                <tr>
+                    <td>Relay connection fails</td>
+                    <td>Firewall blocking WebSocket</td>
+                    <td>Allow wss://relay.privacy-lion.com</td>
+                </tr>
+                <tr>
+                    <td>Agent response not received</td>
+                    <td>Agent not subscribed to relay</td>
+                    <td>Verify agent is watching for kind 28200</td>
+                </tr>
+            </table>
+        </section>
+
         <!-- Support -->
         <section class="doc-section">
             <h2>Support</h2>
-            <p>
-                Questions? Issues?
-            </p>
+            <p>Questions? Issues?</p>
             <ul>
-                <li>Email: <a href="mailto:enterprise@privacy-lion.com">enterprise@privacy-lion.com</a></li>
+                <li>Email: <a href="mailto:enterprise@signedby.me">enterprise@signedby.me</a></li>
                 <li>GitHub: <a href="https://github.com/PrivacyLion/SignedByMe/issues">Open an issue</a></li>
             </ul>
         </section>
@@ -483,13 +1052,12 @@ X-API-Key: your_api_key
         <div class="container">
             <div class="footer-content">
                 <div class="footer-brand">
-                    <span class="logo-icon">⚡</span>
                     <span class="logo-text">SignedByMe</span>
                 </div>
                 <div class="footer-links">
                     <a href="https://github.com/PrivacyLion/SignedByMe">GitHub</a>
                     <a href="./">Documentation</a>
-                    <a href="mailto:contact@privacy-lion.com">Contact</a>
+                    <a href="mailto:enterprise@signedby.me">Contact</a>
                 </div>
             </div>
             <p class="footer-legal">
