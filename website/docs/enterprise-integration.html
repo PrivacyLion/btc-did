@@ -363,7 +363,10 @@ console.log('Public Key (hex):', publicKey);</code></pre>
   },
   "relays": {
     "YOUR_ENTERPRISE_NPUB_HEX_HERE": [
-      "wss://relay.privacy-lion.com"
+      "wss://relay.privacy-lion.com",
+      "wss://relay-sfo.privacy-lion.com",
+      "wss://relay-ams.privacy-lion.com",
+      "wss://relay-sgp.privacy-lion.com"
     ]
   },
   "lightning": "payments@yourdomain.com"
@@ -516,7 +519,13 @@ console.log('Public Key (hex):', publicKey);</code></pre>
 const CONFIG = {
     CLIENT_ID: 'your-client-id',
     API_BASE: 'https://api.beta.privacy-lion.com',
-    RELAY_URL: 'wss://relay.privacy-lion.com',
+    // SignedByMe relay infrastructure (multi-region)
+    RELAYS: [
+        'wss://relay.privacy-lion.com',      // US East (NYC)
+        'wss://relay-sfo.privacy-lion.com',  // US West (SFO)
+        'wss://relay-ams.privacy-lion.com',  // Europe (AMS)
+        'wss://relay-sgp.privacy-lion.com'   // Asia (SGP)
+    ],
     ENTERPRISE_PUBKEY_HEX: 'your-enterprise-pubkey-hex',
     // SECURITY: In production, sign events from your backend
     ENTERPRISE_PRIVKEY_NSEC: 'nsec1...',
@@ -628,28 +637,39 @@ Agent                           NOSTR Relay                    Your System      
 
             <h3>5.2 Subscribe to Login Events</h3>
             <div class="doc-code">
-<pre><code>const ws = new WebSocket('wss://relay.privacy-lion.com');
+<pre><code>import { SimplePool } from 'nostr-tools/pool';
 
-ws.onopen = () => {
-    // Subscribe to kind 28101 proof events for your client_id
-    ws.send(JSON.stringify([
-        'REQ',
-        'login-sub',
-        {
-            kinds: [28101],
-            '#c': ['your-client-id'],
-            since: Math.floor(Date.now() / 1000) - 300
+const pool = new SimplePool();
+
+// Subscribe to all SignedByMe relays for redundancy
+const RELAYS = [
+    'wss://relay.privacy-lion.com',
+    'wss://relay-sfo.privacy-lion.com',
+    'wss://relay-ams.privacy-lion.com',
+    'wss://relay-sgp.privacy-lion.com'
+];
+
+const sub = pool.subscribeMany(
+    RELAYS,
+    [{
+        kinds: [28101],
+        '#c': ['your-client-id'],
+        since: Math.floor(Date.now() / 1000) - 300
+    }],
+    {
+        onevent(event) {
+            if (event.kind === 28101) {
+                handleLoginProofEvent(event);
+            }
+        },
+        oneose() {
+            console.log('End of stored events');
         }
-    ]));
-};
-
-ws.onmessage = async (event) => {
-    const msg = JSON.parse(event.data);
-    
-    if (msg[0] === 'EVENT' && msg[2].kind === 28101) {
-        await handleLoginProofEvent(msg[2]);
     }
-};</code></pre>
+);
+
+// To close subscription when done:
+// sub.close();</code></pre>
             </div>
 
             <h3>5.3 Validate Delegation Chain</h3>
@@ -1027,7 +1047,7 @@ def validate_signedby_token(id_token, expected_client_id):
                 <tr>
                     <td>Relay connection fails</td>
                     <td>Firewall blocking WebSocket</td>
-                    <td>Allow wss://relay.privacy-lion.com</td>
+                    <td>Allow all SignedByMe relays: wss://relay.privacy-lion.com, wss://relay-sfo.privacy-lion.com, wss://relay-ams.privacy-lion.com, wss://relay-sgp.privacy-lion.com</td>
                 </tr>
                 <tr>
                     <td>Agent response not received</td>
@@ -1037,15 +1057,6 @@ def validate_signedby_token(id_token, expected_client_id):
             </table>
         </section>
 
-        <!-- Support -->
-        <section class="doc-section">
-            <h2>Support</h2>
-            <p>Questions? Issues?</p>
-            <ul>
-                <li>Email: <a href="mailto:enterprise@signedby.me">enterprise@signedby.me</a></li>
-                <li>GitHub: <a href="https://github.com/PrivacyLion/SignedByMe/issues">Open an issue</a></li>
-            </ul>
-        </section>
     </div>
 
     <footer class="footer">
@@ -1057,7 +1068,6 @@ def validate_signedby_token(id_token, expected_client_id):
                 <div class="footer-links">
                     <a href="https://github.com/PrivacyLion/SignedByMe">GitHub</a>
                     <a href="./">Documentation</a>
-                    <a href="mailto:enterprise@signedby.me">Contact</a>
                 </div>
             </div>
             <p class="footer-legal">
