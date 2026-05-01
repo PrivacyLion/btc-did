@@ -478,6 +478,28 @@ console.log('Public Key (hex):', publicKey);</code></pre>
                 <li><strong>Gate 1 passed.</strong> You now have the agent's npub.</li>
             </ol>
 
+            <h4>Custom Relay Configuration (Optional)</h4>
+            <p>
+                By default, agents use SignedByMe's relay infrastructure. If you want agents to publish to your own relays instead, 
+                add a <span class="inline-code">relays</span> tag to your kind 28200 event:
+            </p>
+            <div class="doc-code">
+<pre><code>{
+  "kind": 28200,
+  "tags": [
+    ["c", "your-client-id"],
+    ["relays", "wss://your-relay.com", "wss://backup-relay.com"]
+  ],
+  "content": "{\"client_id\":\"your-client-id\",\"expires_at\":\"...\"}"
+}</code></pre>
+            </div>
+            <div class="doc-warning">
+                <p>
+                    <strong>If you specify custom relays:</strong> The agent will publish responses to those relays. 
+                    You are responsible for subscribing to and monitoring your own relays.
+                </p>
+            </div>
+
             <div class="gate-header">GATE 2 — Human's Cryptographic Consent</div>
             <ol>
                 <li>Your system publishes an <strong>addressed kind 28200</strong> (now tagged with the specific agent_npub)</li>

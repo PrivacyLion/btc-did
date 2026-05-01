@@ -81,6 +81,9 @@ pub struct AuthorizationEvent {
     pub enterprise_pubkey: PublicKey,
     /// Enterprise client_id (from event content or tags)
     pub client_id: Option<String>,
+    /// Custom relays specified by enterprise (Phase 29.4)
+    /// If present, agent should publish responses to these relays
+    pub custom_relays: Vec<String>,
     /// Event creation timestamp
     pub created_at: Timestamp,
 }
@@ -135,8 +138,10 @@ impl EnrollmentBootstrap {
     /// - kind 28250 from the human owner (human delegation)
     /// 
     /// When both are found, executes enrollment via API.
+    /// If the enterprise specifies custom relays in their kind 28200, the agent
+    /// will add those relays and publish responses to them (Phase 29.4).
     pub async fn watch_for_enrollment<S: SecureStorage>(
-        &self,
+        &mut self,
         identity: &AgentIdentity<S>,
         human_npub: &str,
         poll_interval: Duration,
@@ -157,6 +162,14 @@ impl EnrollmentBootstrap {
             if let (Some(auth), Some(delegation)) = (auth_events.first(), delegation_events.first()) {
                 eprintln!("[enrollment] Found authorization: {}", auth.event_id.to_hex());
                 eprintln!("[enrollment] Found delegation: {}", delegation.event_id.to_hex());
+                
+                // Add custom relays if enterprise specified them (Phase 29.4)
+                if !auth.custom_relays.is_empty() {
+                    eprintln!("[enrollment] Enterprise specified custom relays: {:?}", auth.custom_relays);
+                    if let Err(e) = self.nostr_client.add_custom_relays(&auth.custom_relays).await {
+                        eprintln!("[enrollment] Warning: Failed to add custom relays: {}", e);
+                    }
+                }
                 
                 // Execute enrollment
                 return self.execute_enrollment(
@@ -192,10 +205,18 @@ impl EnrollmentBootstrap {
                     .find(|t| t.as_vec().first().map(|s| s.as_str()) == Some("client_id"))
                     .and_then(|t| t.as_vec().get(1).cloned());
                 
+                // Extract custom relays from tags (Phase 29.4)
+                // Tag format: ["relays", "wss://relay1.com", "wss://relay2.com", ...]
+                let custom_relays: Vec<String> = e.tags.iter()
+                    .find(|t| t.as_vec().first().map(|s| s.as_str()) == Some("relays"))
+                    .map(|t| t.as_vec().iter().skip(1).cloned().collect())
+                    .unwrap_or_default();
+                
                 AuthorizationEvent {
                     event_id: e.id,
                     enterprise_pubkey: e.pubkey,
                     client_id,
+                    custom_relays,
                     created_at: e.created_at,
                 }
             })

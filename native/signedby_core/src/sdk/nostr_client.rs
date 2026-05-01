@@ -20,7 +20,15 @@ use std::time::Duration;
 use super::identity::AgentIdentity;
 use super::storage::SecureStorage;
 
-/// SignedByMe audit relay (NIP-42 required for writes)
+/// SignedByMe default relays (NIP-42 required for writes)
+pub const DEFAULT_RELAYS: &[&str] = &[
+    "wss://relay.privacy-lion.com",      // US East (NYC)
+    "wss://relay-sfo.privacy-lion.com",  // US West (SFO)
+    "wss://relay-ams.privacy-lion.com",  // Europe (AMS)
+    "wss://relay-sgp.privacy-lion.com",  // Asia (SGP)
+];
+
+/// Legacy single relay constant for backwards compatibility
 pub const RELAY_URL: &str = "wss://relay.privacy-lion.com";
 
 /// Event kinds for Phase 26 flow
@@ -50,19 +58,21 @@ pub struct ProofEventData {
 
 /// Agent NOSTR client for SignedByMe SDK
 /// 
-/// Connects to the audit relay with NIP-42 authentication.
+/// Connects to the audit relays with NIP-42 authentication.
 /// All events are signed by the agent's nsec (derived from leaf_secret).
 pub struct NostrClient {
     client: Client,
     keys: Keys,
     agent_npub: String,
+    /// Active relay URLs (defaults + any custom relays added)
+    relays: Vec<String>,
 }
 
 impl NostrClient {
     /// Create a new NOSTR client from AgentIdentity
     /// 
     /// Derives agent keys from leaf_secret (never stored separately).
-    /// Connects to wss://relay.privacy-lion.com with NIP-42 auth.
+    /// Connects to all SignedByMe default relays with NIP-42 auth.
     pub async fn new<S: SecureStorage>(identity: &AgentIdentity<S>) -> Result<Self> {
         // Derive agent keys fresh from leaf_secret
         let keys = identity.get_agent_keys()?;
@@ -71,30 +81,37 @@ impl NostrClient {
         // Create nostr-sdk client with agent keys
         let client = Client::new(keys.clone());
         
+        // Initialize with default relays
+        let relays: Vec<String> = DEFAULT_RELAYS.iter().map(|s| s.to_string()).collect();
+        
         let mut nostr_client = Self {
             client,
             keys,
             agent_npub,
+            relays,
         };
         
-        // Connect and authenticate
+        // Connect and authenticate to all default relays
         nostr_client.connect_and_auth().await?;
         
         Ok(nostr_client)
     }
     
-    /// Connect to relay and perform NIP-42 authentication
+    /// Connect to all relays and perform NIP-42 authentication
     async fn connect_and_auth(&mut self) -> Result<()> {
-        // Add relay
-        self.client.add_relay(RELAY_URL).await
-            .map_err(|e| anyhow!("Failed to add relay {}: {}", RELAY_URL, e))?;
+        // Add all relays
+        for relay_url in &self.relays {
+            if let Err(e) = self.client.add_relay(relay_url.as_str()).await {
+                eprintln!("[nostr] Warning: Failed to add relay {}: {}", relay_url, e);
+            }
+        }
         
         // Connect with timeout
         let timeout = Duration::from_secs(10);
         match tokio::time::timeout(timeout, self.client.connect()).await {
             Ok(_) => {}
             Err(_) => {
-                return Err(anyhow!("Connection to {} timed out after 10 seconds", RELAY_URL));
+                return Err(anyhow!("Connection to relays timed out after 10 seconds"));
             }
         }
         
@@ -104,6 +121,38 @@ impl NostrClient {
         tokio::time::sleep(Duration::from_millis(500)).await;
         
         Ok(())
+    }
+    
+    /// Add custom relays (e.g., from enterprise kind 28200 "relays" tag)
+    /// 
+    /// Call this when an enterprise specifies custom relays in their authorization event.
+    /// The agent will publish responses to these relays in addition to defaults.
+    pub async fn add_custom_relays(&mut self, relay_urls: &[String]) -> Result<()> {
+        for relay_url in relay_urls {
+            // Skip if already added
+            if self.relays.contains(relay_url) {
+                continue;
+            }
+            
+            // Add to our list
+            self.relays.push(relay_url.clone());
+            
+            // Add to nostr-sdk client
+            if let Err(e) = self.client.add_relay(relay_url.as_str()).await {
+                eprintln!("[nostr] Warning: Failed to add custom relay {}: {}", relay_url, e);
+            }
+        }
+        
+        // Reconnect to include new relays
+        self.client.connect().await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        
+        Ok(())
+    }
+    
+    /// Get the list of active relay URLs
+    pub fn active_relays(&self) -> &[String] {
+        &self.relays
     }
     
     /// Get the agent's npub (bech32)
