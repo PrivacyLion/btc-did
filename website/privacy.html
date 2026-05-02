@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy — SignedByMe</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            padding-top: 80px;
+        }
+        .doc-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 48px 24px;
+        }
+        .doc-nav {
+            margin-bottom: 32px;
+        }
+        .doc-nav a {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        .doc-title {
+            margin-bottom: 16px;
+        }
+        .doc-meta {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 48px;
+        }
+        .doc-section {
+            margin-bottom: 48px;
+        }
+        .doc-section h2 {
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .doc-section p, .doc-section li {
+            line-height: 1.7;
+            margin-bottom: 12px;
+        }
+        .doc-section ul {
+            margin-left: 24px;
+            margin-bottom: 16px;
+        }
+        .highlight-box {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 24px 0;
+        }
+        .highlight-box h3 {
+            color: #10B981;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">
+                <span class="logo-text brand-name">SignedByMe</span>
+            </a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="docs/enterprise-integration.html">Documentation</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="doc-container">
+        <div class="doc-nav">
+            <a href="index.html">← Back to Home</a>
+        </div>
+
+        <h1 class="doc-title">Privacy Policy</h1>
+        <p class="doc-meta">Effective Date: May 26, 2026</p>
+
+        <div class="highlight-box">
+            <h3>Privacy by Design</h3>
+            <p>
+                SignedByMe is built on zero-knowledge cryptography. We cannot see your identity, 
+                and we've designed the system so we never need to. This isn't a policy choice — 
+                it's a mathematical guarantee.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>1. What We Collect</h2>
+            <p>
+                SignedByMe collects the minimum data required to operate the service:
+            </p>
+            <ul>
+                <li><strong>npub (public key):</strong> Your agent's pseudonymous NOSTR public key — not linked to any real-world identity</li>
+                <li><strong>leaf_commitment:</strong> A cryptographic hash used for Merkle tree membership — cannot be reversed to reveal identity</li>
+                <li><strong>Login timestamps:</strong> When your agent authenticated (for revenue share calculation)</li>
+                <li><strong>client_id:</strong> Which enterprise your agent authenticated to</li>
+            </ul>
+            <p>
+                All of this data is pseudonymous. Your npub is a mathematical output of zero-knowledge proofs, not a claim you make.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>2. What We Do NOT Collect</h2>
+            <p>
+                SignedByMe explicitly does not collect:
+            </p>
+            <ul>
+                <li><strong>No names</strong> — We don't know who you are</li>
+                <li><strong>No email addresses</strong> — Email is used only for enterprise gate 1 verification and never stored by SignedByMe</li>
+                <li><strong>No physical addresses</strong> — We have no use for them</li>
+                <li><strong>No phone numbers</strong> — Not required</li>
+                <li><strong>No KYC data</strong> — No ID verification, no selfies, no documents</li>
+                <li><strong>No IP addresses</strong> — Not logged</li>
+                <li><strong>No device fingerprints</strong> — Not tracked</li>
+                <li><strong>No analytics or tracking</strong> — No Google Analytics, no pixels, no beacons</li>
+            </ul>
+            <p>
+                We cannot leak what we don't have.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>3. NOSTR Events Are Public</h2>
+            <p>
+                SignedByMe uses the NOSTR protocol for delegation, authorization, and audit. By design:
+            </p>
+            <ul>
+                <li>Kind 28200, 28202, 28250, 28251 events are published to public relays</li>
+                <li>Anyone can read these events — this is intentional for transparency</li>
+                <li>Events contain only npubs and cryptographic data — no PII</li>
+                <li>The public audit trail is a feature, not a bug</li>
+            </ul>
+            <p>
+                Your npub is pseudonymous. It is not linked to your real identity unless you choose to link it yourself (e.g., via NIP-05).
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>4. Payment Data</h2>
+            <p>
+                SignedByMe uses Bitcoin Lightning Network for payments:
+            </p>
+            <ul>
+                <li>Payments are processed via Strike</li>
+                <li>SignedByMe sees: payment amount, timestamp, and preimage</li>
+                <li>SignedByMe does NOT see: your Strike account details, bank info, or identity</li>
+                <li>Payment preimages are cryptographically bound to agent identity at enrollment</li>
+            </ul>
+            <p>
+                Strike has its own privacy policy for payment processing. We recommend reviewing it.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>5. What Enterprises See</h2>
+            <p>
+                When your agent authenticates to an enterprise, they receive:
+            </p>
+            <ul>
+                <li><strong>npub:</strong> Your agent's pseudonymous identifier</li>
+                <li><strong>Membership boolean:</strong> "This agent is authorized" (yes/no)</li>
+                <li><strong>OIDC id_token:</strong> Standard JWT with sub=npub</li>
+            </ul>
+            <p>
+                Enterprises do NOT receive:
+            </p>
+            <ul>
+                <li>Which human owns the agent</li>
+                <li>Which other enterprises the agent accesses</li>
+                <li>The agent's leaf_secret or DID</li>
+                <li>Any real-world identity</li>
+            </ul>
+            <p>
+                Zero-knowledge proofs ensure enterprises learn only what they need: authorization status.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>6. Data Retention</h2>
+            <ul>
+                <li><strong>Merkle tree leaves:</strong> Retained indefinitely (required for proof verification)</li>
+                <li><strong>Login verifications:</strong> Retained for 12 months (revenue share calculation), then deleted</li>
+                <li><strong>NOSTR events:</strong> Stored on public relays per relay operator policies</li>
+                <li><strong>Backups:</strong> SQLite backups retained for 30 days</li>
+            </ul>
+            <p>
+                We retain only what's necessary for the cryptographic system to function.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>7. Security</h2>
+            <p>
+                SignedByMe security is built on cryptographic guarantees, not promises:
+            </p>
+            <ul>
+                <li><strong>Groth16 zero-knowledge proofs:</strong> ~101K constraints over BN254</li>
+                <li><strong>Poseidon2 hashing:</strong> ZK-friendly cryptographic hash</li>
+                <li><strong>secp256k1 signatures:</strong> Same curve as Bitcoin</li>
+                <li><strong>TEE/Secure Enclave:</strong> Agent keys stored in hardware-backed secure storage</li>
+                <li><strong>No server-side secrets:</strong> Server has no NOSTR keys, no ability to forge proofs</li>
+            </ul>
+            <p>
+                The mathematical guarantee: forging an agent identity requires simultaneously breaking SHA-256, 
+                Groth16 over BN254 (~101K constraints), and secp256k1 — the same foundations that secure Bitcoin.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>8. Contact</h2>
+            <p>
+                Questions about privacy? Email <a href="mailto:contact@signedbyme.com">contact@signedbyme.com</a>
+            </p>
+            <p>
+                <strong>Legal Entity:</strong> SignedByMe is a trade name of Privacy Lion LLC, a Florida limited liability company.
+            </p>
+        </div>
+
+        <div class="highlight-box">
+            <h3>Our Commitment</h3>
+            <p>
+                We built SignedByMe because we believe identity should be self-sovereign, privacy-preserving, 
+                and cryptographically verifiable. We don't collect your data because we don't need it — 
+                and we've designed the system so that's mathematically guaranteed.
+            </p>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-text brand-name">SignedByMe</span>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/PrivacyLion/SignedByMe">GitHub</a>
+                    <a href="docs/enterprise-integration.html">Documentation</a>
+                    <a href="mailto:contact@signedbyme.com">Contact</a>
+                    <a href="terms.html">Terms</a>
+                    <a href="privacy.html">Privacy</a>
+                </div>
+            </div>
+            <p class="footer-legal">
+                © 2026 Privacy Lion LLC. All rights reserved.
+            </p>
+        </div>
+    </footer>
+</body>
+</html>

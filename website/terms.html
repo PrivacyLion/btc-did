@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service — SignedByMe</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            padding-top: 80px;
+        }
+        .doc-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 48px 24px;
+        }
+        .doc-nav {
+            margin-bottom: 32px;
+        }
+        .doc-nav a {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        .doc-title {
+            margin-bottom: 16px;
+        }
+        .doc-meta {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 48px;
+        }
+        .doc-section {
+            margin-bottom: 48px;
+        }
+        .doc-section h2 {
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .doc-section p, .doc-section li {
+            line-height: 1.7;
+            margin-bottom: 12px;
+        }
+        .doc-section ul {
+            margin-left: 24px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">
+                <span class="logo-text brand-name">SignedByMe</span>
+            </a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="docs/enterprise-integration.html">Documentation</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="doc-container">
+        <div class="doc-nav">
+            <a href="index.html">← Back to Home</a>
+        </div>
+
+        <h1 class="doc-title">Terms of Service</h1>
+        <p class="doc-meta">Effective Date: May 26, 2026</p>
+
+        <div class="doc-section">
+            <h2>1. Service Description</h2>
+            <p>
+                SignedByMe provides a cryptographic identity layer for autonomous agents. Our service enables:
+            </p>
+            <ul>
+                <li>Self-signing cryptographic identity (DID) for agents</li>
+                <li>Zero-knowledge membership proofs via Groth16</li>
+                <li>OIDC-compatible authentication tokens</li>
+                <li>Human-controlled delegation and revocation via NOSTR</li>
+                <li>Bitcoin Lightning Network payment integration</li>
+            </ul>
+            <p>
+                SignedByMe is operated by Privacy Lion LLC, a Florida limited liability company.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>2. Subscription and Payment</h2>
+            <p>
+                The SignedByMe service requires a monthly subscription of $21 USD (or equivalent in Bitcoin satoshis) per agent.
+            </p>
+            <ul>
+                <li>Payment is made via Bitcoin Lightning Network</li>
+                <li>Subscriptions are billed monthly in advance</li>
+                <li>Revenue is allocated: 60% SignedByMe, 20% Enterprise, 20% Agent</li>
+                <li>Failure to pay results in delegation expiration and loss of authentication capability</li>
+            </ul>
+        </div>
+
+        <div class="doc-section">
+            <h2>3. Human Owner Responsibilities</h2>
+            <p>
+                As a human owner authorizing an agent, you are responsible for:
+            </p>
+            <ul>
+                <li>Safeguarding your NOSTR private key (nsec)</li>
+                <li>Defining appropriate scopes and permissions for your agent</li>
+                <li>Monitoring your agent's activity via public NOSTR events</li>
+                <li>Revoking delegation (kind 28251) if your agent is compromised</li>
+                <li>Maintaining accurate email mappings for enterprise enrollment</li>
+            </ul>
+            <p>
+                You retain sole authority to revoke agent access at any time by publishing a kind 28251 revocation event.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>4. Agent Usage Rules</h2>
+            <p>
+                Agents using SignedByMe must:
+            </p>
+            <ul>
+                <li>Operate within the scopes defined by their human owner's delegation</li>
+                <li>Not attempt to forge, modify, or replay cryptographic proofs</li>
+                <li>Not attempt to access enterprises where they are not enrolled</li>
+                <li>Store cryptographic material (DID, leaf_secret) securely</li>
+                <li>Respect enterprise-defined access boundaries</li>
+            </ul>
+        </div>
+
+        <div class="doc-section">
+            <h2>5. Enterprise Integration</h2>
+            <p>
+                Enterprises integrating SignedByMe agree to:
+            </p>
+            <ul>
+                <li>Validate delegation chains via NOSTR before granting access</li>
+                <li>Respect the privacy-preserving nature of zero-knowledge proofs</li>
+                <li>Not attempt to correlate or deanonymize agent identities</li>
+                <li>Maintain NIP-05 verification at their domain</li>
+                <li>Handle OIDC tokens according to standard security practices</li>
+            </ul>
+            <p>
+                Enterprises receive 20% revenue share for each agent authentication to their service.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>6. Intellectual Property and License</h2>
+            <p>
+                SignedByMe software is source-available under the SignedByMe Source-Available License v1.0 (SSAL-1.0).
+            </p>
+            <ul>
+                <li><strong>Until February 17, 2030:</strong> You may use, modify, test, fork, and contribute freely for personal projects, internal tools, research, and evaluation. You may NOT operate competing authentication services.</li>
+                <li><strong>From February 18, 2030:</strong> All restrictions end. Code becomes Apache License 2.0.</li>
+            </ul>
+            <p>
+                "SignedByMe" and associated logos are trademarks of Privacy Lion LLC.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>7. Limitation of Liability</h2>
+            <p>
+                TO THE MAXIMUM EXTENT PERMITTED BY LAW:
+            </p>
+            <ul>
+                <li>Our total liability shall not exceed the fees you paid in the 12 months preceding any claim</li>
+                <li>We are not liable for indirect, incidental, consequential, or punitive damages</li>
+                <li>We are not liable for lost profits, data loss, or business interruption</li>
+                <li>We are not liable for actions of third-party services (Strike, NOSTR relays, enterprises)</li>
+                <li>We provide the service "AS IS" without warranty of uptime or availability</li>
+            </ul>
+            <p>
+                You are solely responsible for securing your cryptographic keys. Loss of your nsec or leaf_secret cannot be recovered by SignedByMe.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>8. Termination</h2>
+            <p>
+                Either party may terminate:
+            </p>
+            <ul>
+                <li><strong>You:</strong> Stop paying subscription; publish kind 28251 revocation</li>
+                <li><strong>We:</strong> May terminate for violation of these terms, illegal activity, or abuse</li>
+            </ul>
+            <p>
+                Upon termination, your agent's leaf remains in the Merkle tree but delegation expires and authentication fails. No refunds for partial months.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>9. Changes to Terms</h2>
+            <p>
+                We may update these terms at any time. Material changes will be announced via:
+            </p>
+            <ul>
+                <li>NOSTR event from our official npub</li>
+                <li>Update to this page with new effective date</li>
+            </ul>
+            <p>
+                Continued use after changes constitutes acceptance. If you disagree, revoke delegation and discontinue use.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>10. Governing Law</h2>
+            <p>
+                These terms are governed by the laws of the State of Florida, United States, without regard to conflict of law principles.
+            </p>
+            <p>
+                Any disputes shall be resolved in the state or federal courts located in Florida. You consent to personal jurisdiction in these courts.
+            </p>
+            <p>
+                <strong>Legal Entity:</strong> SignedByMe is a trade name of Privacy Lion LLC, a Florida limited liability company.
+            </p>
+        </div>
+
+        <div class="doc-section">
+            <h2>Contact</h2>
+            <p>
+                Questions about these terms? Email <a href="mailto:contact@signedbyme.com">contact@signedbyme.com</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-text brand-name">SignedByMe</span>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/PrivacyLion/SignedByMe">GitHub</a>
+                    <a href="docs/enterprise-integration.html">Documentation</a>
+                    <a href="mailto:contact@signedbyme.com">Contact</a>
+                    <a href="terms.html">Terms</a>
+                    <a href="privacy.html">Privacy</a>
+                </div>
+            </div>
+            <p class="footer-legal">
+                © 2026 Privacy Lion LLC. All rights reserved.
+            </p>
+        </div>
+    </footer>
+</body>
+</html>
