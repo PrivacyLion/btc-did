@@ -112,7 +112,7 @@ code {
 }
 
 .section-intro {
-    font-size: 1.75rem;
+    font-size: 1.125rem;
     max-width: var(--content-width);
     margin-bottom: var(--space-xl);
 }
@@ -1112,7 +1112,7 @@ code {
 /* What is SignedByMe - Restyled */
 .intro-text {
     max-width: 800px;
-    margin-bottom: var(--space-xl);
+    margin-bottom: calc(var(--space-xl) * 2);
 }
 
 .intro-text p {
