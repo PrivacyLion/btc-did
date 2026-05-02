@@ -1,570 +1,191 @@
 /**
- * SignedByMe Live Demo
+ * SignedByMe Live NOSTR Event Feed
  * 
- * Demonstrates the NOSTR event flow:
- * 
- * ENROLLMENT FLOW:
- * 1. Enterprise signs kind 28200 authorization event
- * 2. Human signs kind 28250 delegation event
- * 3. Agent calls POST /v1/membership/enroll/commit
- * 
- * LOGIN FLOW:
- * 1. Agent generates Groth16 proof
- * 2. Agent calls POST /v1/login/verify
- * 3. Receives OIDC id_token
+ * Displays real-time SignedByMe events from production relays.
+ * Event kinds: 28101 (proof), 28102 (auth_complete), 28103 (login_complete),
+ *              28200 (enrollment_auth), 28202 (enrollment_response),
+ *              28250 (delegation), 28251 (revocation)
  */
 
-// Configuration
-const CONFIG = {
-    API_BASE: 'https://api.beta.privacy-lion.com',
-    CLIENT_ID: 'signedbyme-demo',
-    AMOUNT_SATS: 100
-};
-
-// SignedByMe relay infrastructure (Phase 29: Multi-relay)
-const SIGNEDBY_RELAYS = [
-    'wss://relay.privacy-lion.com',      // US East (ATL) - primary
-    'wss://relay-sfo.privacy-lion.com',  // US West (SFO)
-    'wss://relay-ams.privacy-lion.com',  // Europe (AMS)
-    'wss://relay-sgp.privacy-lion.com',  // Asia (SGP)
+// SignedByMe relay infrastructure
+const RELAYS = [
+    'wss://relay.privacy-lion.com',
+    'wss://relay-sfo.privacy-lion.com',
+    'wss://relay-ams.privacy-lion.com',
+    'wss://relay-sgp.privacy-lion.com',
 ];
-// Legacy single URL for backwards compatibility  
-CONFIG.RELAY_URL = SIGNEDBY_RELAYS[0];
 
-// Demo State
-const state = {
-    currentNonce: null,
-    currentMode: 'idle', // 'idle' | 'login' | 'enroll'
-    relayWs: null,
-    enrollmentInterval: null,
-    timerInterval: null,
-    exampleTimeout: null,
-    receivedLiveEvent: false
+// SignedByMe event kinds
+const EVENT_KINDS = [28101, 28102, 28103, 28200, 28202, 28250, 28251];
+
+// Event type metadata
+const EVENT_META = {
+    28101: { name: 'Proof', class: 'proof', icon: '🔐' },
+    28102: { name: 'Auth Complete', class: 'complete', icon: '✓' },
+    28103: { name: 'Login Complete', class: 'complete', icon: '✓' },
+    28200: { name: 'Authorization', class: 'auth', icon: '🏢' },
+    28202: { name: 'Enrollment Response', class: 'auth', icon: '🤖' },
+    28250: { name: 'Delegation', class: 'delegation', icon: '👤' },
+    28251: { name: 'Revocation', class: 'revocation', icon: '🚫' },
 };
 
-// DOM References (populated on init)
-let dom = {};
+// State
+let ws = null;
+let eventCount = 0;
+let connected = false;
+let exampleTimeout = null;
 
-// ============================================================================
-// Initialization
-// ============================================================================
+// DOM elements
+let feedEl = null;
 
-document.addEventListener('DOMContentLoaded', initDemo);
+// Initialize on load
+document.addEventListener('DOMContentLoaded', init);
 
-function initDemo() {
-    const container = document.getElementById('demo-container');
-    if (!container) return;
+function init() {
+    feedEl = document.getElementById('event-feed');
+    if (!feedEl) return;
     
-    // Build demo UI
-    container.innerHTML = buildDemoHTML();
+    // Clear placeholder and show connecting message
+    feedEl.innerHTML = '<div class="feed-status">Connecting to relay...</div>';
     
-    // Cache DOM references
-    dom = {
-        container: container,
-        modeSelect: document.getElementById('demo-mode'),
-        startBtn: document.getElementById('demo-start'),
-        resetBtn: document.getElementById('demo-reset'),
-        qrContainer: document.getElementById('demo-qr'),
-        status: document.getElementById('demo-status'),
-        events: document.getElementById('demo-events'),
-        result: document.getElementById('demo-result'),
-        timer: document.getElementById('demo-timer')
-    };
+    // Connect to primary relay
+    connectToRelay(RELAYS[0]);
     
-    // Event listeners
-    dom.startBtn.addEventListener('click', startDemo);
-    dom.resetBtn.addEventListener('click', resetDemo);
-    
-    log('Demo initialized. Select a flow and click Start.');
+    // Show examples after 5 seconds if no events
+    exampleTimeout = setTimeout(showExampleEvents, 5000);
 }
 
-function buildDemoHTML() {
-    return `
-        <div class="demo-layout">
-            <div class="demo-controls">
-                <div class="demo-control-group">
-                    <label for="demo-mode">Flow</label>
-                    <select id="demo-mode">
-                        <option value="login">Login (User → Enterprise)</option>
-                        <option value="enroll">Enrollment (Enterprise → User)</option>
-                    </select>
-                </div>
-                <button id="demo-start" class="btn btn-primary">Start Demo</button>
-                <button id="demo-reset" class="btn btn-secondary" style="display: none;">Reset</button>
-            </div>
-            
-            <div class="demo-main">
-                <div class="demo-qr-section">
-                    <div id="demo-qr" class="demo-qr-box">
-                        <p class="demo-qr-placeholder">Select a flow to begin</p>
-                    </div>
-                    <p id="demo-timer" class="demo-timer"></p>
-                </div>
-                
-                <div class="demo-status-section">
-                    <h3>Status</h3>
-                    <p id="demo-status">Ready</p>
-                    
-                    <h3>NOSTR Events</h3>
-                    <div id="demo-events" class="demo-events-log">
-                        <p class="demo-event-placeholder">Events will appear here...</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div id="demo-result" class="demo-result" style="display: none;">
-                <!-- Result displayed here on success -->
-            </div>
-        </div>
-        
-        <style>
-            .demo-layout {
-                display: flex;
-                flex-direction: column;
-                gap: 24px;
-            }
-            .demo-controls {
-                display: flex;
-                align-items: center;
-                gap: 16px;
-                flex-wrap: wrap;
-            }
-            .demo-control-group {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }
-            .demo-control-group select {
-                padding: 8px 12px;
-                border: 1px solid var(--border);
-                border-radius: 6px;
-                font-size: 0.95rem;
-            }
-            .demo-main {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 24px;
-            }
-            @media (max-width: 768px) {
-                .demo-main {
-                    grid-template-columns: 1fr;
-                }
-            }
-            .demo-qr-section {
-                text-align: center;
-            }
-            .demo-qr-box {
-                background: white;
-                border: 2px dashed var(--border);
-                border-radius: 12px;
-                padding: 24px;
-                min-height: 280px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .demo-qr-box.active {
-                border: 2px solid var(--primary);
-            }
-            .demo-qr-placeholder {
-                color: var(--text-muted);
-            }
-            .demo-timer {
-                margin-top: 12px;
-                font-size: 0.9rem;
-                color: var(--text-muted);
-            }
-            .demo-status-section h3 {
-                font-size: 0.9rem;
-                color: var(--text-muted);
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                margin-bottom: 8px;
-            }
-            .demo-status-section h3:not(:first-child) {
-                margin-top: 16px;
-            }
-            #demo-status {
-                font-weight: 500;
-                color: var(--text);
-            }
-            .demo-events-log {
-                background: #1E1E1E;
-                border-radius: 8px;
-                padding: 12px;
-                max-height: 200px;
-                overflow-y: auto;
-                font-family: var(--font-mono);
-                font-size: 0.8rem;
-            }
-            .demo-event-placeholder {
-                color: #6B7280;
-            }
-            .demo-event {
-                color: #D4D4D4;
-                margin-bottom: 4px;
-                word-break: break-all;
-            }
-            .demo-event.success {
-                color: #10B981;
-            }
-            .demo-event.error {
-                color: #EF4444;
-            }
-            .demo-event.info {
-                color: #60A5FA;
-            }
-            .demo-result {
-                background: linear-gradient(90deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
-                border: 1px solid var(--success);
-                border-radius: 12px;
-                padding: 24px;
-            }
-            .demo-result h3 {
-                color: var(--success);
-                margin-bottom: 16px;
-            }
-            .demo-result pre {
-                background: #1E1E1E;
-                color: #D4D4D4;
-                padding: 12px;
-                border-radius: 8px;
-                overflow-x: auto;
-                font-size: 0.85rem;
-            }
-        </style>
-    `;
-}
-
-// ============================================================================
-// Demo Flow Control
-// ============================================================================
-
-function startDemo() {
-    const mode = dom.modeSelect.value;
-    state.currentMode = mode;
-    
-    dom.startBtn.style.display = 'none';
-    dom.resetBtn.style.display = 'inline-flex';
-    dom.modeSelect.disabled = true;
-    dom.qrContainer.classList.add('active');
-    
-    clearEvents();
-    
-    if (mode === 'login') {
-        startLoginDemo();
-    } else {
-        startEnrollmentDemo();
+function connectToRelay(url) {
+    if (ws) {
+        ws.close();
     }
-}
-
-function resetDemo() {
-    // Close connections
-    closeRelay();
-    clearInterval(state.enrollmentInterval);
-    clearInterval(state.timerInterval);
-    clearTimeout(state.exampleTimeout);
     
-    // Reset state
-    state.currentNonce = null;
-    state.currentMode = 'idle';
-    state.receivedLiveEvent = false;
+    ws = new WebSocket(url);
     
-    // Reset UI
-    dom.startBtn.style.display = 'inline-flex';
-    dom.resetBtn.style.display = 'none';
-    dom.modeSelect.disabled = false;
-    dom.qrContainer.classList.remove('active');
-    dom.qrContainer.innerHTML = '<p class="demo-qr-placeholder">Select a flow to begin</p>';
-    dom.timer.textContent = '';
-    dom.status.textContent = 'Ready';
-    dom.result.style.display = 'none';
-    
-    clearEvents();
-    log('Demo reset.');
-}
-
-// ============================================================================
-// Login Flow
-// ============================================================================
-
-function startLoginDemo() {
-    // Generate nonce locally - no API call
-    state.currentNonce = generateNonce();
-    log(`Generated nonce: ${state.currentNonce.substring(0, 16)}...`);
-    
-    // Build deep link
-    const deepLink = `signedby://${CONFIG.CLIENT_ID}/${state.currentNonce}/${CONFIG.AMOUNT_SATS}`;
-    logEvent('info', `Deep link: ${deepLink}`);
-    
-    // Render QR
-    dom.qrContainer.innerHTML = '';
-    new QRCode(dom.qrContainer, {
-        text: deepLink,
-        width: 220,
-        height: 220,
-        colorDark: '#3B82F6',
-        colorLight: '#FFFFFF'
-    });
-    
-    dom.status.textContent = 'Scan with SignedByMe app...';
-    
-    // Start 5-minute countdown
-    startTimer(300);
-    
-    // Subscribe to relay
-    subscribeToRelay(state.currentNonce);
-}
-
-function subscribeToRelay(nonce) {
-    closeRelay();
-    
-    logEvent('info', `Connecting to ${CONFIG.RELAY_URL}...`);
-    state.relayWs = new WebSocket(CONFIG.RELAY_URL);
-    
-    state.relayWs.onopen = () => {
-        logEvent('success', 'Connected to relay');
+    ws.onopen = () => {
+        connected = true;
+        updateStatus(`Connected to ${url.replace('wss://', '')}`);
         
-        // Subscribe to kind 28101 events tagged with our nonce
+        // Subscribe to SignedByMe event kinds
         const subRequest = JSON.stringify([
             'REQ',
-            'demo-sub',
-            {
-                kinds: [28101],
-                '#nonce': [nonce]
-            }
+            'sbm-feed',
+            { kinds: EVENT_KINDS }
         ]);
-        state.relayWs.send(subRequest);
-        logEvent('info', 'Subscribed to proof events');
-        dom.status.textContent = 'Waiting for proof event...';
-        
-        // Show example events after 5 seconds if no live events arrive
-        state.exampleTimeout = setTimeout(() => {
-            if (state.currentMode === 'login' && !state.receivedLiveEvent) {
-                showExampleEvents();
-            }
-        }, 5000);
+        ws.send(subRequest);
     };
     
-    state.relayWs.onmessage = (event) => {
+    ws.onmessage = (event) => {
         try {
             const msg = JSON.parse(event.data);
             
-            if (msg[0] === 'EVENT' && msg[1] === 'demo-sub') {
-                const nostrEvent = msg[2];
-                
-                // Clear example events and timeout on first live event
-                if (!state.receivedLiveEvent) {
-                    state.receivedLiveEvent = true;
-                    clearTimeout(state.exampleTimeout);
-                    clearEvents();
-                    logEvent('success', '🔴 LIVE EVENT RECEIVED');
+            if (msg[0] === 'EVENT' && msg[1] === 'sbm-feed') {
+                // Clear example timeout on first real event
+                if (exampleTimeout) {
+                    clearTimeout(exampleTimeout);
+                    exampleTimeout = null;
                 }
                 
-                logEvent('success', `Received kind ${nostrEvent.kind} event`);
-                handleProofEvent(nostrEvent);
-            } else if (msg[0] === 'EOSE') {
-                logEvent('info', 'End of stored events');
+                // Clear examples if showing
+                if (eventCount === 0) {
+                    clearFeed();
+                }
+                
+                displayEvent(msg[2], false);
             }
-        } catch (error) {
-            logEvent('error', 'Error parsing relay message');
+        } catch (e) {
+            console.error('Error parsing relay message:', e);
         }
     };
     
-    state.relayWs.onerror = () => {
-        logEvent('error', 'Relay connection error');
-        dom.status.textContent = 'Connection error. Retrying...';
-        
-        setTimeout(() => {
-            if (state.currentNonce && state.currentMode === 'login') {
-                subscribeToRelay(state.currentNonce);
-            }
-        }, 3000);
+    ws.onerror = () => {
+        updateStatus('Connection error — retrying...');
     };
     
-    state.relayWs.onclose = () => {
-        logEvent('info', 'Relay connection closed');
+    ws.onclose = () => {
+        connected = false;
+        // Reconnect after 3 seconds
+        setTimeout(() => connectToRelay(url), 3000);
     };
 }
 
-async function handleProofEvent(event) {
-    dom.status.textContent = 'Proof received! Processing...';
+function displayEvent(event, isExample = false) {
+    const meta = EVENT_META[event.kind] || { name: 'Unknown', class: 'unknown', icon: '?' };
+    const time = new Date(event.created_at * 1000).toLocaleTimeString();
+    const npub = truncateNpub(event.pubkey);
     
+    // Parse content for additional info
+    let detail = '';
     try {
         const content = JSON.parse(event.content);
-        logEvent('info', `npub: ${content.public_outputs?.npub?.substring(0, 20)}...`);
-        logEvent('info', `Invoices received: user + operator`);
-        
-        // In a real demo, we'd pay the invoices here
-        // For now, show the proof structure
-        dom.status.textContent = 'Proof verified!';
-        
-        dom.result.innerHTML = `
-            <h3>✓ Login Successful</h3>
-            <p>In production, the enterprise would now:</p>
-            <ol>
-                <li>Pay both Lightning invoices via Strike/other provider</li>
-                <li>Submit proof + preimages to <code>/v1/login/verify</code></li>
-                <li>Receive OIDC id_token with <code>sub=npub</code></li>
-            </ol>
-            <h4>Proof Event Content</h4>
-            <pre>${JSON.stringify(content, null, 2)}</pre>
-        `;
-        dom.result.style.display = 'block';
-        
-        closeRelay();
-        clearInterval(state.timerInterval);
-        dom.timer.textContent = '';
-        
-    } catch (error) {
-        logEvent('error', `Error processing proof: ${error.message}`);
-        dom.status.textContent = 'Error processing proof';
+        if (content.client_id) detail = content.client_id;
+        else if (content.scopes) detail = Object.keys(content.scopes).join(', ');
+        else if (content.delegation_id) detail = 'revoked';
+    } catch (e) {
+        // Content not JSON, that's fine
     }
-}
-
-// ============================================================================
-// Enrollment Flow
-// ============================================================================
-
-function startEnrollmentDemo() {
-    logEvent('info', 'Enrollment demo starting...');
-    logEvent('info', 'Note: Full enrollment requires enterprise signing key');
     
-    // Generate nonce
-    state.currentNonce = generateNonce();
-    log(`Generated nonce: ${state.currentNonce.substring(0, 16)}...`);
-    
-    // Build enrollment deep link (without actual signing)
-    const expiresAt = Math.floor(Date.now() / 1000) + 90;
-    const deepLink = `signedby://enroll/${CONFIG.CLIENT_ID}/${state.currentNonce}?exp=${expiresAt}`;
-    logEvent('info', `Deep link: ${deepLink}`);
-    
-    // Render QR
-    dom.qrContainer.innerHTML = '';
-    new QRCode(dom.qrContainer, {
-        text: deepLink,
-        width: 220,
-        height: 220,
-        colorDark: '#10B981',
-        colorLight: '#FFFFFF'
-    });
-    
-    dom.status.textContent = 'Scan to enroll in demo group';
-    
-    // Start 90-second countdown (enrollment QRs refresh)
-    startTimer(90);
-    
-    // Show enrollment info
-    dom.result.innerHTML = `
-        <h3 style="color: var(--primary);">Enrollment Demo</h3>
-        <p>This demonstrates the enrollment QR code that enterprises display.</p>
-        <p>In production:</p>
-        <ol>
-            <li>Enterprise signs kind 28200 event with their NOSTR key</li>
-            <li>Publishes to relay before displaying QR</li>
-            <li>User scans → app fetches event → verifies signature</li>
-            <li>User's leaf_commitment added to Merkle tree</li>
-        </ol>
-        <p><strong>Full enrollment requires the enterprise signing key to be configured.</strong></p>
-    `;
-    dom.result.style.display = 'block';
-}
-
-// ============================================================================
-// Utilities
-// ============================================================================
-
-function generateNonce() {
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function closeRelay() {
-    if (state.relayWs) {
-        state.relayWs.close();
-        state.relayWs = null;
+    // Check tags for client_id
+    if (!detail && event.tags) {
+        const cTag = event.tags.find(t => t[0] === 'c');
+        if (cTag) detail = cTag[1];
     }
-}
-
-function startTimer(seconds) {
-    clearInterval(state.timerInterval);
-    let remaining = seconds;
-    
-    const update = () => {
-        const mins = Math.floor(remaining / 60);
-        const secs = remaining % 60;
-        dom.timer.textContent = `Expires in ${mins}:${secs.toString().padStart(2, '0')}`;
-        
-        if (remaining <= 0) {
-            clearInterval(state.timerInterval);
-            dom.timer.textContent = 'Expired';
-            dom.status.textContent = 'Session expired. Click Reset to try again.';
-        } else {
-            remaining--;
-        }
-    };
-    
-    update();
-    state.timerInterval = setInterval(update, 1000);
-}
-
-function log(message) {
-    console.log('[SignedByMe Demo]', message);
-}
-
-function logEvent(type, message) {
-    const events = dom.events;
-    if (!events) return;
-    
-    // Clear placeholder
-    const placeholder = events.querySelector('.demo-event-placeholder');
-    if (placeholder) placeholder.remove();
     
     const el = document.createElement('div');
-    el.className = `demo-event ${type}`;
-    el.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-    events.appendChild(el);
-    events.scrollTop = events.scrollHeight;
-}
-
-function clearEvents() {
-    if (dom.events) {
-        dom.events.innerHTML = '<p class="demo-event-placeholder">Events will appear here...</p>';
+    el.className = `feed-event ${meta.class}${isExample ? ' example' : ''}`;
+    el.innerHTML = `
+        <span class="event-time">${time}</span>
+        <span class="event-kind">${meta.icon} ${event.kind}</span>
+        <span class="event-name">${meta.name}</span>
+        <span class="event-npub">${npub}</span>
+        ${detail ? `<span class="event-detail">${detail}</span>` : ''}
+        ${isExample ? '<span class="event-example-badge">example</span>' : ''}
+    `;
+    
+    // Add to top of feed
+    feedEl.insertBefore(el, feedEl.firstChild);
+    
+    // Keep max 20 events
+    eventCount++;
+    while (feedEl.children.length > 20) {
+        feedEl.removeChild(feedEl.lastChild);
     }
 }
 
 function showExampleEvents() {
-    clearEvents();
+    if (eventCount > 0) return; // Real events came in
     
-    // Add example header
-    logEvent('info', '— Showing example events (waiting for live activity) —');
+    clearFeed();
+    updateStatus('Showing example events (waiting for live activity...)');
     
-    // Simulate realistic event sequence with delays
+    // Example events demonstrating the flow
+    const now = Math.floor(Date.now() / 1000);
     const examples = [
-        { type: 'info', msg: 'Agent connects to relay...', delay: 300 },
-        { type: 'success', msg: 'Received kind 28200 (enterprise authorization)', delay: 800 },
-        { type: 'info', msg: 'npub: npub1abc...xyz (enterprise)', delay: 1200 },
-        { type: 'success', msg: 'Received kind 28250 (human delegation)', delay: 1800 },
-        { type: 'info', msg: 'npub: npub1def...uvw (human owner)', delay: 2200 },
-        { type: 'success', msg: 'Received kind 28101 (Groth16 proof)', delay: 3000 },
-        { type: 'info', msg: 'Proof verified: membership ✓ npub derived ✓', delay: 3400 },
-        { type: 'success', msg: 'Received kind 28103 (login complete)', delay: 4000 },
-        { type: 'info', msg: 'OIDC id_token issued, sub=npub1...', delay: 4400 },
+        { kind: 28200, pubkey: 'a1b2c3d4e5f6...', content: '{"client_id":"acme"}', created_at: now - 30, tags: [] },
+        { kind: 28202, pubkey: 'f6e5d4c3b2a1...', content: '{"email":"user@example.com"}', created_at: now - 25, tags: [] },
+        { kind: 28200, pubkey: 'a1b2c3d4e5f6...', content: '{"client_id":"acme","agent_npub":"npub1..."}', created_at: now - 20, tags: [] },
+        { kind: 28250, pubkey: '1a2b3c4d5e6f...', content: '{"scopes":{"acme":["read","write"]}}', created_at: now - 15, tags: [] },
+        { kind: 28101, pubkey: 'f6e5d4c3b2a1...', content: '{"merkle_root":"0x..."}', created_at: now - 10, tags: [['c', 'acme']] },
+        { kind: 28103, pubkey: 'f6e5d4c3b2a1...', content: '{}', created_at: now - 5, tags: [['c', 'acme']] },
     ];
     
-    examples.forEach(({ type, msg, delay }) => {
-        setTimeout(() => {
-            // Don't show if we got a real event or demo was reset
-            if (state.receivedLiveEvent || state.currentMode === 'idle') return;
-            logEvent(type, msg);
-        }, delay);
-    });
-    
-    // Update status to indicate examples
-    setTimeout(() => {
-        if (!state.receivedLiveEvent && state.currentMode === 'login') {
-            dom.status.textContent = 'Showing example flow (scan QR for live demo)';
-        }
-    }, 500);
+    // Display in reverse order (oldest first visually, but insertBefore flips it)
+    examples.reverse().forEach(ex => displayEvent(ex, true));
+}
+
+function updateStatus(msg) {
+    const statusEl = feedEl.querySelector('.feed-status');
+    if (statusEl) {
+        statusEl.textContent = msg;
+    }
+}
+
+function clearFeed() {
+    feedEl.innerHTML = '';
+    eventCount = 0;
+}
+
+function truncateNpub(hex) {
+    if (!hex || hex.length < 16) return hex || '?';
+    return hex.substring(0, 8) + '...' + hex.substring(hex.length - 4);
 }
