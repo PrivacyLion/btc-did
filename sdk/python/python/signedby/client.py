@@ -17,10 +17,10 @@ from signedby._core import (
 
 # SignedByMe relay infrastructure (Phase 29: Multi-relay)
 SIGNEDBY_RELAYS = [
-    "wss://relay.privacy-lion.com",      # US East (ATL) - primary
-    "wss://relay-sfo.privacy-lion.com",  # US West (SFO)
-    "wss://relay-ams.privacy-lion.com",  # Europe (AMS)
-    "wss://relay-sgp.privacy-lion.com",  # Asia (SGP)
+    "wss://relay.signedbyme.com",      # US East (ATL) - primary
+    "wss://relay-sfo.signedbyme.com",  # US West (SFO)
+    "wss://relay-ams.signedbyme.com",  # Europe (AMS)
+    "wss://relay-sgp.signedbyme.com",  # Asia (SGP)
 ]
 
 
@@ -98,7 +98,7 @@ class SignedByClient:
         nonce: str,
         *,
         relay_urls: list[str] | None = None,
-        api_url: str = "https://api.beta.privacy-lion.com",
+        api_url: str = "https://api.signedbyme.com",
     ) -> LoginToken:
         """
         Authenticate to an enterprise and receive an OIDC token.

@@ -29,5 +29,5 @@ ssh ${VM_USER}@${VM_IP} '
 '
 
 echo "== Done. Smoke tests =="
-curl -sS https://api.beta.privacy-lion.com/healthz && echo " ✓ API healthy"
-curl -sS https://api.beta.privacy-lion.com/v1/enterprise/info && echo " ✓ Enterprise endpoint"
+curl -sS https://api.signedbyme.com/healthz && echo " ✓ API healthy"
+curl -sS https://api.signedbyme.com/v1/enterprise/info && echo " ✓ Enterprise endpoint"

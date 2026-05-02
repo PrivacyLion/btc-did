@@ -28,7 +28,7 @@ logger = logging.getLogger("login")
 router = APIRouter(tags=["login"])
 
 # Config
-ISSUER = "https://api.beta.privacy-lion.com"
+ISSUER = "https://api.signedbyme.com"
 KEYS_DIR = Path(__file__).resolve().parents[2] / "keys"
 CLIENTS_PATH = Path(__file__).resolve().parents[2] / "clients.json"
 

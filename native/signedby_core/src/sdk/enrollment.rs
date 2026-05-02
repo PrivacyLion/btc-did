@@ -27,7 +27,7 @@ pub const KEY_MERKLE_WITNESS: &str = "signedby_merkle_witness";
 pub const KEY_MERKLE_ROOT: &str = "signedby_merkle_root";
 
 /// Default API base URL
-pub const DEFAULT_API_URL: &str = "https://api.beta.privacy-lion.com";
+pub const DEFAULT_API_URL: &str = "https://api.signedbyme.com";
 
 /// Enrollment result returned after successful enrollment
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -2,7 +2,7 @@
 
 Complete reference for all SignedByMe API endpoints.
 
-**Base URL:** `https://api.beta.privacy-lion.com`
+**Base URL:** `https://api.signedbyme.com`
 
 ---
 
@@ -42,7 +42,7 @@ POST /v1/enterprise/session
 **Example Request:**
 
 ```bash
-curl -X POST https://api.beta.privacy-lion.com/v1/enterprise/session \
+curl -X POST https://api.signedbyme.com/v1/enterprise/session \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your_api_key" \
   -d '{
@@ -92,7 +92,7 @@ GET /v1/enterprise/session/{session_id}/status
 **Example Request:**
 
 ```bash
-curl https://api.beta.privacy-lion.com/v1/enterprise/session/sess_abc123/status \
+curl https://api.signedbyme.com/v1/enterprise/session/sess_abc123/status \
   -H "X-API-Key: your_api_key"
 ```
 
@@ -148,7 +148,7 @@ POST /v1/confirm-payment
 **Example Request:**
 
 ```bash
-curl -X POST https://api.beta.privacy-lion.com/v1/confirm-payment \
+curl -X POST https://api.signedbyme.com/v1/confirm-payment \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your_api_key" \
   -d '{
@@ -183,11 +183,11 @@ GET /.well-known/openid-configuration
 
 ```json
 {
-  "issuer": "https://api.beta.privacy-lion.com",
-  "authorization_endpoint": "https://api.beta.privacy-lion.com/oidc/authorize",
-  "token_endpoint": "https://api.beta.privacy-lion.com/oidc/token",
-  "userinfo_endpoint": "https://api.beta.privacy-lion.com/oidc/userinfo",
-  "jwks_uri": "https://api.beta.privacy-lion.com/.well-known/jwks.json",
+  "issuer": "https://api.signedbyme.com",
+  "authorization_endpoint": "https://api.signedbyme.com/oidc/authorize",
+  "token_endpoint": "https://api.signedbyme.com/oidc/token",
+  "userinfo_endpoint": "https://api.signedbyme.com/oidc/userinfo",
+  "jwks_uri": "https://api.signedbyme.com/.well-known/jwks.json",
   "response_types_supported": ["code"],
   "subject_types_supported": ["public"],
   "id_token_signing_alg_values_supported": ["RS256"],
@@ -248,7 +248,7 @@ Content-Type: application/x-www-form-urlencoded
 **Example Request:**
 
 ```bash
-curl -X POST https://api.beta.privacy-lion.com/oidc/token \
+curl -X POST https://api.signedbyme.com/oidc/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code" \
   -d "code=code_xyz789..." \
@@ -349,7 +349,7 @@ POST /v1/roots/publish
 **Example Request:**
 
 ```bash
-curl -X POST https://api.beta.privacy-lion.com/v1/roots/publish \
+curl -X POST https://api.signedbyme.com/v1/roots/publish \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your_api_key" \
   -d '{
@@ -390,7 +390,7 @@ POST /v1/membership/enroll
 **Example Request:**
 
 ```bash
-curl -X POST https://api.beta.privacy-lion.com/v1/membership/enroll \
+curl -X POST https://api.signedbyme.com/v1/membership/enroll \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your_api_key" \
   -d '{

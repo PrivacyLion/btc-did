@@ -11,15 +11,15 @@
  * NO SERVER CALLS FOR QR GENERATION (Decision 10)
  */
 (function() {
-  const API = "https://api.beta.privacy-lion.com";
+  const API = "https://api.signedbyme.com";
   const CLIENT_ID = "acme";  // Enterprise client ID
   
   // SignedByMe relay infrastructure (Phase 29: Multi-relay)
   const SIGNEDBY_RELAYS = [
-    'wss://relay.privacy-lion.com',      // US East (ATL) - primary
-    'wss://relay-sfo.privacy-lion.com',  // US West (SFO)
-    'wss://relay-ams.privacy-lion.com',  // Europe (AMS)
-    'wss://relay-sgp.privacy-lion.com',  // Asia (SGP)
+    'wss://relay.signedbyme.com',      // US East (ATL) - primary
+    'wss://relay-sfo.signedbyme.com',  // US West (SFO)
+    'wss://relay-ams.signedbyme.com',  // Europe (AMS)
+    'wss://relay-sgp.signedbyme.com',  // Asia (SGP)
   ];
   // Legacy single URL for backwards compatibility
   const NOSTR_RELAY = SIGNEDBY_RELAYS[0];

@@ -49,7 +49,7 @@ Your Server                    SignedByMe API                 User's App
 ## Step 1: Create a Session
 
 ```bash
-curl -X POST https://api.beta.privacy-lion.com/v1/enterprise/session \
+curl -X POST https://api.signedbyme.com/v1/enterprise/session \
   -H "Content-Type: application/json" \
   -d '{
     "client_id": "your_client_id",
@@ -98,7 +98,7 @@ Show the QR code or deep link to your user:
 ## Step 3: Poll for Completion
 
 ```bash
-curl https://api.beta.privacy-lion.com/v1/enterprise/session/abc123/status
+curl https://api.signedbyme.com/v1/enterprise/session/abc123/status
 ```
 
 **Response (pending):**
@@ -127,7 +127,7 @@ Poll every 2-3 seconds until `status` is `complete` or `expired`.
 ## Step 4: Exchange Code for Token
 
 ```bash
-curl -X POST https://api.beta.privacy-lion.com/oidc/token \
+curl -X POST https://api.signedbyme.com/oidc/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code" \
   -d "code=xyz789..." \
@@ -159,7 +159,7 @@ The `id_token` is a signed JWT. Validate it:
 
 ```json
 {
-  "iss": "https://api.beta.privacy-lion.com",
+  "iss": "https://api.signedbyme.com",
   "aud": "your_client_id",
   "sub": "did:key:z6MkhaXgBZD...",
   "iat": 1704067200,
@@ -176,7 +176,7 @@ The `id_token` is a signed JWT. Validate it:
 ## Complete JavaScript Example
 
 ```javascript
-const API_BASE = 'https://api.beta.privacy-lion.com';
+const API_BASE = 'https://api.signedbyme.com';
 
 async function startLogin(clientId, redirectUri) {
   // 1. Create session

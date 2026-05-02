@@ -4,7 +4,7 @@
 
 ```
                     DO Global Load Balancer
-                    api.beta.privacy-lion.com
+                    api.signedbyme.com
                             |
               +-------------+-------------+
               |                           |
@@ -100,7 +100,7 @@ If primary is permanently lost:
 
 After any failover:
 
-- [ ] `curl https://api.beta.privacy-lion.com/.well-known/openid-configuration` returns 200
+- [ ] `curl https://api.signedbyme.com/.well-known/openid-configuration` returns 200
 - [ ] Both servers show "Active" in DO Load Balancer console
 - [ ] Uptime Kuma shows all monitors green
 - [ ] Test enrollment or login flow end-to-end

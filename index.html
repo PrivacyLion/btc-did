@@ -15,7 +15,7 @@
   </head>
   <body>
     <h1>SignedByMe — Beta</h1>
-    <p>This page calls the production API at <code>api.beta.privacy-lion.com</code>.</p>
+    <p>This page calls the production API at <code>api.signedbyme.com</code>.</p>
 
     <div class="row">
       <button id="btnHealth">Ping /health</button>
@@ -27,7 +27,7 @@
     <pre id="out"></pre>
 
     <script>
-      const API = 'https://api.beta.privacy-lion.com';
+      const API = 'https://api.signedbyme.com';
       function showStatus(ok, msg) {
         const el = document.getElementById('status');
         el.className = ok ? 'ok' : 'bad';

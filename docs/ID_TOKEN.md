@@ -38,7 +38,7 @@ The ID token is a signed JWT (JSON Web Token) containing:
 
 ```json
 {
-  "iss": "https://api.beta.privacy-lion.com",
+  "iss": "https://api.signedbyme.com",
   "sub": "did:key:z6MkhaXgBZDvotDUGZjQ8WCNfD8GmYzGdL6aLNsqRCj3KSEy",
   "aud": "acme",
   "iat": 1704067200,
@@ -61,7 +61,7 @@ The ID token is a signed JWT (JSON Web Token) containing:
 
 | Claim | Type | Description |
 |-------|------|-------------|
-| `iss` | string | Issuer URL (always `https://api.beta.privacy-lion.com`) |
+| `iss` | string | Issuer URL (always `https://api.signedbyme.com`) |
 | `sub` | string | Subject - the user's DID |
 | `aud` | string | Audience - your client_id |
 | `iat` | number | Issued at (Unix timestamp) |
@@ -129,7 +129,7 @@ All custom claims are namespaced under `https://signedby.me/claims/`:
 
 ```json
 {
-  "iss": "https://api.beta.privacy-lion.com",
+  "iss": "https://api.signedbyme.com",
   "sub": "did:key:z6MkhaXgBZDvotDUGZjQ8WCNfD8GmYzGdL6aLNsqRCj3KSEy",
   "aud": "acme",
   "iat": 1704067200,
@@ -148,7 +148,7 @@ All custom claims are namespaced under `https://signedby.me/claims/`:
 
 ```json
 {
-  "iss": "https://api.beta.privacy-lion.com",
+  "iss": "https://api.signedbyme.com",
   "sub": "did:key:z6MkhaXgBZDvotDUGZjQ8WCNfD8GmYzGdL6aLNsqRCj3KSEy",
   "aud": "acme",
   "iat": 1704067200,
@@ -172,7 +172,7 @@ All custom claims are namespaced under `https://signedby.me/claims/`:
 ### 1. Fetch Public Keys
 
 ```bash
-curl https://api.beta.privacy-lion.com/.well-known/jwks.json
+curl https://api.signedbyme.com/.well-known/jwks.json
 ```
 
 Response:
@@ -204,7 +204,7 @@ def validate_id_token(token, expected_client_id, expected_nonce=None):
     claims = decode_jwt(token)
     
     # Required checks
-    assert claims["iss"] == "https://api.beta.privacy-lion.com"
+    assert claims["iss"] == "https://api.signedbyme.com"
     assert claims["aud"] == expected_client_id
     assert claims["exp"] > time.time()  # Not expired
     assert claims["iat"] <= time.time() + 60  # Not from future (60s skew)
@@ -227,7 +227,7 @@ const jwt = require('jsonwebtoken');
 const jwksClient = require('jwks-rsa');
 
 const client = jwksClient({
-  jwksUri: 'https://api.beta.privacy-lion.com/.well-known/jwks.json'
+  jwksUri: 'https://api.signedbyme.com/.well-known/jwks.json'
 });
 
 function getKey(header, callback) {
@@ -240,7 +240,7 @@ function verifyToken(token, clientId) {
   return new Promise((resolve, reject) => {
     jwt.verify(token, getKey, {
       algorithms: ['RS256'],
-      issuer: 'https://api.beta.privacy-lion.com',
+      issuer: 'https://api.signedbyme.com',
       audience: clientId
     }, (err, decoded) => {
       if (err) reject(err);
@@ -262,8 +262,8 @@ import jwt
 import requests
 from jwt import PyJWKClient
 
-JWKS_URL = "https://api.beta.privacy-lion.com/.well-known/jwks.json"
-ISSUER = "https://api.beta.privacy-lion.com"
+JWKS_URL = "https://api.signedbyme.com/.well-known/jwks.json"
+ISSUER = "https://api.signedbyme.com"
 
 jwks_client = PyJWKClient(JWKS_URL)
 
@@ -300,11 +300,11 @@ import (
 )
 
 func verifyToken(tokenString, clientID string) (*jwt.Token, error) {
-    jwksURL := "https://api.beta.privacy-lion.com/.well-known/jwks.json"
+    jwksURL := "https://api.signedbyme.com/.well-known/jwks.json"
     jwks, _ := keyfunc.Get(jwksURL, keyfunc.Options{})
     
     token, err := jwt.Parse(tokenString, jwks.Keyfunc,
-        jwt.WithIssuer("https://api.beta.privacy-lion.com"),
+        jwt.WithIssuer("https://api.signedbyme.com"),
         jwt.WithAudience(clientID),
     )
     

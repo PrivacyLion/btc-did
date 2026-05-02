@@ -1,10 +1,10 @@
 {
   "acme": {
-    "domain": "acme.beta.privacy-lion.com",
+    "domain": "signedbyme.com",
     "api_key_hash": "c6b97b904962e8e86634ec3ac0ac6f6ce03ab9ec318a092aa4a04c01b59f8ac4"
   },
   "ageverify": {
-    "domain": "ageverify.beta.privacy-lion.com",
+    "domain": "ageverify.signedbyme.com",
     "api_key_hash": "b5bf3417757fbfe0a6bec70e017e7426c1a7bda1c86e2c5808f4475de5ad21a7"
   }
 }

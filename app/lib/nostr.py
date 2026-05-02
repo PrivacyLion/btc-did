@@ -29,15 +29,15 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # NIP-05 base URL (no trailing slash)
-NIP05_BASE_URL = "https://beta.privacy-lion.com"
+NIP05_BASE_URL = "https://signedbyme.com"
 
 # NOSTR relays for publishing (Phase 29: Multi-relay infrastructure)
 # Primary relay list - events are published to ALL relays for redundancy
 SIGNEDBY_RELAYS = [
-    "wss://relay.privacy-lion.com",      # US East (ATL) - primary
-    "wss://relay-sfo.privacy-lion.com",  # US West (SFO)
-    "wss://relay-ams.privacy-lion.com",  # Europe (AMS)
-    "wss://relay-sgp.privacy-lion.com",  # Asia (SGP)
+    "wss://relay.signedbyme.com",      # US East (ATL) - primary
+    "wss://relay-sfo.signedbyme.com",  # US West (SFO)
+    "wss://relay-ams.signedbyme.com",  # Europe (AMS)
+    "wss://relay-sgp.signedbyme.com",  # Asia (SGP)
 ]
 
 # Legacy single-relay env var (backwards compatibility)
@@ -150,7 +150,7 @@ async def verify_nip05(identifier: str, expected_pubkey: Optional[str] = None) -
     Verify a NIP-05 identifier and optionally check against expected pubkey.
     
     Args:
-        identifier: NIP-05 identifier (e.g., "acme@acme.beta.privacy-lion.com")
+        identifier: NIP-05 identifier (e.g., "acme@signedbyme.com")
         expected_pubkey: If provided, verify pubkey matches (hex)
         
     Returns:
@@ -216,7 +216,7 @@ async def verify_enterprise_pubkey(domain: str, pubkey: str) -> NIP05Result:
     Uses the convention: _@{domain} for enterprise identity.
     
     Args:
-        domain: Enterprise domain (e.g., "acme.beta.privacy-lion.com")
+        domain: Enterprise domain (e.g., "signedbyme.com")
         pubkey: Expected pubkey (hex)
         
     Returns:

@@ -6,7 +6,7 @@ set -euo pipefail
 # Phase 29: Multiple Relay Infrastructure
 #
 # Usage: ./setup-relay.sh <relay-name> <domain>
-# Example: ./setup-relay.sh relay-sfo relay-sfo.privacy-lion.com
+# Example: ./setup-relay.sh relay-sfo relay-sfo.signedbyme.com
 #
 # Requirements:
 # - Fresh Ubuntu 22.04/24.04 droplet (2GB RAM, 50GB disk minimum)
@@ -19,7 +19,7 @@ RELAY_DOMAIN="${2:-}"
 
 if [[ -z "$RELAY_NAME" || -z "$RELAY_DOMAIN" ]]; then
     echo "Usage: $0 <relay-name> <domain>"
-    echo "Example: $0 relay-sfo relay-sfo.privacy-lion.com"
+    echo "Example: $0 relay-sfo relay-sfo.signedbyme.com"
     exit 1
 fi
 
@@ -337,5 +337,5 @@ echo "  curl -I https://$RELAY_DOMAIN"
 echo "  systemctl status strfry"
 echo ""
 echo "To sync events from existing relay:"
-echo "  strfry sync wss://relay.privacy-lion.com --dir down"
+echo "  strfry sync wss://relay.signedbyme.com --dir down"
 echo "=============================================="

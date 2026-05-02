@@ -16,10 +16,10 @@ from signedby._core import (
 
 # SignedByMe relay infrastructure (Phase 29: Multi-relay)
 SIGNEDBY_RELAYS = [
-    "wss://relay.privacy-lion.com",      # US East (ATL) - primary
-    "wss://relay-sfo.privacy-lion.com",  # US West (SFO)
-    "wss://relay-ams.privacy-lion.com",  # Europe (AMS)
-    "wss://relay-sgp.privacy-lion.com",  # Asia (SGP)
+    "wss://relay.signedbyme.com",      # US East (ATL) - primary
+    "wss://relay-sfo.signedbyme.com",  # US West (SFO)
+    "wss://relay-ams.signedbyme.com",  # Europe (AMS)
+    "wss://relay-sgp.signedbyme.com",  # Asia (SGP)
 ]
 
 
@@ -94,7 +94,7 @@ class SignedByAgent:
         
         Args:
             relay_url: WebSocket URL of the relay
-                       e.g., "wss://relay.privacy-lion.com"
+                       e.g., "wss://relay.signedbyme.com"
         """
         self._rust.connect_relay(relay_url)
         self._relay_connected = True

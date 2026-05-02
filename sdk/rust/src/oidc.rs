@@ -54,7 +54,7 @@ pub struct SignedByClaims {
 /// Configuration for token validation
 #[derive(Debug, Clone)]
 pub struct ValidationConfig {
-    /// Expected issuer (e.g., "https://api.beta.privacy-lion.com")
+    /// Expected issuer (e.g., "https://api.signedbyme.com")
     pub issuer: String,
     
     /// Expected audience (your client_id)
@@ -71,7 +71,7 @@ pub struct ValidationConfig {
 impl Default for ValidationConfig {
     fn default() -> Self {
         Self {
-            issuer: "https://api.beta.privacy-lion.com".into(),
+            issuer: "https://api.signedbyme.com".into(),
             audience: String::new(),
             jwks: None,
             leeway: 60,

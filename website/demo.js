@@ -9,10 +9,10 @@
 
 // SignedByMe relay infrastructure
 const RELAYS = [
-    'wss://relay.privacy-lion.com',
-    'wss://relay-sfo.privacy-lion.com',
-    'wss://relay-ams.privacy-lion.com',
-    'wss://relay-sgp.privacy-lion.com',
+    'wss://relay.signedbyme.com',
+    'wss://relay-sfo.signedbyme.com',
+    'wss://relay-ams.signedbyme.com',
+    'wss://relay-sgp.signedbyme.com',
 ];
 
 // SignedByMe event kinds

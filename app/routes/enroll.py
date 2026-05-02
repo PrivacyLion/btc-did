@@ -101,11 +101,11 @@ def get_client_config(client_id: str) -> Optional[dict]:
 def get_nip05_pubkey(client_id: str) -> Optional[str]:
     """
     Fetch enterprise pubkey via NIP-05.
-    Looks up https://{client_id}.beta.privacy-lion.com/.well-known/nostr.json
+    Looks up https://{client_id}.signedbyme.com/.well-known/nostr.json
     Returns hex pubkey or None.
     """
     # Map client_id to domain
-    nip05_url = f"https://{client_id}.beta.privacy-lion.com/.well-known/nostr.json"
+    nip05_url = f"https://{client_id}.signedbyme.com/.well-known/nostr.json"
     
     try:
         with httpx.Client(timeout=5.0) as client:

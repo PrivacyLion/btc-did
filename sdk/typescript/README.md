@@ -49,7 +49,7 @@ agent.setEmailMapping({
 });
 
 // Connect to relay and watch for authorizations
-await agent.connectRelay('wss://relay.privacy-lion.com');
+await agent.connectRelay('wss://relay.signedbyme.com');
 
 for await (const event of agent.watchForAuthorizations()) {
   console.log(`New authorization from: ${event.enterprise}`);

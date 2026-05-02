@@ -38,7 +38,7 @@ println!("User npub: {}", result.npub);  // Pseudonymous per-service ID
 use signedby_sdk::oidc::{TokenValidator, ValidationConfig};
 
 let config = ValidationConfig {
-    issuer: "https://api.beta.privacy-lion.com".into(),
+    issuer: "https://api.signedbyme.com".into(),
     audience: "your-client-id".into(),
     // Offline mode: bundle the JWKS
     jwks: Some(include_str!("jwks.json").into()),

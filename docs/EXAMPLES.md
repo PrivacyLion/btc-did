@@ -9,7 +9,7 @@ Copy-paste examples for integrating SignedByMe.
 ### Create Session
 
 ```bash
-curl -X POST https://api.beta.privacy-lion.com/v1/enterprise/session \
+curl -X POST https://api.signedbyme.com/v1/enterprise/session \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your_api_key" \
   -d '{
@@ -23,14 +23,14 @@ curl -X POST https://api.beta.privacy-lion.com/v1/enterprise/session \
 ### Poll Session Status
 
 ```bash
-curl https://api.beta.privacy-lion.com/v1/enterprise/session/sess_abc123/status \
+curl https://api.signedbyme.com/v1/enterprise/session/sess_abc123/status \
   -H "X-API-Key: your_api_key"
 ```
 
 ### Exchange Code for Token
 
 ```bash
-curl -X POST https://api.beta.privacy-lion.com/oidc/token \
+curl -X POST https://api.signedbyme.com/oidc/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code" \
   -d "code=code_xyz789" \
@@ -41,13 +41,13 @@ curl -X POST https://api.beta.privacy-lion.com/oidc/token \
 ### Fetch JWKS
 
 ```bash
-curl https://api.beta.privacy-lion.com/.well-known/jwks.json
+curl https://api.signedbyme.com/.well-known/jwks.json
 ```
 
 ### Enroll Member
 
 ```bash
-curl -X POST https://api.beta.privacy-lion.com/v1/membership/enroll \
+curl -X POST https://api.signedbyme.com/v1/membership/enroll \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your_api_key" \
   -d '{
@@ -60,7 +60,7 @@ curl -X POST https://api.beta.privacy-lion.com/v1/membership/enroll \
 ### Publish Root
 
 ```bash
-curl -X POST https://api.beta.privacy-lion.com/v1/roots/publish \
+curl -X POST https://api.signedbyme.com/v1/roots/publish \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your_api_key" \
   -d '{
@@ -81,7 +81,7 @@ const fetch = require('node-fetch');
 const jwt = require('jsonwebtoken');
 const jwksClient = require('jwks-rsa');
 
-const API_BASE = 'https://api.beta.privacy-lion.com';
+const API_BASE = 'https://api.signedbyme.com';
 const API_KEY = process.env.SIGNEDBY_API_KEY;
 const CLIENT_ID = 'acme';
 const REDIRECT_URI = 'https://acme.com/callback';
@@ -263,7 +263,7 @@ import requests
 from jwt import PyJWKClient
 import jwt
 
-API_BASE = "https://api.beta.privacy-lion.com"
+API_BASE = "https://api.signedbyme.com"
 API_KEY = os.environ["SIGNEDBY_API_KEY"]
 CLIENT_ID = "acme"
 REDIRECT_URI = "https://acme.com/callback"

@@ -120,7 +120,7 @@ jwt.decode(token, signing_key.key, algorithms=["RS256"])
 **Fix:**
 ```python
 # Expected issuer
-ISSUER = "https://api.beta.privacy-lion.com"
+ISSUER = "https://api.signedbyme.com"
 
 # Verify against correct issuer
 jwt.decode(token, key, issuer=ISSUER, ...)
@@ -228,7 +228,7 @@ def api_call_with_retry(url, max_retries=3):
 **Cause:** Network issue or API is down.
 
 **Fix:**
-1. Check API status: `curl https://api.beta.privacy-lion.com/healthz`
+1. Check API status: `curl https://api.signedbyme.com/healthz`
 2. Verify your network can reach the API
 3. Check firewall rules
 
@@ -280,14 +280,14 @@ print(json.dumps(decode_jwt_unsafe(id_token), indent=2))
 
 ```bash
 # Poll session to see current state
-curl -s https://api.beta.privacy-lion.com/v1/enterprise/session/YOUR_SESSION_ID/status \
+curl -s https://api.signedbyme.com/v1/enterprise/session/YOUR_SESSION_ID/status \
   -H "X-API-Key: your_key" | jq .
 ```
 
 ### Verify JWKS is Accessible
 
 ```bash
-curl -s https://api.beta.privacy-lion.com/.well-known/jwks.json | jq .
+curl -s https://api.signedbyme.com/.well-known/jwks.json | jq .
 ```
 
 ---

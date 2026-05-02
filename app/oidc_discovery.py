@@ -18,7 +18,7 @@ import json
 
 router = APIRouter(tags=["oidc"])
 
-ISSUER = "https://api.beta.privacy-lion.com"
+ISSUER = "https://api.signedbyme.com"
 
 # Standard OIDC endpoints
 AUTHZ = f"{ISSUER}/oidc/authorize"

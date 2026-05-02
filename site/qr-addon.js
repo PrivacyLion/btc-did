@@ -3,7 +3,7 @@
    Outputs:  #qr (QR), #status-line-1/2 (text), #login-status-json (pre)
 */
 (function () {
-  const api = "https://api.beta.privacy-lion.com";
+  const api = "https://api.signedbyme.com";
   const $ = (sel) => document.querySelector(sel);
   const byId = (id) => document.getElementById(id);
 

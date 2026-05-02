@@ -289,7 +289,7 @@ If they're not in the current tree, this returns 404.
 
 ```json
 {
-  "iss": "https://api.beta.privacy-lion.com",
+  "iss": "https://api.signedbyme.com",
   "sub": "did:key:z6MkhaXgBZD...",
   "aud": "acme",
   "amr": ["did_sig", "stwo_proof", "ln_payment", "merkle"],

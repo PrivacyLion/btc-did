@@ -221,10 +221,10 @@ signedby/
 | Purpose | URL |
 |---------|-----|
 | Deep Link | `signedby://login?session=xxx&amount=500` |
-| API Base | `https://api.beta.privacy-lion.com` |
-| Demo Site | `https://acme.beta.privacy-lion.com` |
-| NOSTR Relay | `wss://relay.privacy-lion.com` |
-| OIDC Discovery | `https://api.beta.privacy-lion.com/.well-known/openid-configuration` |
+| API Base | `https://api.signedbyme.com` |
+| Demo Site | `https://signedbyme.com` |
+| NOSTR Relay | `wss://relay.signedbyme.com` |
+| OIDC Discovery | `https://api.signedbyme.com/.well-known/openid-configuration` |
 
 ## Tech Stack
 

@@ -23,7 +23,7 @@ pub const KIND_LOGIN_COMPLETE: u16 = 28103;
 
 // Default relay list (SignedByMe audit relay is always first)
 pub const DEFAULT_RELAYS: &[&str] = &[
-    "wss://relay.privacy-lion.com",  // SignedByMe audit relay (primary)
+    "wss://relay.signedbyme.com",  // SignedByMe audit relay (primary)
     "wss://relay.damus.io",           // Public relay (redundancy)
     "wss://nos.lol",                  // Public relay (redundancy)
 ];

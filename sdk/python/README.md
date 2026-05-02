@@ -49,7 +49,7 @@ agent.set_email_mapping({
 })
 
 # Connect to relay and watch for authorizations
-agent.connect_relay("wss://relay.privacy-lion.com")
+agent.connect_relay("wss://relay.signedbyme.com")
 
 async for event in agent.watch_for_authorizations():
     print(f"New authorization from: {event.enterprise}")

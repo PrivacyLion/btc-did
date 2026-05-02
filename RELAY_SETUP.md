@@ -1,8 +1,8 @@
-# Relay Setup - relay.privacy-lion.com
+# Relay Setup - relay.signedbyme.com
 
 ## VPS Info
 - **IP:** 174.138.66.8
-- **DNS:** relay.privacy-lion.com (configured)
+- **DNS:** relay.signedbyme.com (configured)
 - **Provider:** DigitalOcean
 - **Purpose:** Nostr relay for SignedByMe users
 
@@ -94,7 +94,7 @@ apt update && apt install -y caddy
 
 # Configure
 cat > /etc/caddy/Caddyfile << 'EOF'
-relay.privacy-lion.com {
+relay.signedbyme.com {
     reverse_proxy 127.0.0.1:7777
 }
 EOF
@@ -109,7 +109,7 @@ systemctl restart caddy
 curl -s http://127.0.0.1:7777 | head
 
 # External test
-wscat -c wss://relay.privacy-lion.com
+wscat -c wss://relay.signedbyme.com
 # Send: ["REQ", "test", {}]
 ```
 
@@ -149,7 +149,7 @@ After relay is running, update app constants:
 
 ```kotlin
 // In MainActivity.kt or config
-const val SIGNEDBY_RELAY = "wss://relay.privacy-lion.com"
+const val SIGNEDBY_RELAY = "wss://relay.signedbyme.com"
 ```
 
 The app will publish:

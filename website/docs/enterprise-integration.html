@@ -363,10 +363,10 @@ console.log('Public Key (hex):', publicKey);</code></pre>
   },
   "relays": {
     "YOUR_ENTERPRISE_NPUB_HEX_HERE": [
-      "wss://relay.privacy-lion.com",
-      "wss://relay-sfo.privacy-lion.com",
-      "wss://relay-ams.privacy-lion.com",
-      "wss://relay-sgp.privacy-lion.com"
+      "wss://relay.signedbyme.com",
+      "wss://relay-sfo.signedbyme.com",
+      "wss://relay-ams.signedbyme.com",
+      "wss://relay-sgp.signedbyme.com"
     ]
   },
   "lightning": "payments@yourdomain.com"
@@ -540,13 +540,13 @@ console.log('Public Key (hex):', publicKey);</code></pre>
 <pre><code>// Configuration
 const CONFIG = {
     CLIENT_ID: 'your-client-id',
-    API_BASE: 'https://api.beta.privacy-lion.com',
+    API_BASE: 'https://api.signedbyme.com',
     // SignedByMe relay infrastructure (multi-region)
     RELAYS: [
-        'wss://relay.privacy-lion.com',      // US East (NYC)
-        'wss://relay-sfo.privacy-lion.com',  // US West (SFO)
-        'wss://relay-ams.privacy-lion.com',  // Europe (AMS)
-        'wss://relay-sgp.privacy-lion.com'   // Asia (SGP)
+        'wss://relay.signedbyme.com',      // US East (NYC)
+        'wss://relay-sfo.signedbyme.com',  // US West (SFO)
+        'wss://relay-ams.signedbyme.com',  // Europe (AMS)
+        'wss://relay-sgp.signedbyme.com'   // Asia (SGP)
     ],
     ENTERPRISE_PUBKEY_HEX: 'your-enterprise-pubkey-hex',
     // SECURITY: In production, sign events from your backend
@@ -615,7 +615,7 @@ app.post('/api/signedby/verify-login', async (req, res) => {
     const apiKey = await getSecret('SIGNEDBY_API_KEY');
     
     // Call SignedByMe API from backend
-    const response = await fetch('https://api.beta.privacy-lion.com/v1/login/verify', {
+    const response = await fetch('https://api.signedbyme.com/v1/login/verify', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -665,10 +665,10 @@ const pool = new SimplePool();
 
 // Subscribe to all SignedByMe relays for redundancy
 const RELAYS = [
-    'wss://relay.privacy-lion.com',
-    'wss://relay-sfo.privacy-lion.com',
-    'wss://relay-ams.privacy-lion.com',
-    'wss://relay-sgp.privacy-lion.com'
+    'wss://relay.signedbyme.com',
+    'wss://relay-sfo.signedbyme.com',
+    'wss://relay-ams.signedbyme.com',
+    'wss://relay-sgp.signedbyme.com'
 ];
 
 const sub = pool.subscribeMany(
@@ -731,7 +731,7 @@ const sub = pool.subscribeMany(
             <h3>5.4 Verify Proof and Get Token</h3>
             <div class="doc-code">
 <pre><code>async function verifyProofAndGetToken(proof, publicOutputs) {
-    const response = await fetch('https://api.beta.privacy-lion.com/v1/login/verify', {
+    const response = await fetch('https://api.signedbyme.com/v1/login/verify', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -758,7 +758,7 @@ const sub = pool.subscribeMany(
         <section id="api-reference" class="doc-section">
             <h2>6. API Reference</h2>
             <p>
-                <strong>Base URL:</strong> <span class="inline-code">https://api.beta.privacy-lion.com</span>
+                <strong>Base URL:</strong> <span class="inline-code">https://api.signedbyme.com</span>
                 (migrates to <span class="inline-code">https://api.signedbyme.com</span>)
             </p>
 
@@ -1069,7 +1069,7 @@ def validate_signedby_token(id_token, expected_client_id):
                 <tr>
                     <td>Relay connection fails</td>
                     <td>Firewall blocking WebSocket</td>
-                    <td>Allow all SignedByMe relays: wss://relay.privacy-lion.com, wss://relay-sfo.privacy-lion.com, wss://relay-ams.privacy-lion.com, wss://relay-sgp.privacy-lion.com</td>
+                    <td>Allow all SignedByMe relays: wss://relay.signedbyme.com, wss://relay-sfo.signedbyme.com, wss://relay-ams.signedbyme.com, wss://relay-sgp.signedbyme.com</td>
                 </tr>
                 <tr>
                     <td>Agent response not received</td>

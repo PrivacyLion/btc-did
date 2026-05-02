@@ -6,10 +6,10 @@
 
 | Relay | Region | Domain | IP |
 |-------|--------|--------|-----|
-| Primary | US East (ATL) | relay.privacy-lion.com | 174.138.66.8 |
-| SFO | US West | relay-sfo.privacy-lion.com | TBD |
-| AMS | Europe | relay-ams.privacy-lion.com | TBD |
-| SGP | Asia | relay-sgp.privacy-lion.com | TBD |
+| Primary | US East (ATL) | relay.signedbyme.com | 174.138.66.8 |
+| SFO | US West | relay-sfo.signedbyme.com | TBD |
+| AMS | Europe | relay-ams.signedbyme.com | TBD |
+| SGP | Asia | relay-sgp.signedbyme.com | TBD |
 
 ### Deployment Steps
 
@@ -26,9 +26,9 @@ On DigitalOcean:
 
 In GoDaddy (or your DNS provider):
 ```
-relay-sfo.privacy-lion.com  A  <droplet-ip>
-relay-ams.privacy-lion.com  A  <droplet-ip>
-relay-sgp.privacy-lion.com  A  <droplet-ip>
+relay-sfo.signedbyme.com  A  <droplet-ip>
+relay-ams.signedbyme.com  A  <droplet-ip>
+relay-sgp.signedbyme.com  A  <droplet-ip>
 ```
 
 Wait for DNS propagation (5-15 minutes).
@@ -43,7 +43,7 @@ curl -O https://raw.githubusercontent.com/PrivacyLion/SignedByMe/main/scripts/se
 chmod +x setup-relay.sh
 
 # Run with relay name and domain
-./setup-relay.sh relay-sfo relay-sfo.privacy-lion.com
+./setup-relay.sh relay-sfo relay-sfo.signedbyme.com
 ```
 
 The script will:
@@ -60,7 +60,7 @@ The script will:
 After setup, sync existing events from the primary relay:
 
 ```bash
-strfry sync wss://relay.privacy-lion.com --dir down
+strfry sync wss://relay.signedbyme.com --dir down
 ```
 
 This pulls all existing SignedByMe events to the new relay.
@@ -72,11 +72,11 @@ This pulls all existing SignedByMe events to the new relay.
 systemctl status strfry
 
 # Check HTTPS
-curl -I https://relay-sfo.privacy-lion.com
+curl -I https://relay-sfo.signedbyme.com
 
 # Test WebSocket (requires wscat)
 npm install -g wscat
-wscat -c wss://relay-sfo.privacy-lion.com
+wscat -c wss://relay-sfo.signedbyme.com
 ```
 
 ### Write Policy
@@ -93,7 +93,7 @@ Policy file: `/etc/strfry/policies/signedby.py`
 
 Add each relay to Uptime Kuma:
 - Monitor type: HTTP(s)
-- URL: `https://relay-sfo.privacy-lion.com`
+- URL: `https://relay-sfo.signedbyme.com`
 - Expected status: 200
 
 ### Troubleshooting
@@ -120,7 +120,7 @@ Relays are independent peers. To keep them in sync:
 
 **Manual sync (one-time):**
 ```bash
-strfry sync wss://relay.privacy-lion.com --dir both
+strfry sync wss://relay.signedbyme.com --dir both
 ```
 
 **Continuous sync (optional):**
@@ -134,7 +134,7 @@ Enterprises can specify preferred relays in their enrollment authorization event
 ```json
 {
   "kind": 28200,
-  "content": "{\"relays\":[\"wss://relay.privacy-lion.com\",\"wss://relay-sfo.privacy-lion.com\"],...}"
+  "content": "{\"relays\":[\"wss://relay.signedbyme.com\",\"wss://relay-sfo.signedbyme.com\"],...}"
 }
 ```
 

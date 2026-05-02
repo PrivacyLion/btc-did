@@ -22,14 +22,14 @@ use super::storage::SecureStorage;
 
 /// SignedByMe default relays (NIP-42 required for writes)
 pub const DEFAULT_RELAYS: &[&str] = &[
-    "wss://relay.privacy-lion.com",      // US East (NYC)
-    "wss://relay-sfo.privacy-lion.com",  // US West (SFO)
-    "wss://relay-ams.privacy-lion.com",  // Europe (AMS)
-    "wss://relay-sgp.privacy-lion.com",  // Asia (SGP)
+    "wss://relay.signedbyme.com",      // US East (NYC)
+    "wss://relay-sfo.signedbyme.com",  // US West (SFO)
+    "wss://relay-ams.signedbyme.com",  // Europe (AMS)
+    "wss://relay-sgp.signedbyme.com",  // Asia (SGP)
 ];
 
 /// Legacy single relay constant for backwards compatibility
-pub const RELAY_URL: &str = "wss://relay.privacy-lion.com";
+pub const RELAY_URL: &str = "wss://relay.signedbyme.com";
 
 /// Event kinds for Phase 26 flow
 pub const KIND_ENROLLMENT_AUTH: u16 = 28200;    // Enterprise → agent authorization

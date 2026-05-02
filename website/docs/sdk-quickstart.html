@@ -668,7 +668,7 @@ except SignedByError as e:
 agent = SignedByAgent.init(storage_path="./agent_data")
 
 # Connect to relay
-agent.connect_relay("wss://relay.privacy-lion.com")
+agent.connect_relay("wss://relay.signedbyme.com")
 
 # Watch for authorization requests
 async for event in agent.watch_for_authorizations():

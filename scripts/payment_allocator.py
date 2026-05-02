@@ -42,10 +42,10 @@ STRIKE_API_KEY = os.environ.get('STRIKE_BUSINESS_API_KEY', '')
 STRIKE_API_URL = 'https://api.strike.me/v1'
 # SignedByMe relay infrastructure (Phase 29: Multi-relay)
 SIGNEDBY_RELAYS = [
-    "wss://relay.privacy-lion.com",      # US East (ATL) - primary
-    "wss://relay-sfo.privacy-lion.com",  # US West (SFO)
-    "wss://relay-ams.privacy-lion.com",  # Europe (AMS)
-    "wss://relay-sgp.privacy-lion.com",  # Asia (SGP)
+    "wss://relay.signedbyme.com",      # US East (ATL) - primary
+    "wss://relay-sfo.signedbyme.com",  # US West (SFO)
+    "wss://relay-ams.signedbyme.com",  # Europe (AMS)
+    "wss://relay-sgp.signedbyme.com",  # Asia (SGP)
 ]
 # Legacy env var for backwards compatibility
 RELAY_URL = os.environ.get('SBM_RELAY_URL', SIGNEDBY_RELAYS[0])

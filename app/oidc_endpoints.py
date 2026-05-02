@@ -13,7 +13,7 @@ from .db import create_oidc_code, get_oidc_code, use_oidc_code
 
 router = APIRouter()
 
-ISSUER = "https://api.beta.privacy-lion.com"
+ISSUER = "https://api.signedbyme.com"
 
 def oauth_err(code: str, desc: str, http=status.HTTP_400_BAD_REQUEST):
     return JSONResponse({"error": code, "error_description": desc}, status_code=http)

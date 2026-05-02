@@ -46,10 +46,10 @@ The script will:
 
 ```bash
 # Check health
-curl https://api.beta.privacy-lion.com/healthz
+curl https://api.signedbyme.com/healthz
 
 # Check OIDC discovery
-curl https://api.beta.privacy-lion.com/.well-known/openid-configuration | jq .
+curl https://api.signedbyme.com/.well-known/openid-configuration | jq .
 
 # Check database was created
 ssh root@134.199.198.192 "ls -la /opt/sbm-api/app/var/"
@@ -76,7 +76,7 @@ rsync -avz --delete \
 ssh root@164.90.137.161 "systemctl restart sbm-api"
 
 # Verify
-curl -s https://api.beta.privacy-lion.com/healthz  # LB routes to both
+curl -s https://api.signedbyme.com/healthz  # LB routes to both
 ```
 
 ## Clean Up Old Files (After Verification)

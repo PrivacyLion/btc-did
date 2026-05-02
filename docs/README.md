@@ -203,7 +203,7 @@ Contact us to receive:
 
 ```bash
 # Create a login session
-curl -X POST https://api.beta.privacy-lion.com/v1/enterprise/session \
+curl -X POST https://api.signedbyme.com/v1/enterprise/session \
   -H "Content-Type: application/json" \
   -d '{"client_id": "your_client_id", "amount_sats": 100}'
 
@@ -221,7 +221,7 @@ User scans with SignedByMe app → proves identity → gets paid → you get tok
 ## API Base URL
 
 ```
-https://api.beta.privacy-lion.com
+https://api.signedbyme.com
 ```
 
 ## Support
