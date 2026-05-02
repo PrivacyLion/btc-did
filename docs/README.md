@@ -227,8 +227,8 @@ https://api.beta.privacy-lion.com
 ## Support
 
 - Documentation issues: Open a GitHub issue
-- Security issues: ops@privacy-lion.com
-- Integration help: ops@privacy-lion.com
+- Security issues: contact@signedbyme.com
+- Integration help: contact@signedbyme.com
 
 ---
 

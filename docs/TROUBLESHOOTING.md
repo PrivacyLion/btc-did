@@ -312,7 +312,7 @@ curl -s https://api.beta.privacy-lion.com/.well-known/jwks.json | jq .
 1. **Check this guide** for common issues
 2. **API Reference** for endpoint details: [API_REFERENCE.md](./API_REFERENCE.md)
 3. **GitHub Issues** for bugs: [Report an issue](https://github.com/PrivacyLion/SignedByMe/issues)
-4. **Email support:** ops@privacy-lion.com
+4. **Email support:** contact@signedbyme.com
 
 When reporting issues, include:
 - Your client_id (not secret!)

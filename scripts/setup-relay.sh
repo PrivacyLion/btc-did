@@ -112,7 +112,7 @@ relay {
         name = "RELAY_NAME_PLACEHOLDER"
         description = "SignedByMe Audit Relay - RELAY_DOMAIN_PLACEHOLDER"
         pubkey = ""
-        contact = "admin@privacy-lion.com"
+        contact = "contact@signedbyme.com"
         icon = ""
         nips = ""
     }
@@ -321,7 +321,7 @@ ufw --force enable
 # 9. SSL Certificate via Certbot
 # -----------------------------------------------------------------------------
 echo "[9/9] Obtaining SSL certificate..."
-certbot --nginx -d "$RELAY_DOMAIN" --non-interactive --agree-tos --email admin@privacy-lion.com --redirect
+certbot --nginx -d "$RELAY_DOMAIN" --non-interactive --agree-tos --email contact@signedbyme.com --redirect
 
 # -----------------------------------------------------------------------------
 # Done

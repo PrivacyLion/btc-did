@@ -36,7 +36,7 @@ cat > /etc/strfry/strfry.conf << 'EOF'
 relay {
     name = "SignedByMe Relay"
     description = "Nostr relay for SignedByMe identity proofs"
-    contact = "admin@privacy-lion.com"
+    contact = "contact@signedbyme.com"
 }
 
 database {

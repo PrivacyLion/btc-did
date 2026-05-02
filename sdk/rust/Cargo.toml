@@ -2,7 +2,7 @@
 name = "signedby-sdk"
 version = "0.1.0"
 edition = "2021"
-authors = ["Privacy Lion <contact@privacy-lion.com>"]
+authors = ["Privacy Lion <contact@signedbyme.com>"]
 description = "SignedByMe SDK - Self-signing digital signatures with zero-knowledge proofs"
 license = "MIT"
 repository = "https://github.com/PrivacyLion/SignedByMe"

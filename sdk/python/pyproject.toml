@@ -9,7 +9,7 @@ description = "SignedByMe SDK - Self-signing digital signatures with zero-knowle
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
-    { name = "Privacy Lion", email = "contact@privacy-lion.com" }
+    { name = "Privacy Lion", email = "contact@signedbyme.com" }
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

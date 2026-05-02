@@ -114,4 +114,4 @@ This prevents Sybil attacks and ensures only pre-approved identities can authent
 
 ## Reporting Security Issues
 
-If you discover a security vulnerability, please email ops@privacy-lion.com. Do not open a public issue.
+If you discover a security vulnerability, please email contact@signedbyme.com. Do not open a public issue.
