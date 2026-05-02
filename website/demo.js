@@ -37,7 +37,9 @@ const state = {
     currentMode: 'idle', // 'idle' | 'login' | 'enroll'
     relayWs: null,
     enrollmentInterval: null,
-    timerInterval: null
+    timerInterval: null,
+    exampleTimeout: null,
+    receivedLiveEvent: false
 };
 
 // DOM References (populated on init)
@@ -261,10 +263,12 @@ function resetDemo() {
     closeRelay();
     clearInterval(state.enrollmentInterval);
     clearInterval(state.timerInterval);
+    clearTimeout(state.exampleTimeout);
     
     // Reset state
     state.currentNonce = null;
     state.currentMode = 'idle';
+    state.receivedLiveEvent = false;
     
     // Reset UI
     dom.startBtn.style.display = 'inline-flex';
@@ -333,6 +337,13 @@ function subscribeToRelay(nonce) {
         state.relayWs.send(subRequest);
         logEvent('info', 'Subscribed to proof events');
         dom.status.textContent = 'Waiting for proof event...';
+        
+        // Show example events after 5 seconds if no live events arrive
+        state.exampleTimeout = setTimeout(() => {
+            if (state.currentMode === 'login' && !state.receivedLiveEvent) {
+                showExampleEvents();
+            }
+        }, 5000);
     };
     
     state.relayWs.onmessage = (event) => {
@@ -341,6 +352,15 @@ function subscribeToRelay(nonce) {
             
             if (msg[0] === 'EVENT' && msg[1] === 'demo-sub') {
                 const nostrEvent = msg[2];
+                
+                // Clear example events and timeout on first live event
+                if (!state.receivedLiveEvent) {
+                    state.receivedLiveEvent = true;
+                    clearTimeout(state.exampleTimeout);
+                    clearEvents();
+                    logEvent('success', '🔴 LIVE EVENT RECEIVED');
+                }
+                
                 logEvent('success', `Received kind ${nostrEvent.kind} event`);
                 handleProofEvent(nostrEvent);
             } else if (msg[0] === 'EOSE') {
@@ -512,4 +532,39 @@ function clearEvents() {
     if (dom.events) {
         dom.events.innerHTML = '<p class="demo-event-placeholder">Events will appear here...</p>';
     }
+}
+
+function showExampleEvents() {
+    clearEvents();
+    
+    // Add example header
+    logEvent('info', '— Showing example events (waiting for live activity) —');
+    
+    // Simulate realistic event sequence with delays
+    const examples = [
+        { type: 'info', msg: 'Agent connects to relay...', delay: 300 },
+        { type: 'success', msg: 'Received kind 28200 (enterprise authorization)', delay: 800 },
+        { type: 'info', msg: 'npub: npub1abc...xyz (enterprise)', delay: 1200 },
+        { type: 'success', msg: 'Received kind 28250 (human delegation)', delay: 1800 },
+        { type: 'info', msg: 'npub: npub1def...uvw (human owner)', delay: 2200 },
+        { type: 'success', msg: 'Received kind 28101 (Groth16 proof)', delay: 3000 },
+        { type: 'info', msg: 'Proof verified: membership ✓ npub derived ✓', delay: 3400 },
+        { type: 'success', msg: 'Received kind 28103 (login complete)', delay: 4000 },
+        { type: 'info', msg: 'OIDC id_token issued, sub=npub1...', delay: 4400 },
+    ];
+    
+    examples.forEach(({ type, msg, delay }) => {
+        setTimeout(() => {
+            // Don't show if we got a real event or demo was reset
+            if (state.receivedLiveEvent || state.currentMode === 'idle') return;
+            logEvent(type, msg);
+        }, delay);
+    });
+    
+    // Update status to indicate examples
+    setTimeout(() => {
+        if (!state.receivedLiveEvent && state.currentMode === 'login') {
+            dom.status.textContent = 'Showing example flow (scan QR for live demo)';
+        }
+    }, 500);
 }

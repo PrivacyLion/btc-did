@@ -112,7 +112,7 @@ code {
 }
 
 .section-intro {
-    font-size: 1.125rem;
+    font-size: 1.5rem;
     max-width: var(--content-width);
     margin-bottom: var(--space-xl);
 }
@@ -1029,7 +1029,7 @@ code {
 }
 
 .intro-text p {
-    font-size: 1.1rem;
+    font-size: 1.35rem;
     line-height: 1.8;
     margin-bottom: var(--space-md);
 }
