@@ -17,6 +17,7 @@ Key change: enrollment_id eliminated — kind 28200 NOSTR event signature IS the
 import sqlite3
 import json
 import logging
+import time
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Optional, List, Dict, Any
@@ -823,6 +824,67 @@ def delete_enrollment_session(*args, **kwargs): return False
 def add_root_to_history(tree_id: str, root_hash: str, leaf_index: int) -> None:
     """Alias for add_merkle_root (backward compat)."""
     add_merkle_root(tree_id, root_hash, leaf_index)
+
+
+# ============================================================================
+# OIDC AUTHORIZATION CODES
+# Stores temporary authorization codes for OAuth2/OIDC code flow
+# ============================================================================
+
+def create_oidc_code(
+    code: str,
+    client_id: str,
+    iat: int,
+    exp: int,
+    redirect_uri: str,
+    nonce: str,
+    code_challenge: Optional[str] = None,
+    code_challenge_method: str = "S256",
+) -> None:
+    """Store an OIDC authorization code."""
+    conn = get_connection()
+    # Ensure table exists
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS oidc_codes (
+            code TEXT PRIMARY KEY,
+            client_id TEXT NOT NULL,
+            iat INTEGER NOT NULL,
+            exp INTEGER NOT NULL,
+            redirect_uri TEXT NOT NULL,
+            nonce TEXT,
+            code_challenge TEXT,
+            code_challenge_method TEXT DEFAULT 'S256',
+            used INTEGER DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        INSERT INTO oidc_codes (code, client_id, iat, exp, redirect_uri, nonce, code_challenge, code_challenge_method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (code, client_id, iat, exp, redirect_uri, nonce, code_challenge, code_challenge_method))
+    conn.commit()
+
+
+def get_oidc_code(code: str) -> Optional[Dict[str, Any]]:
+    """Get an OIDC authorization code record."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM oidc_codes WHERE code = ? AND used = 0 AND exp > ?",
+            (code, int(time.time()))
+        ).fetchone()
+        return dict(row) if row else None
+    except sqlite3.OperationalError:
+        return None
+
+
+def use_oidc_code(code: str) -> None:
+    """Mark an OIDC authorization code as used."""
+    conn = get_connection()
+    try:
+        conn.execute("UPDATE oidc_codes SET used = 1 WHERE code = ?", (code,))
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
 
 # =============================================================================
